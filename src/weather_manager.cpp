@@ -172,6 +172,8 @@ bool loadCache(WeatherData& weather) {
     return true;
 }
 
+#include "cache_manager.h"
+
 bool saveCache(const WeatherData& weather) {
     JsonDocument doc;
     doc["temp"] = weather.temperatureC;
@@ -185,7 +187,11 @@ bool saveCache(const WeatherData& weather) {
 
     String json;
     serializeJson(doc, json);
-    return StorageManager::writeFile(WEATHER_CACHE_PATH, json);
+    if (StorageManager::writeFile(WEATHER_CACHE_PATH, json)) {
+        CacheManager::markUpdated(WEATHER_CACHE_PATH);
+        return true;
+    }
+    return false;
 }
 
 } // namespace WeatherManager

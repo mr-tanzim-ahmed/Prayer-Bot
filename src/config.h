@@ -146,6 +146,16 @@
 #define FESTIVAL_TABLE_PATH   "/festivals.json"
 
 // ------------------------------------------------------------
+//  Cache Management
+// ------------------------------------------------------------
+#define CACHE_META_PATH       "/cache_meta.json"
+#define CACHE_MAX_AGE_DAYS    7         // Default max cache age
+#define CACHE_PRAYER_MAX_DAYS 35        // Prayer cache validity
+#define CACHE_WEATHER_MAX_DAYS 1        // Weather cache validity
+#define CACHE_FESTIVAL_MAX_DAYS 365     // Festival data validity
+#define CACHE_CLEANUP_INTERVAL (24UL * 3600UL * 1000UL) // Run cleanup daily
+
+// ------------------------------------------------------------
 //  Surah Count
 // ------------------------------------------------------------
 #define TOTAL_SURAHS          114

@@ -17,6 +17,8 @@
 #include "storage_manager.h"
 #include "web_server_manager.h"
 #include "screen_router.h"
+#include "logger.h"
+#include "cache_manager.h"
 
 // ============================================================
 //  PRAYER-BOT MAIN
@@ -72,9 +74,11 @@ void setup() {
     Serial.println("========================================");
 
     // 1. Initialize storage and load settings
+    Logger::init(LOG_DEBUG);
     StorageManager::init();
+    CacheManager::init();
     StorageManager::loadSettings(g_settings);
-    Serial.println("[MAIN] Settings loaded.");
+    Logger::info("MAIN", "Settings loaded.");
 
     // 2. Initialize display
     if (DisplayManager::init()) {
@@ -323,6 +327,9 @@ void taskNetwork(void* param) {
             if ((now - lastNtpSync) >= NTP_SYNC_INTERVAL) {
                 WifiManager::syncNTP(g_settings);
                 lastNtpSync = now;
+                
+                // Also clean up expired cache whenever we sync time
+                CacheManager::cleanExpired(CACHE_MAX_AGE_DAYS);
             }
         }
 
