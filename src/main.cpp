@@ -54,6 +54,7 @@ TaskHandle_t taskWebServerHandle = NULL;
 void taskDisplay(void* param);
 void taskScheduler(void* param);
 void taskNetwork(void* param);
+void taskAudio(void* param);
 
 // ============================================================
 //  SETUP
@@ -92,6 +93,7 @@ void setup() {
 
     // 5. Initialize Pomodoro with saved settings
     PomodoroManager::init(g_settings);
+    PomodoroManager::updateSettings(g_pomodoro, g_settings);
     Serial.println("[MAIN] Pomodoro initialized.");
 
     // 6. Connect WiFi (or start AP for setup)
@@ -148,6 +150,7 @@ void setup() {
     xTaskCreatePinnedToCore(taskDisplay,   "Display",   8192,  NULL, 2, &taskDisplayHandle,   1);
     xTaskCreatePinnedToCore(taskScheduler, "Scheduler", 8192,  NULL, 3, &taskSchedulerHandle, 0);
     xTaskCreatePinnedToCore(taskNetwork,   "Network",   16384, NULL, 1, &taskNetworkHandle,   0);
+    xTaskCreatePinnedToCore(taskAudio,     "Audio",     8192,  NULL, 4, &taskAudioHandle,     1); // High priority audio on Core 1
 
     Serial.println("[MAIN] All tasks started. Prayer-Bot ready.");
     Serial.println("========================================");
@@ -276,9 +279,9 @@ void taskScheduler(void* param) {
 // ============================================================
 
 void taskNetwork(void* param) {
-    unsigned long lastWeatherUpdate = millis();
-    unsigned long lastPrayerUpdate  = millis();
-    unsigned long lastNtpSync       = millis();
+    unsigned long lastWeatherUpdate = 0;  // Force immediate first fetch
+    unsigned long lastPrayerUpdate  = 0;
+    unsigned long lastNtpSync       = 0;
 
     for (;;) {
         unsigned long now = millis();
@@ -286,11 +289,13 @@ void taskNetwork(void* param) {
         // Reconnect WiFi if needed
         if (WiFi.status() != WL_CONNECTED) {
             g_wifiConnected = WifiManager::reconnect();
+        } else {
+            g_wifiConnected = true;
         }
 
-        if (g_wifiConnected) {
+        if (g_wifiConnected && WiFi.status() == WL_CONNECTED) {
             // Refresh weather
-            if ((now - lastWeatherUpdate) >= WEATHER_UPDATE_INTERVAL) {
+            if ((now - lastWeatherUpdate) >= WEATHER_UPDATE_INTERVAL || lastWeatherUpdate == 0) {
                 if (WeatherManager::update(g_settings, g_weather)) {
                     g_weatherReady = true;
                 }
@@ -298,7 +303,7 @@ void taskNetwork(void* param) {
             }
 
             // Refresh prayer data (daily / cache refresh)
-            if ((now - lastPrayerUpdate) >= PRAYER_UPDATE_INTERVAL) {
+            if ((now - lastPrayerUpdate) >= PRAYER_UPDATE_INTERVAL || lastPrayerUpdate == 0) {
                 PrayerManager::getTodayPrayers(g_todayPrayers);
                 CalendarManager::getHijriDate(g_hijriDate);
                 CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
@@ -313,5 +318,20 @@ void taskNetwork(void* param) {
         }
 
         vTaskDelay(pdMS_TO_TICKS(5000));
+    }
+}
+
+// ============================================================
+//  TASK: Audio
+//  High priority task dedicated entirely to feeding the MP3
+//  decoder loop for stutter-free I2S audio playback.
+// ============================================================
+
+void taskAudio(void* param) {
+    for (;;) {
+        AzanManager::update();
+        // Give time back to RTOS, small delay is enough to prevent WDT resets
+        // while maintaining smooth playback.
+        vTaskDelay(pdMS_TO_TICKS(2));
     }
 }

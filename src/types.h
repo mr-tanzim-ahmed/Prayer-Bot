@@ -121,6 +121,7 @@ enum PomodoroPhase : uint8_t {
 
 struct PomodoroState {
     PomodoroPhase phase;
+    PomodoroPhase savedPhase;        // Phase before pause (for correct resume)
     uint16_t focusMinutes;
     uint16_t shortBreakMinutes;
     uint16_t longBreakMinutes;

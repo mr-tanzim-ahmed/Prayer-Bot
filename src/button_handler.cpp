@@ -2,10 +2,15 @@
 #include "config.h"
 
 // ============================================================
-//  BUTTON HANDLER IMPLEMENTATION
+//  BUTTON HANDLER IMPLEMENTATION (CAPACITIVE TOUCH)
 // ============================================================
 
 namespace {
+    // Touch threshold for ESP32-S3 (lower value means touched, usually drops below 40000 on S3, but Arduino API normalizes it. 
+    // Typical un-touched is > 50000, touched is < 30000. Let's use a dynamic baseline or a fixed threshold of 30000.
+    // Actually, on ESP32-S3 `touchRead()` returns raw values around 40000-60000. Touched is lower.
+    const uint32_t TOUCH_THRESHOLD = 30000;
+
     // Button 1 state
     bool btn1_pressed = false;
     unsigned long btn1_lastDebounce = 0;
@@ -16,51 +21,46 @@ namespace {
     bool btn2_isHeld = false;
     unsigned long btn2_pressStart = 0;
     unsigned long btn2_lastDebounce = 0;
-    bool btn2_longFired = false;  // Prevent re-firing while held
+    bool btn2_longFired = false;
 }
 
 namespace ButtonHandler {
 
 void init() {
-    pinMode(PIN_BUTTON_1, INPUT);
-    pinMode(PIN_BUTTON_2, INPUT);
-    Serial.println("[BUTTON] Initialized.");
+    // Capacitive touch pins don't need pinMode() setup in Arduino core
+    Serial.println("[BUTTON] Capacitive touch initialized.");
 }
 
 void update() {
     unsigned long now = millis();
 
-    // Reset previous frame's events
     btn1_pressed = false;
     btn2_shortPressed = false;
     btn2_longPressed = false;
 
-    // --- Button 1: Short press only ---
-    bool b1 = digitalRead(PIN_BUTTON_1) == HIGH;
+    // --- Touch 1: Screen cycle (Short press) ---
+    // touchRead returns a smaller value when touched on S3
+    bool b1 = touchRead(PIN_BUTTON_1) < TOUCH_THRESHOLD;
     if (b1 && (now - btn1_lastDebounce) >= BUTTON_DEBOUNCE_MS) {
         btn1_pressed = true;
         btn1_lastDebounce = now;
     }
 
-    // --- Button 2: Short press + Long press (5 sec) ---
-    bool b2 = digitalRead(PIN_BUTTON_2) == HIGH;
+    // --- Touch 2: Short press + Long press (5 sec) ---
+    bool b2 = touchRead(PIN_BUTTON_2) < TOUCH_THRESHOLD;
 
     if (b2) {
         if (!btn2_isHeld) {
-            // Just pressed
             btn2_isHeld = true;
             btn2_pressStart = now;
             btn2_longFired = false;
         } else if (!btn2_longFired && (now - btn2_pressStart) >= BUTTON_LONG_PRESS_MS) {
-            // Held long enough
             btn2_longPressed = true;
             btn2_longFired = true;
         }
     } else {
         if (btn2_isHeld) {
-            // Just released
             if (!btn2_longFired && (now - btn2_lastDebounce) >= BUTTON_DEBOUNCE_MS) {
-                // Was a short press
                 btn2_shortPressed = true;
             }
             btn2_isHeld = false;

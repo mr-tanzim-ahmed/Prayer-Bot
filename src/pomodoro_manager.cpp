@@ -63,6 +63,7 @@ void update(PomodoroState& state) {
 
 void start(PomodoroState& state) {
     state.phase = POMODORO_FOCUS;
+    state.savedPhase = POMODORO_FOCUS;
     state.currentCycle = 0;
     state.phaseStartMs = millis();
     state.pausedElapsedMs = 0;
@@ -78,13 +79,14 @@ void togglePause(PomodoroState& state) {
     }
 
     if (state.phase == POMODORO_PAUSED) {
-        // Resume
-        state.phase = POMODORO_FOCUS; // TODO: restore previous phase
+        // Resume to the phase we were in before pausing
+        state.phase = state.savedPhase;
         state.phaseStartMs = millis() - state.pausedElapsedMs;
         state.pausedByAzan = false;
         Serial.println("[POMODORO] Resumed.");
     } else {
-        // Pause
+        // Pause - save current phase
+        state.savedPhase = state.phase;
         state.pausedElapsedMs = millis() - state.phaseStartMs;
         state.phase = POMODORO_PAUSED;
         Serial.println("[POMODORO] Paused.");
@@ -93,6 +95,7 @@ void togglePause(PomodoroState& state) {
 
 void reset(PomodoroState& state) {
     state.phase = POMODORO_IDLE;
+    state.savedPhase = POMODORO_IDLE;
     state.currentCycle = 0;
     state.remainingSeconds = 0;
     state.pausedElapsedMs = 0;
@@ -102,6 +105,7 @@ void reset(PomodoroState& state) {
 
 void pauseForAzan(PomodoroState& state) {
     if (state.phase != POMODORO_IDLE && state.phase != POMODORO_PAUSED) {
+        state.savedPhase = state.phase;
         state.pausedElapsedMs = millis() - state.phaseStartMs;
         state.phase = POMODORO_PAUSED;
         state.pausedByAzan = true;
@@ -111,7 +115,7 @@ void pauseForAzan(PomodoroState& state) {
 
 void resumeFromAzan(PomodoroState& state) {
     if (state.pausedByAzan && state.phase == POMODORO_PAUSED) {
-        state.phase = POMODORO_FOCUS; // TODO: restore previous phase
+        state.phase = state.savedPhase;
         state.phaseStartMs = millis() - state.pausedElapsedMs;
         state.pausedByAzan = false;
         Serial.println("[POMODORO] Resumed after azan.");

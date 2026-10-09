@@ -2,6 +2,7 @@
 #define CONFIG_H
 
 #include <Arduino.h>
+#include <driver/i2s.h>
 
 // ============================================================
 //  PRAYER-BOT CONFIGURATION

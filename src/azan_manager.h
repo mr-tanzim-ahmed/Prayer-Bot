@@ -19,6 +19,9 @@ namespace AzanManager {
     // Stop playback
     void stop();
 
+    // Decode audio frame (call frequently in dedicated task)
+    void update();
+
     // Is azan currently playing?
     bool isPlaying();
 
