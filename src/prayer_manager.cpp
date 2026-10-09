@@ -6,6 +6,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <time.h>
+#include "cache_manager.h"
 
 // ============================================================
 //  PRAYER MANAGER IMPLEMENTATION
@@ -219,12 +220,12 @@ bool refresh(const Settings& settings) {
     cachedMonth = month;
     cachedYear  = year;
 
-#include "cache_manager.h"
     // Save to flash
     String cacheJson;
     serializeJson(cacheDoc, cacheJson);
-    StorageManager::writeFile(PRAYER_CACHE_PATH, cacheJson);
-    CacheManager::markUpdated(PRAYER_CACHE_PATH);
+    if (StorageManager::writeFile(PRAYER_CACHE_PATH, cacheJson)) {
+        CacheManager::markUpdated(PRAYER_CACHE_PATH);
+    }
 
     Serial.printf("[PRAYER] Cached %d days for %d/%d.\n", cachedDaysCount, month, year);
     return true;

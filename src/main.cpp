@@ -295,6 +295,8 @@ void taskNetwork(void* param) {
     unsigned long lastWeatherUpdate = 0;  // Force immediate first fetch
     unsigned long lastPrayerUpdate  = 0;
     unsigned long lastNtpSync       = 0;
+    unsigned long lastCacheCleanup  = 0;
+    bool initialCacheCleanupPending = g_timesynced;
 
     for (;;) {
         unsigned long now = millis();
@@ -307,6 +309,12 @@ void taskNetwork(void* param) {
         }
 
         if (g_wifiConnected && WiFi.status() == WL_CONNECTED) {
+            if (initialCacheCleanupPending) {
+                CacheManager::cleanExpired(CACHE_MAX_AGE_DAYS);
+                lastCacheCleanup = now;
+                initialCacheCleanupPending = false;
+            }
+
             // Refresh weather
             if ((now - lastWeatherUpdate) >= WEATHER_UPDATE_INTERVAL || lastWeatherUpdate == 0) {
                 if (WeatherManager::update(g_settings, g_weather)) {
@@ -325,11 +333,15 @@ void taskNetwork(void* param) {
 
             // NTP re-sync
             if ((now - lastNtpSync) >= NTP_SYNC_INTERVAL) {
-                WifiManager::syncNTP(g_settings);
+                g_timesynced = WifiManager::syncNTP(g_settings);
                 lastNtpSync = now;
-                
-                // Also clean up expired cache whenever we sync time
-                CacheManager::cleanExpired(CACHE_MAX_AGE_DAYS);
+
+                if (g_timesynced &&
+                    (lastCacheCleanup == 0 ||
+                     (now - lastCacheCleanup) >= CACHE_CLEANUP_INTERVAL)) {
+                    CacheManager::cleanExpired(CACHE_MAX_AGE_DAYS);
+                    lastCacheCleanup = now;
+                }
             }
         }
 

@@ -1,5 +1,9 @@
 # Prayer-Bot: Smart Islamic Personal Assistant (ESP32‑S3)
 
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+[📄 **README**](README.md) | [🔧 **Hardware Connections**](HARDWARE_CONNECTIONS.md) | [📐 **Circuit Diagram**](CIRCUIT.md) | [📜 **License**](LICENSE)
+
 Welcome to **Prayer‑Bot**, a DIY, offline‑first digital companion that helps you manage daily prayers, track Hijri dates, stay focused with a Pomodoro timer, and monitor local weather—all from a single ESP32‑S3 desk clock.
 
 ---

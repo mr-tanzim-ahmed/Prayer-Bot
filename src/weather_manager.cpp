@@ -5,6 +5,7 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include "cache_manager.h"
 
 // ============================================================
 //  WEATHER MANAGER IMPLEMENTATION
@@ -171,8 +172,6 @@ bool loadCache(WeatherData& weather) {
     Serial.println("[WEATHER] Loaded from cache.");
     return true;
 }
-
-#include "cache_manager.h"
 
 bool saveCache(const WeatherData& weather) {
     JsonDocument doc;
