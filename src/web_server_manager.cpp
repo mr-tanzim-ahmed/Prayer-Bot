@@ -83,41 +83,23 @@ namespace {
 <body>
     <div class="container">
         <h1>&#x1F54C; Prayer-Bot Dashboard</h1>
-        <div class="grid">
-            
-            <div class="card">
-                <h2>&#x1F30D; Location Setup</h2>
-                <div class="form-group">
-                    <label>Country</label>
-                    <select id="country" onchange="updateDivisions()">
-                        <option value="BD">Bangladesh</option>
-                        <option value="CUSTOM">Custom Location</option>
-                    </select>
-                </div>
-                <div class="form-group" id="division-group">
-                    <label>Division</label>
-                    <select id="division" onchange="applyLocation()">
-                        <option value="23.8103,90.4125">Dhaka</option>
-                        <option value="22.3569,91.7832">Chattogram</option>
-                        <option value="24.8949,91.8687">Sylhet</option>
-                        <option value="24.3745,88.6042">Rajshahi</option>
-                        <option value="22.8456,89.5403">Khulna</option>
-                        <option value="22.7010,90.3535">Barishal</option>
-                        <option value="25.7439,89.2752">Rangpur</option>
-                        <option value="24.7471,90.4203">Mymensingh</option>
-                    </select>
-                </div>
-                <div id="custom-group" class="hidden">
-                    <div class="form-group">
-                        <label>City Name</label>
-                        <input type="text" id="city" value="Dhaka">
-                    </div>
-                    <div class="form-group" style="display:flex; gap:10px;">
-                        <div style="flex:1;"><label>Lat</label><input type="number" id="lat" step="0.0001"></div>
-                        <div style="flex:1;"><label>Lon</label><input type="number" id="lon" step="0.0001"></div>
-                    </div>
-                </div>
+        <div class="card" id="wifi-card">
+            <h2>&#x1F4F6; WiFi Setup</h2>
+            <div class="form-group">
+                <label>SSID</label>
+                <input type="text" id="wifi-ssid" placeholder="Enter WiFi SSID">
             </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="wifi-pass" placeholder="Enter WiFi password">
+            </div>
+            <button onclick="connectWifi()">Connect</button>
+            <div class="status" id="wifi-status"></div>
+        </div>
+
+        <div id="main-dashboard" class="hidden">
+            <!-- Existing cards will be placed here -->
+
 
             <div class="card">
                 <h2>&#x1F50A; Audio & Azan</h2>
@@ -197,6 +179,84 @@ namespace {
             document.getElementById('city').value = sel.options[sel.selectedIndex].text;
             document.getElementById('lat').value = lat;
             document.getElementById('lon').value = lon;
+            fetchLivePreview();
+        }
+
+        async function connectWifi() {
+            const ssid = document.getElementById('wifi-ssid').value.trim();
+            const pass = document.getElementById('wifi-pass').value;
+            const statusEl = document.getElementById('wifi-status');
+            if (!ssid) {
+                statusEl.textContent = 'SSID required';
+                return;
+            }
+            const body = { ssid, pass };
+            try {
+                const r = await fetch('/api/wifi', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const json = await r.json();
+                if (r.ok) {
+                    statusEl.textContent = 'Connected. Loading dashboard...';
+                    // hide WiFi card, show main dashboard
+                    document.getElementById('wifi-card').classList.add('hidden');
+                    document.getElementById('main-dashboard').classList.remove('hidden');
+                    // fetch preview now that we have network
+                    fetchLivePreview();
+                } else {
+                    statusEl.textContent = json.error || 'Connection failed';
+                }
+            } catch (e) {
+                statusEl.textContent = 'Connection error';
+                console.error(e);
+            }
+        }
+        // Check WiFi connection on page load
+        async function checkWifi() {
+            try {
+                const r = await fetch('/api/settings');
+                if (r.ok) {
+                    // WiFi is already configured, hide setup and show dashboard
+                    document.getElementById('wifi-card').classList.add('hidden');
+                    document.getElementById('main-dashboard').classList.remove('hidden');
+                    // Load settings and live preview
+                    loadSettings();
+                    fetchLivePreview();
+                }
+            } catch (_) {
+                // Remain on WiFi setup screen if fetch fails
+            }
+        }
+        // Invoke checkWifi when script loads
+        checkWifi();
+
+            const lat = document.getElementById('lat').value;
+            const lon = document.getElementById('lon').value;
+            const method = document.getElementById('calcMethod') ? document.getElementById('calcMethod').value : 3;
+            
+            // Format current date as DD-MM-YYYY
+            const d = new Date();
+            const dateStr = String(d.getDate()).padStart(2, '0') + '-' + String(d.getMonth()+1).padStart(2, '0') + '-' + d.getFullYear();
+            
+            document.getElementById('live-gregorian').textContent = "Fetching...";
+            
+            try {
+                const res = await fetch(`https://api.aladhan.com/v1/timings/${dateStr}?latitude=${lat}&longitude=${lon}&method=${method}`);
+                const json = await res.json();
+                if(json.code === 200) {
+                    const data = json.data;
+                    document.getElementById('live-gregorian').textContent = data.date.gregorian.weekday.en + ', ' + data.date.gregorian.day + ' ' + data.date.gregorian.month.en + ' ' + data.date.gregorian.year;
+                    document.getElementById('live-hijri').textContent = data.date.hijri.day + ' ' + data.date.hijri.month.en + ' ' + data.date.hijri.year + ' AH';
+                    
+                    document.getElementById('live-sunrise').textContent = data.timings.Sunrise.substring(0,5);
+                    document.getElementById('live-sunset').textContent = data.timings.Maghrib.substring(0,5); // Sunset is Maghrib time
+                }
+            } catch(e) {
+                document.getElementById('live-gregorian').textContent = "Preview unavailable";
+                console.error(e);
+            }
         }
 
         async function loadSettings() {
@@ -229,6 +289,8 @@ namespace {
                 }
                 if (!matched) document.getElementById('country').value = 'CUSTOM';
                 updateDivisions();
+                
+                fetchLivePreview();
 
             } catch(e) { console.error(e); }
         }

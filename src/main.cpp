@@ -35,6 +35,7 @@ PomodoroState   g_pomodoro;
 IslamicEvent    g_todayEvent;
 
 SystemScreen    g_currentScreen = SYS_SCREEN_PRAYER_FOCUS;
+unsigned long   g_screenStartMs = 0;
 AzanState       g_azanState     = AZAN_IDLE;
 VoiceState      g_voiceState    = VOICE_IDLE;
 
@@ -182,6 +183,7 @@ void taskDisplay(void* param) {
         if (ButtonHandler::isButton1Pressed()) {
             // Cycle to next screen
             g_currentScreen = (SystemScreen)((g_currentScreen + 1) % SYS_SCREEN_COUNT);
+            g_screenStartMs = millis();
             ScreenRouter::draw(g_currentScreen);
         }
 
@@ -205,6 +207,13 @@ void taskDisplay(void* param) {
 
         // Update current screen content (clock tick, countdown, etc.)
         ScreenRouter::update(g_currentScreen);
+
+        // Auto-slide logic for Dhikr screen (100 seconds)
+        if (g_currentScreen == SYS_SCREEN_DHIKR && (millis() - g_screenStartMs >= 100000)) {
+            g_currentScreen = SYS_SCREEN_PRAYER_FOCUS; // Return to main screen
+            g_screenStartMs = millis();
+            ScreenRouter::draw(g_currentScreen);
+        }
 
         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(100));
     }

@@ -10,8 +10,8 @@
 // ============================================================
 
 namespace ClockCalendarScreen {
-    void draw(const HijriDate& hijri, const IslamicEvent& event);
-    void update(const HijriDate& hijri, const IslamicEvent& event);
+    void draw(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers& prayers);
+    void update(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers& prayers);
 }
 
 #endif // CLOCK_CALENDAR_SCREEN_H

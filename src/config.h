@@ -48,7 +48,7 @@
 // ------------------------------------------------------------
 #define SCREEN_WIDTH          128
 #define SCREEN_HEIGHT         64
-#define TOTAL_SCREENS         5        // Prayer Focus, All Prayers, Clock/Calendar, Weather, Pomodoro
+#define TOTAL_SCREENS         6        // Prayer Focus, All Prayers, Clock/Calendar, Weather, Pomodoro, Dhikr
 
 // Screen indices
 #define SCREEN_PRAYER_FOCUS   0
@@ -56,6 +56,7 @@
 #define SCREEN_CLOCK_CALENDAR 2
 #define SCREEN_WEATHER        3
 #define SCREEN_POMODORO       4
+#define SCREEN_DHIKR          5
 
 // ------------------------------------------------------------
 //  Timing Intervals
@@ -117,7 +118,7 @@
 // ------------------------------------------------------------
 //  Prayer Calculation Defaults
 // ------------------------------------------------------------
-#define DEFAULT_CALC_METHOD   1        // University of Islamic Sciences, Karachi
+#define DEFAULT_CALC_METHOD   3        // Muslim World League
 #define DEFAULT_ASR_SCHOOL    1        // 1 = Hanafi
 #define DEFAULT_HIJRI_OFFSET  0        // -2 to +2
 

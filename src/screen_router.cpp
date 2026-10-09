@@ -5,6 +5,7 @@
 #include "screens/clock_calendar_screen.h"
 #include "screens/weather_screen.h"
 #include "screens/pomodoro_screen.h"
+#include "screens/dhikr_screen.h"
 
 // Access global state
 extern DailyPrayers    g_todayPrayers;
@@ -19,10 +20,15 @@ extern VoiceState      g_voiceState;
 extern bool            g_weatherReady;
 extern bool            g_prayerReady;
 
+// Track time on current screen for animations
+extern unsigned long   g_screenStartMs;
+
 namespace ScreenRouter {
 
 void draw(SystemScreen screen) {
     if (!DisplayManager::isAvailable()) return;
+    
+    unsigned long timeOnScreen = millis() - g_screenStartMs;
 
     switch (screen) {
         case SYS_SCREEN_PRAYER_FOCUS:
@@ -34,7 +40,7 @@ void draw(SystemScreen screen) {
             break;
 
         case SYS_SCREEN_CLOCK_CALENDAR:
-            ClockCalendarScreen::draw(g_hijriDate, g_todayEvent);
+            ClockCalendarScreen::draw(g_hijriDate, g_todayEvent, g_todayPrayers);
             break;
 
         case SYS_SCREEN_WEATHER:
@@ -45,6 +51,10 @@ void draw(SystemScreen screen) {
             PomodoroScreen::draw(g_pomodoro);
             break;
 
+        case SYS_SCREEN_DHIKR:
+            DhikrScreen::draw(timeOnScreen);
+            break;
+
         default:
             break;
     }
@@ -53,13 +63,15 @@ void draw(SystemScreen screen) {
 void update(SystemScreen screen) {
     if (!DisplayManager::isAvailable()) return;
 
+    unsigned long timeOnScreen = millis() - g_screenStartMs;
+
     switch (screen) {
         case SYS_SCREEN_PRAYER_FOCUS:
             PrayerFocusScreen::update(g_nextPrayer, g_prohibited);
             break;
 
         case SYS_SCREEN_CLOCK_CALENDAR:
-            ClockCalendarScreen::update(g_hijriDate, g_todayEvent);
+            ClockCalendarScreen::update(g_hijriDate, g_todayEvent, g_todayPrayers);
             break;
 
         case SYS_SCREEN_WEATHER:
@@ -68,6 +80,10 @@ void update(SystemScreen screen) {
 
         case SYS_SCREEN_POMODORO:
             PomodoroScreen::update(g_pomodoro);
+            break;
+
+        case SYS_SCREEN_DHIKR:
+            DhikrScreen::update(timeOnScreen);
             break;
 
         default:
