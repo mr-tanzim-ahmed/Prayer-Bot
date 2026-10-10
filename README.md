@@ -18,7 +18,46 @@ Welcome to **Prayer‑Bot**, a DIY, offline‑first digital companion that helps
 - **📱 Local Web Dashboard** – Configure location, prayer calculation, prohibited-time offsets, azan volume, weather key, and Pomodoro timings; view device/prayer/weather status and control screens, Pomodoro, zikir counting, and the active alarm from a phone or computer.
 - **📳 Shake‑to‑Snooze** – Vibration sensor lets you dismiss or snooze alerts with a shake.
 - **🕋 Dhikr Screen** – Five Arabic dhikr phrases rotate every 20 seconds, with a touch-to-count counter; the screen returns to the main screen after 100 seconds.
-- **🔧 Robust Memory Management** – All JSON parsing is streamed directly into LittleFS; no dynamic allocations for new features.
+- **🧩 Modular Firmware** – Features are separated into managers and display screens, with shared configuration and data types.
+
+---
+
+## 🗂️ Project structure
+
+Firmware code lives in `src/`. Managers keep feature logic separate from the entry point, and each manager currently uses a matching `.h` interface and `.cpp` implementation. Screen rendering is grouped in `src/screens/`.
+
+```text
+Prayer-Bot/
+├── platformio.ini             # PlatformIO board, framework, and dependencies
+├── README.md                   # Project overview and setup
+├── HARDWARE_CONNECTIONS.md    # Wiring guide
+├── CIRCUIT.md                  # Circuit reference
+├── data/                       # LittleFS image input (runtime files are generated)
+└── src/
+    ├── main.cpp                # Startup and FreeRTOS task orchestration
+    ├── config.h                # Pins, defaults, API endpoints, and intervals
+    ├── types.h                 # Shared application data types and states
+    ├── *_manager.h/.cpp        # Prayer, weather, Wi-Fi, audio, storage, and other services
+    ├── dashboard_html.h        # Embedded local web dashboard
+    ├── pomodoro_stats.h/.cpp   # Persistent Pomodoro history and weekly report
+    └── screens/                # OLED screen implementations and shared screen routing
+```
+
+**Where to make changes**
+
+| Feature or concern | Main files |
+|---|---|
+| Prayer schedules and prohibited-time windows | `src/prayer_manager.h`, `src/prayer_manager.cpp` |
+| Azan and Pomodoro notification sounds | `src/azan_manager.h`, `src/azan_manager.cpp` |
+| Pomodoro state and durations | `src/pomodoro_manager.h`, `src/pomodoro_manager.cpp` |
+| Pomodoro weekly totals | `src/pomodoro_stats.h`, `src/pomodoro_stats.cpp` |
+| Dashboard UI and its JSON API | `src/dashboard_html.h`, `src/web_server_manager.h`, `src/web_server_manager.cpp` |
+| Persistent settings and cache | `src/storage_manager.h`, `src/storage_manager.cpp`, `src/cache_manager.h`, `src/cache_manager.cpp` |
+| OLED screen presentation | `src/screens/` and `src/screen_router.h`, `src/screen_router.cpp` |
+| Shared settings, screen IDs, and defaults | `src/types.h`, `src/config.h` |
+| Startup, task scheduling, and integration | `src/main.cpp` |
+
+Keep feature behavior in its manager or screen module where practical; use `main.cpp` to initialize services and coordinate their FreeRTOS tasks. Keep interfaces in the corresponding headers and update this map when files or responsibilities move.
 
 ---
 
@@ -59,7 +98,8 @@ The dashboard exposes device status, today's prayer times, Hijri date, weather/A
 ## 📚 Under the Hood (Software & APIs)
 
 - **FreeRTOS** – Separate tasks for networking, UI rendering, sensor reading, and audio playback.
-- **Memory‑Efficient JSON Streaming** – Large monthly calendar payloads are parsed directly into flash storage.
+- **JSON handling** – Large API responses are parsed from network streams with ArduinoJson filters; web request bodies are size-limited and validated before settings are applied. JSON documents and Arduino `String` values use dynamic memory, so this is bounded in key paths rather than allocation-free.
+- **Persistent storage and caching** – Settings, prayer/weather cache data, and Pomodoro daily history are stored in LittleFS. Cache metadata tracks expiry for supported cached data.
 - **Free APIs** – Aladhan (prayer times) and Open‑Meteo (air quality); OpenWeatherMap weather requires a user-provided API key.
 
 Feel free to fork, modify, and extend the bot (e.g., add voice commands or additional sensors). Happy building!
