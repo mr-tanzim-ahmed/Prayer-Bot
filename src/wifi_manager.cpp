@@ -9,6 +9,8 @@
 
 namespace {
     bool apMode = false;
+    bool connectionPending = false;
+    unsigned long connectionStartedMs = 0;
     String storedSSID;
     String storedPassword;
 }
@@ -16,10 +18,6 @@ namespace {
 namespace WifiManager {
 
 bool init(const Settings& settings) {
-    // TODO: Load WiFi credentials from LittleFS or use WiFiManager-style provisioning
-    // For now, try to connect with compiled credentials
-    // In production, this will check for saved creds first
-
     String ssid = StorageManager::readFile("/wifi_ssid.txt");
     String pass = StorageManager::readFile("/wifi_pass.txt");
 
@@ -59,7 +57,8 @@ bool init(const Settings& settings) {
 }
 
 void startAP() {
-    WiFi.mode(WIFI_AP);
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.setSleep(false);
     WiFi.softAP(AP_SSID, AP_PASSWORD);
     apMode = true;
 
@@ -69,9 +68,24 @@ void startAP() {
     Serial.println(WiFi.softAPIP());
 }
 
+bool connectToNetwork(const String& ssid, const String& password) {
+    if (ssid.isEmpty()) return false;
+    storedSSID = ssid;
+    storedPassword = password;
+
+    WiFi.mode(apMode ? WIFI_AP_STA : WIFI_STA);
+    WiFi.setSleep(false);
+    WiFi.begin(storedSSID.c_str(), storedPassword.c_str());
+    connectionStartedMs = millis();
+    connectionPending = true;
+    Serial.printf("[WiFi] Connecting to configured network: %s\n", storedSSID.c_str());
+    return true;
+}
+
 bool reconnect() {
     if (apMode) return false;
     if (WiFi.status() == WL_CONNECTED) return true;
+    if (storedSSID.isEmpty()) return false;
 
     Serial.println("[WiFi] Reconnecting...");
     WiFi.disconnect();
@@ -114,6 +128,21 @@ bool syncNTP(const Settings& settings) {
 
 bool isConnected() {
     return WiFi.status() == WL_CONNECTED;
+}
+
+bool isConnecting() {
+    if (!connectionPending) return false;
+    if (WiFi.status() == WL_CONNECTED) {
+        connectionPending = false;
+        Serial.printf("[WiFi] Connected. IP: %s\n", WiFi.localIP().toString().c_str());
+        return false;
+    }
+    if (millis() - connectionStartedMs >= WIFI_CONNECT_TIMEOUT) {
+        connectionPending = false;
+        Serial.println("[WiFi] Connection attempt timed out.");
+        return false;
+    }
+    return true;
 }
 
 String getIP() {

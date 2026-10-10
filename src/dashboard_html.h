@@ -55,6 +55,11 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     .prayer strong{font-size:1rem}
     .wifi{margin:16px 0;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:17px 20px}
     .wifi summary{cursor:pointer;color:var(--accent);font-weight:700}
+    .wifi[hidden],.grid[hidden],.savebar[hidden],#continueWifi[hidden]{display:none}
+    .wifi{max-width:620px;margin:24px auto}
+    .wifi h2{margin-bottom:6px}
+    .wifi-status{min-height:28px;margin:12px 0;color:var(--accent);font-weight:650}
+    .wifi-status.error{color:var(--bad)}
     .settings{padding:0;overflow:hidden}
     .settings>summary{cursor:pointer;list-style:none;padding:18px 20px;font-weight:700}
     .settings>summary::-webkit-details-marker{display:none}
@@ -76,15 +81,34 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 <main>
   <header>
     <div><h1>Prayer-Bot</h1><div class="badge">Your prayer &amp; focus companion</div></div>
-    <button type="button" onclick="refreshAll()">Refresh</button>
+    <div class="actions">
+      <button type="button" onclick="openWifiSetup()">Wi-Fi setup</button>
+      <button type="button" onclick="refreshAll()">Refresh</button>
+    </div>
   </header>
 
-  <section class="grid">
+  <section id="wifiSetup" class="card wifi" hidden>
+    <h2>Connect Prayer-Bot to Wi-Fi</h2>
+    <p>Connect to your home Wi-Fi to enable prayer times, weather, and online clock sync. The setup network stays available while connecting.</p>
+    <p class="hint">Setup address: <strong>http://192.168.4.1</strong> · Wi-Fi: <strong>PrayerBot-Setup</strong></p>
+    <div class="fields" style="margin-top:16px">
+      <div class="field"><label for="wifiSsid">Wi-Fi network name (SSID)</label><input id="wifiSsid" maxlength="32" autocomplete="username" required></div>
+      <div class="field"><label for="wifiPass">Wi-Fi password</label><input id="wifiPass" type="password" maxlength="63" autocomplete="new-password"></div>
+    </div>
+    <div class="actions">
+      <button id="connectWifi" class="primary" type="button" onclick="saveWifi()">Connect to Wi-Fi</button>
+      <button id="continueWifi" type="button" onclick="continueToDashboard()" hidden>Next: open dashboard</button>
+    </div>
+    <p id="wifiMessage" class="wifi-status" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="grid" id="dashboardContent" hidden>
     <article class="card wide">
       <h2>Device overview</h2>
       <div class="stats">
         <div class="stat"><span>Connection</span><strong id="network">Loading…</strong></div>
         <div class="stat"><span>Dashboard address</span><strong><a id="ipLink" href="#" style="color:var(--accent)"><span id="ip">—</span></a></strong></div>
+        <div class="stat"><span>Home network IP</span><strong id="homeIp">—</strong></div>
         <div class="stat"><span>Current prayer</span><strong id="nextPrayer">—</strong></div>
         <div class="stat"><span>Prayer alarm</span><strong id="azanStatus">—</strong></div>
         <div class="stat"><span>Hijri date</span><strong id="hijri">—</strong></div>
@@ -223,23 +247,14 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     </details>
   </section>
 
-  <details class="card wifi">
-    <summary>Wi-Fi setup / change network</summary>
-    <p>Saving Wi-Fi credentials restarts the board so it can connect to your network.</p>
-    <div class="fields" style="margin-top:12px">
-      <div class="field"><label for="wifiSsid">Wi-Fi network name (SSID)</label><input id="wifiSsid" maxlength="32" autocomplete="username"></div>
-      <div class="field"><label for="wifiPass">Wi-Fi password</label><input id="wifiPass" type="password" maxlength="63" autocomplete="new-password"></div>
-    </div>
-    <button type="button" onclick="saveWifi()">Save Wi-Fi &amp; restart</button>
-    <p class="hint">If no Wi-Fi is configured, join PrayerBot-Setup (password 12345678) and open http://192.168.4.1</p>
-  </details>
-
-  <div class="savebar"><button id="saveButton" class="primary" type="button" onclick="saveSettings()">Save &amp; apply settings</button><div id="message" class="message" role="status"></div></div>
+  <div class="savebar" id="savebar" hidden><button id="saveButton" class="primary" type="button" onclick="saveSettings()">Save &amp; apply settings</button><div id="message" class="message" role="status"></div></div>
 </main>
 <script>
   const byId = id => document.getElementById(id);
   const put = (id, value) => { byId(id).textContent = value ?? '—'; };
   let initialStatus=true;
+  let dashboardReady=false;
+  let wifiSubmitted=false;
   const locations={
     dhaka:{city:'Dhaka',lat:23.8103,lon:90.4125,tz:'Asia/Dhaka',utcOff:6},
     chattogram:{city:'Chattogram',lat:22.3569,lon:91.7832,tz:'Asia/Dhaka',utcOff:6},
@@ -249,6 +264,27 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   };
   function message(text, error=false) {
     const el=byId('message'); el.textContent=text; el.classList.toggle('error',error);
+  }
+  function showDashboard() {
+    dashboardReady=true;
+    byId('wifiSetup').hidden=true;
+    byId('dashboardContent').hidden=false;
+    byId('savebar').hidden=false;
+  }
+  function openWifiSetup() {
+    byId('wifiSetup').hidden=false;
+    byId('continueWifi').hidden=true;
+    byId('wifiMessage').textContent='';
+    byId('wifiMessage').classList.remove('error');
+    if(!dashboardReady) {
+      byId('dashboardContent').hidden=true;
+      byId('savebar').hidden=true;
+    }
+    byId('wifiSsid').focus();
+  }
+  function continueToDashboard() {
+    showDashboard();
+    refreshAll();
   }
   async function api(path, options={}) {
     const response=await fetch(path,options);
@@ -275,9 +311,32 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   }
   async function loadStatus() {
     const s=await api('/api/status');
-    put('network',s.network.connected?'Connected':'Access point');
+    put('network',s.network.connected?'Connected to home Wi-Fi':'Setup access point');
     put('ip',s.network.ip);
     byId('ipLink').href=`http://${s.network.ip}/`;
+    put('homeIp',s.network.homeIp || 'Not connected');
+    if(!dashboardReady && wifiSubmitted) {
+      if(s.network.connected && !s.network.connecting) {
+        wifiSubmitted=false;
+        byId('wifiMessage').textContent='Wi-Fi connected successfully. Select Next to open your dashboard.';
+        byId('wifiMessage').classList.remove('error');
+        byId('continueWifi').hidden=false;
+        byId('connectWifi').disabled=false;
+      } else if(s.network.connecting) {
+        byId('wifiMessage').textContent='Connecting to your Wi-Fi network…';
+      } else {
+        wifiSubmitted=false;
+        byId('wifiMessage').textContent='Could not connect. Check the network name and password, then try again.';
+        byId('wifiMessage').classList.add('error');
+        byId('connectWifi').disabled=false;
+      }
+    } else if(!dashboardReady && s.network.setupRequired) {
+      byId('wifiSetup').hidden=false;
+      byId('dashboardContent').hidden=true;
+      byId('savebar').hidden=true;
+    } else if(!dashboardReady) {
+      showDashboard();
+    }
     put('nextPrayer',s.nextPrayer.name ? `${s.nextPrayer.name} at ${s.nextPrayer.time} (${s.nextPrayer.countdown})` : 'Schedule unavailable');
     put('azanStatus',s.azanPlaying?'Beeping — touch/shake to stop':'Ready');
     put('hijri',s.hijri.date || '—'); put('event',s.hijri.event || 'None today');
@@ -385,16 +444,30 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     catch(e) { message(e.message,true); }
   }
   async function saveWifi() {
-    const ssid=byId('wifiSsid').value.trim();
-    if(!ssid) { message('Enter a Wi-Fi network name.',true); return; }
+    const ssid=byId('wifiSsid').value;
+    if(!ssid.trim()) {
+      byId('wifiMessage').textContent='Enter a Wi-Fi network name.';
+      byId('wifiMessage').classList.add('error');
+      return;
+    }
+    byId('connectWifi').disabled=true;
+    byId('continueWifi').hidden=true;
     try {
       await api('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,pass:byId('wifiPass').value})});
-      message('Credentials saved. The board is restarting; reconnect to its new network address.');
-    } catch(e) { message(e.message,true); }
+      wifiSubmitted=true;
+      byId('wifiMessage').textContent='Credentials saved. Connecting…';
+      byId('wifiMessage').classList.remove('error');
+      await loadStatus();
+    } catch(e) {
+      byId('wifiMessage').textContent=e.message;
+      byId('wifiMessage').classList.add('error');
+      byId('connectWifi').disabled=false;
+    }
   }
   refreshAll();
   loadWeeklyStats();
   setInterval(()=>{loadStatus().catch(e=>message(e.message,true));loadWeeklyStats();},30000);
+  setInterval(()=>{if(wifiSubmitted)loadStatus().catch(e=>{byId('wifiMessage').textContent=e.message;});},1500);
   window.addEventListener('resize',()=>loadWeeklyStats());
 </script>
 </body>

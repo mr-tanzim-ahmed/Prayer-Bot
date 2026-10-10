@@ -78,11 +78,22 @@ Keep feature behavior in its manager or screen module where practical; use `main
 
 ## 🌐 Access the local dashboard
 
-1. Flash the firmware from VS Code/PlatformIO.
-2. On first boot, join the device Wi-Fi network **PrayerBot-Setup** (password **12345678**).
-3. Open **http://192.168.4.1**. This is the ESP32's default local access-point address.
-4. The dashboard starts with **Dhaka** selected. Choose a preset city or enter a custom city name, latitude, longitude, timezone label, and UTC offset; then save your settings.
-5. To give the ESP32 internet access for NTP, prayer schedules, and weather, expand **Wi-Fi setup / change network**, enter your home Wi-Fi credentials, and save. The board restarts. Open the dashboard at the ESP32's new LAN IP address (shown in the dashboard while connected by AP, in the serial log, or in your router's connected-device list).
+### First-time setup
+
+1. Flash and power on the ESP32.
+2. On your phone or computer, open Wi-Fi settings and connect to **PrayerBot-Setup** (password **12345678**).
+3. In a browser on that same device, go to **http://192.168.4.1**. This is the ESP32 setup access point's fixed IP address.
+4. Enter the Wi-Fi name (SSID) and password for either:
+   - your **2.4 GHz home Wi-Fi router**, or
+   - your **mobile phone's 2.4 GHz hotspot**.
+5. Select **Connect to Wi-Fi**. Wait for **“Wi-Fi connected successfully”**, then select **“Next: open dashboard”**. The setup access point stays available during this connection and the dashboard continues to work at **http://192.168.4.1** while your phone/computer remains connected to **PrayerBot-Setup**.
+6. Set the location (Dhaka is the default) and other device settings from the dashboard.
+
+### Open the dashboard later through your router or hotspot
+
+After the ESP32 joins your router or phone hotspot, it receives a **local IP address from that network using DHCP**. This address is not fixed and may change. Find the **Home network IP** in the dashboard, or check the router/hotspot's connected-device list or the ESP32 serial log. Then connect your phone/computer to the **same router or hotspot** and open **http://<ESP32-home-IP>** in its browser (for example, `http://192.168.1.42`).
+
+If you use a mobile hotspot, its owner phone provides the Wi-Fi connection to the ESP32. Some phones do not allow the hotspot-owner phone to reach connected clients; if the dashboard will not open on that phone, connect a second phone or computer to the hotspot and use the ESP32's displayed Home network IP there.
 
 The dashboard exposes device status, today's prayer times, Hijri date, weather/AQI, screen selection, Pomodoro controls, zikir count controls, and the active azan stop control. Settings are range-validated and saved to LittleFS. The optional OpenWeather API key is never returned by the settings API; the dashboard only reports whether one is configured.
 

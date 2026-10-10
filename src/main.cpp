@@ -168,7 +168,9 @@ void setup() {
         Serial.println("[MAIN] Web server started.");
     } else {
         Serial.println("[MAIN] WiFi not connected. Starting AP mode...");
-        WifiManager::startAP();
+        if (!WifiManager::isAPMode()) {
+            WifiManager::startAP();
+        }
         WebServerManager::init(g_settings);
     }
 
@@ -401,6 +403,7 @@ void taskNetwork(void* param) {
     unsigned long lastNtpSync       = 0;
     unsigned long lastCacheCleanup  = 0;
     bool initialCacheCleanupPending = g_timesynced;
+    bool networkServicesInitialized = g_wifiConnected;
 
     for (;;) {
         unsigned long now = millis();
@@ -413,6 +416,26 @@ void taskNetwork(void* param) {
         }
 
         if (g_wifiConnected && WiFi.status() == WL_CONNECTED) {
+            if (!networkServicesInitialized) {
+                Serial.println("[MAIN] WiFi connected after setup; initializing online services.");
+                g_timesynced = WifiManager::syncNTP(g_settings);
+                g_prayerReady = PrayerManager::init(g_settings);
+                if (g_prayerReady) {
+                    PrayerManager::getTodayPrayers(g_todayPrayers);
+                    PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, g_settings);
+                }
+                g_weatherReady = WeatherManager::update(g_settings, g_weather);
+                CalendarManager::init(g_settings);
+                CalendarManager::getHijriDate(g_hijriDate);
+                CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
+                VoiceManager::init();
+                networkServicesInitialized = true;
+                initialCacheCleanupPending = g_timesynced;
+                lastPrayerUpdate = millis();
+                lastWeatherUpdate = lastPrayerUpdate;
+                lastNtpSync = lastPrayerUpdate;
+            }
+
             if (initialCacheCleanupPending) {
                 CacheManager::cleanExpired(CACHE_MAX_AGE_DAYS);
                 lastCacheCleanup = now;

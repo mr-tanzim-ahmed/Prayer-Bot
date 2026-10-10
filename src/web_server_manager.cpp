@@ -8,6 +8,7 @@
 #include "calendar_manager.h"
 #include "screens/dhikr_screen.h"
 #include "pomodoro_stats.h"
+#include "wifi_manager.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
@@ -327,8 +328,18 @@ void init(Settings& settings) {
         JsonDocument doc;
         JsonObject network = doc["network"].to<JsonObject>();
         network["connected"] = WiFi.status() == WL_CONNECTED;
-        network["mode"] = (WiFi.getMode() & WIFI_AP) ? "access-point" : "station";
-        network["ip"] = (WiFi.getMode() & WIFI_AP) ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+        network["mode"] = (WiFi.getMode() & WIFI_AP)
+            ? (WiFi.status() == WL_CONNECTED ? "access-point+station" : "access-point")
+            : "station";
+        network["setupRequired"] =
+            (WiFi.getMode() & WIFI_AP) && WiFi.status() != WL_CONNECTED;
+        network["connecting"] = WifiManager::isConnecting();
+        network["ip"] = (WiFi.getMode() & WIFI_AP)
+            ? WiFi.softAPIP().toString()
+            : WiFi.localIP().toString();
+        network["homeIp"] = WiFi.status() == WL_CONNECTED
+            ? WiFi.localIP().toString()
+            : "";
 
         JsonObject prayers = doc["prayers"].to<JsonObject>();
         prayers["ready"] = g_prayerReady;
@@ -511,9 +522,11 @@ void init(Settings& settings) {
                 return;
             }
 
-            request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Restarting...\"}");
-            delay(1000);
-            ESP.restart();
+            if (!WifiManager::connectToNetwork(ssid, password)) {
+                request->send(400, "application/json", "{\"error\":\"Could not start the Wi-Fi connection.\"}");
+                return;
+            }
+            request->send(200, "application/json", "{\"status\":\"connecting\",\"message\":\"Connecting to Wi-Fi...\"}");
         });
 
     server->onNotFound([](AsyncWebServerRequest* request) {

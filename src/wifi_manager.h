@@ -17,6 +17,9 @@ namespace WifiManager {
     // Start AP mode for WiFi provisioning
     void startAP();
 
+    // Begin a station connection without interrupting the setup access point.
+    bool connectToNetwork(const String& ssid, const String& password);
+
     // Reconnect after disconnection
     bool reconnect();
 
@@ -25,6 +28,7 @@ namespace WifiManager {
 
     // Status
     bool isConnected();
+    bool isConnecting();
     String getIP();
     bool isAPMode();
 }
