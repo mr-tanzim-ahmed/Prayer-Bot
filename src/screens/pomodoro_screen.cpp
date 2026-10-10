@@ -14,6 +14,7 @@ namespace {
             case POMODORO_SHORT_BREAK: return "SHORT BREAK";
             case POMODORO_LONG_BREAK:  return "LONG BREAK";
             case POMODORO_PAUSED:      return "PAUSED";
+            case POMODORO_WAITING_FOR_BREAK: return "TOUCH TO START BREAK";
             case POMODORO_IDLE:
             default:                   return "READY";
         }
@@ -37,7 +38,10 @@ void draw(const PomodoroState& state) {
     DisplayManager::drawCenteredText(String(getPhaseText(state.phase)), 28);
 
     // Timer
-    if (state.phase != POMODORO_IDLE) {
+    if (state.phase == POMODORO_WAITING_FOR_BREAK) {
+        oled.setFont(u8g2_font_5x8_tf);
+        DisplayManager::drawCenteredText("Touch sensor to start break", 47);
+    } else if (state.phase != POMODORO_IDLE) {
         oled.setFont(u8g2_font_logisoso20_tf);
         int m = state.remainingSeconds / 60;
         int s = state.remainingSeconds % 60;

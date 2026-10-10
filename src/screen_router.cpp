@@ -6,6 +6,7 @@
 #include "screens/weather_screen.h"
 #include "screens/pomodoro_screen.h"
 #include "screens/dhikr_screen.h"
+#include "prayer_manager.h"
 
 // Access global state
 extern DailyPrayers    g_todayPrayers;
@@ -15,7 +16,7 @@ extern HijriDate       g_hijriDate;
 extern IslamicEvent    g_todayEvent;
 extern WeatherData     g_weather;
 extern PomodoroState   g_pomodoro;
-extern AzanState       g_azanState;
+extern volatile AzanState g_azanState;
 extern VoiceState      g_voiceState;
 extern bool            g_weatherReady;
 extern bool            g_prayerReady;
@@ -27,12 +28,20 @@ namespace ScreenRouter {
 
 void draw(SystemScreen screen) {
     if (!DisplayManager::isAvailable()) return;
+
+    if (g_azanState == AZAN_PLAYING) {
+        PrayerFocusScreen::draw(g_nextPrayer, g_prohibited, true,
+                                PrayerManager::getCurrentPrayerName());
+        return;
+    }
     
     unsigned long timeOnScreen = millis() - g_screenStartMs;
 
     switch (screen) {
         case SYS_SCREEN_PRAYER_FOCUS:
-            PrayerFocusScreen::draw(g_nextPrayer, g_prohibited);
+            PrayerFocusScreen::draw(g_nextPrayer, g_prohibited,
+                                    g_azanState == AZAN_PLAYING,
+                                    PrayerManager::getCurrentPrayerName());
             break;
 
         case SYS_SCREEN_ALL_PRAYERS:
@@ -63,11 +72,19 @@ void draw(SystemScreen screen) {
 void update(SystemScreen screen) {
     if (!DisplayManager::isAvailable()) return;
 
+    if (g_azanState == AZAN_PLAYING) {
+        PrayerFocusScreen::update(g_nextPrayer, g_prohibited, true,
+                                  PrayerManager::getCurrentPrayerName());
+        return;
+    }
+
     unsigned long timeOnScreen = millis() - g_screenStartMs;
 
     switch (screen) {
         case SYS_SCREEN_PRAYER_FOCUS:
-            PrayerFocusScreen::update(g_nextPrayer, g_prohibited);
+            PrayerFocusScreen::update(g_nextPrayer, g_prohibited,
+                                      g_azanState == AZAN_PLAYING,
+                                      PrayerManager::getCurrentPrayerName());
             break;
 
         case SYS_SCREEN_CLOCK_CALENDAR:

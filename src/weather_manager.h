@@ -13,11 +13,8 @@ namespace WeatherManager {
     // Fetch weather + AQI and update the WeatherData struct
     bool update(const Settings& settings, WeatherData& weather);
 
-    // Get weather icon type from weather condition ID
+    // Get weather icon type from OpenWeather condition ID
     WeatherIconType getIconType(int weatherId);
-
-    // Get human-readable weather status text
-    String getStatusText(const String& weatherMain);
 
     // Get AQI category text
     String getAQIText(int aqi);

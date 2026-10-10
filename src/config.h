@@ -103,7 +103,7 @@
 #define OPEN_METEO_AIR        "https://air-quality-api.open-meteo.com/v1/air-quality"
 #define QURAN_AUDIO_BASE      "https://cdn.islamic.network/quran/audio/128/ar.alafasy"
 
-// OpenWeatherMap (for weather - to be replaced with Open-Meteo)
+// OpenWeatherMap current weather endpoint
 #define OPENWEATHER_API_BASE  "https://api.openweathermap.org/data/2.5"
 
 // ------------------------------------------------------------

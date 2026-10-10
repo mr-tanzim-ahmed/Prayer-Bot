@@ -19,6 +19,8 @@
 #include "screen_router.h"
 #include "logger.h"
 #include "cache_manager.h"
+#include "screens/dhikr_screen.h"
+#include "pomodoro_stats.h"
 
 // ============================================================
 //  PRAYER-BOT MAIN
@@ -38,7 +40,15 @@ IslamicEvent    g_todayEvent;
 
 SystemScreen    g_currentScreen = SYS_SCREEN_PRAYER_FOCUS;
 unsigned long   g_screenStartMs = 0;
-AzanState       g_azanState     = AZAN_IDLE;
+volatile AzanState g_azanState  = AZAN_IDLE;
+volatile bool   g_azanStopRequested = false;
+volatile bool   g_locationRefreshRequested = false;
+volatile bool   g_weatherRefreshRequested = false;
+volatile bool   g_ntpSyncRequested = false;
+volatile int8_t g_webScreenRequest = -1;
+volatile uint8_t g_webPomodoroRequest = 0;
+volatile uint8_t g_webDhikrRequest = 0;
+volatile int16_t g_webVolumeRequest = -1;
 VoiceState      g_voiceState    = VOICE_IDLE;
 
 bool            g_wifiConnected  = false;
@@ -59,6 +69,14 @@ void taskScheduler(void* param);
 void taskNetwork(void* param);
 void taskAudio(void* param);
 
+namespace {
+    void resumePomodoroAfterAzan() {
+        if (g_pomodoro.pausedByAzan) {
+            PomodoroManager::resumeFromAzan(g_pomodoro);
+        }
+    }
+}
+
 // ============================================================
 //  SETUP
 // ============================================================
@@ -78,6 +96,7 @@ void setup() {
     StorageManager::init();
     CacheManager::init();
     StorageManager::loadSettings(g_settings);
+    PomodoroStats::init();
     Logger::info("MAIN", "Settings loaded.");
 
     // 2. Initialize display
@@ -99,7 +118,16 @@ void setup() {
     // 5. Initialize Pomodoro with saved settings
     PomodoroManager::init(g_settings);
     PomodoroManager::updateSettings(g_pomodoro, g_settings);
+    g_pomodoro.currentCycle = 0;
+    g_pomodoro.phase = POMODORO_IDLE;
+    g_pomodoro.savedPhase = POMODORO_IDLE;
+    g_pomodoro.pendingBreakPhase = POMODORO_SHORT_BREAK;
     Serial.println("[MAIN] Pomodoro initialized.");
+
+    // Audio is available even while the device is in Wi-Fi setup AP mode.
+    if (AzanManager::init()) {
+        AzanManager::setVolume(g_settings.volume);
+    }
 
     // 6. Connect WiFi (or start AP for setup)
     DisplayManager::showConnectingScreen();
@@ -115,7 +143,7 @@ void setup() {
         g_prayerReady = PrayerManager::init(g_settings);
         if (g_prayerReady) {
             PrayerManager::getTodayPrayers(g_todayPrayers);
-            PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited);
+            PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, g_settings);
             Serial.println("[MAIN] Prayer data ready.");
         }
 
@@ -131,15 +159,11 @@ void setup() {
         CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
         Serial.println("[MAIN] Calendar initialized.");
 
-        // 11. Initialize azan
-        AzanManager::init();
-        Serial.println("[MAIN] Azan manager initialized.");
-
-        // 12. Initialize voice
+        // 11. Initialize voice
         VoiceManager::init();
         Serial.println("[MAIN] Voice manager initialized.");
 
-        // 13. Start web server
+        // 12. Start web server
         WebServerManager::init(g_settings);
         Serial.println("[MAIN] Web server started.");
     } else {
@@ -176,6 +200,7 @@ void loop() {
 
 void taskDisplay(void* param) {
     TickType_t lastWake = xTaskGetTickCount();
+    bool suppressButton2Actions = false;
 
     for (;;) {
         // Service OLED health
@@ -183,15 +208,68 @@ void taskDisplay(void* param) {
 
         // Handle button presses
         ButtonHandler::update();
+        int8_t webScreenRequest = g_webScreenRequest;
+        g_webScreenRequest = -1;
+        if (webScreenRequest >= 0 && webScreenRequest < SYS_SCREEN_COUNT) {
+            g_currentScreen = (SystemScreen)webScreenRequest;
+            g_screenStartMs = millis();
+            ScreenRouter::draw(g_currentScreen);
+        }
 
-        if (ButtonHandler::isButton1Pressed()) {
+        uint8_t webPomodoroRequest = g_webPomodoroRequest;
+        g_webPomodoroRequest = 0;
+        if (webPomodoroRequest == 1 && g_azanState != AZAN_PLAYING) {
+            PomodoroManager::togglePause(g_pomodoro);
+        } else if (webPomodoroRequest == 2) {
+            PomodoroManager::reset(g_pomodoro);
+        }
+
+        uint8_t webDhikrRequest = g_webDhikrRequest;
+        g_webDhikrRequest = 0;
+        if (webDhikrRequest > 0) {
+            DhikrScreen::countTouch();
+        }
+
+        int16_t webVolumeRequest = g_webVolumeRequest;
+        g_webVolumeRequest = -1;
+        if (webVolumeRequest >= 0 && webVolumeRequest <= 100) {
+            AzanManager::setVolume((uint8_t)webVolumeRequest);
+        }
+
+        bool anyTouch = ButtonHandler::isAnyTouchPressed();
+        if (g_currentScreen == SYS_SCREEN_DHIKR && anyTouch) {
+            DhikrScreen::countTouch();
+        }
+
+        bool startedPomodoroBreak = false;
+        if (anyTouch &&
+            g_pomodoro.phase == POMODORO_WAITING_FOR_BREAK &&
+            g_azanState != AZAN_PLAYING) {
+            PomodoroManager::startBreak(g_pomodoro);
+            startedPomodoroBreak = true;
+            suppressButton2Actions = ButtonHandler::isButton2Held();
+        }
+
+        if (anyTouch && g_azanState == AZAN_PLAYING) {
+            g_azanStopRequested = true;
+            suppressButton2Actions = ButtonHandler::isButton2Held();
+        }
+
+        if (ButtonHandler::isButton1Pressed() &&
+            g_currentScreen != SYS_SCREEN_DHIKR &&
+            !startedPomodoroBreak &&
+            g_pomodoro.phase != POMODORO_WAITING_FOR_BREAK &&
+            g_azanState != AZAN_PLAYING) {
             // Cycle to next screen
             g_currentScreen = (SystemScreen)((g_currentScreen + 1) % SYS_SCREEN_COUNT);
             g_screenStartMs = millis();
             ScreenRouter::draw(g_currentScreen);
         }
 
-        if (ButtonHandler::isButton2LongPressed()) {
+        if (ButtonHandler::isButton2LongPressed() &&
+            !suppressButton2Actions &&
+            g_currentScreen != SYS_SCREEN_DHIKR &&
+            g_azanState != AZAN_PLAYING) {
             // Start voice mode
             if (g_voiceState == VOICE_IDLE && g_azanState == AZAN_IDLE) {
                 g_voiceState = VOICE_LISTENING;
@@ -199,7 +277,10 @@ void taskDisplay(void* param) {
             }
         }
 
-        if (ButtonHandler::isButton2ShortPressed()) {
+        if (ButtonHandler::isButton2ShortPressed() &&
+            !suppressButton2Actions &&
+            g_currentScreen != SYS_SCREEN_DHIKR &&
+            g_azanState != AZAN_PLAYING) {
             // Context action
             if (g_voiceState == VOICE_PLAYING) {
                 VoiceManager::stopPlayback();
@@ -209,11 +290,25 @@ void taskDisplay(void* param) {
             }
         }
 
+        if (suppressButton2Actions &&
+            !ButtonHandler::isButton2Held() &&
+            !ButtonHandler::isButton2ShortPressed() &&
+            !ButtonHandler::isButton2LongPressed()) {
+            suppressButton2Actions = false;
+        } else if (suppressButton2Actions &&
+                   !ButtonHandler::isButton2Held() &&
+                   (ButtonHandler::isButton2ShortPressed() ||
+                    ButtonHandler::isButton2LongPressed())) {
+            suppressButton2Actions = false;
+        }
+
         // Update current screen content (clock tick, countdown, etc.)
         ScreenRouter::update(g_currentScreen);
 
         // Auto-slide logic for Dhikr screen (100 seconds)
-        if (g_currentScreen == SYS_SCREEN_DHIKR && (millis() - g_screenStartMs >= 100000)) {
+        if (g_currentScreen == SYS_SCREEN_DHIKR &&
+            g_azanState != AZAN_PLAYING &&
+            (millis() - g_screenStartMs >= 100000)) {
             g_currentScreen = SYS_SCREEN_PRAYER_FOCUS; // Return to main screen
             g_screenStartMs = millis();
             ScreenRouter::draw(g_currentScreen);
@@ -231,6 +326,7 @@ void taskDisplay(void* param) {
 
 void taskScheduler(void* param) {
     TickType_t lastWake = xTaskGetTickCount();
+    PomodoroPhase previousPomodoroPhase = g_pomodoro.phase;
 
     for (;;) {
         // Update shake detector
@@ -239,44 +335,52 @@ void taskScheduler(void* param) {
         // Check if azan should play
         if (g_prayerReady && g_azanState == AZAN_IDLE && g_settings.azanEnabled) {
             if (PrayerManager::isAzanTime(g_todayPrayers)) {
-                g_azanState = AZAN_PLAYING;
-                AzanManager::play(PrayerManager::getCurrentPrayerName());
+                if (AzanManager::play(PrayerManager::getCurrentPrayerName())) {
+                    g_azanState = AZAN_PLAYING;
 
-                // Pause Pomodoro during azan
-                if (g_pomodoro.phase == POMODORO_FOCUS ||
-                    g_pomodoro.phase == POMODORO_SHORT_BREAK ||
-                    g_pomodoro.phase == POMODORO_LONG_BREAK) {
-                    PomodoroManager::pauseForAzan(g_pomodoro);
+                    // Pause Pomodoro during azan
+                    if (g_pomodoro.phase == POMODORO_FOCUS ||
+                        g_pomodoro.phase == POMODORO_SHORT_BREAK ||
+                        g_pomodoro.phase == POMODORO_LONG_BREAK) {
+                        PomodoroManager::pauseForAzan(g_pomodoro);
+                    }
                 }
             }
         }
 
-        // Check shake to stop azan
-        if (g_azanState == AZAN_PLAYING && ShakeDetector::isShakeDetected()) {
+        bool shakeDetected = ShakeDetector::isShakeDetected();
+        bool touchStopRequested = g_azanStopRequested;
+        g_azanStopRequested = false;
+        if (g_azanState == AZAN_PLAYING && (shakeDetected || touchStopRequested)) {
             AzanManager::stop();
             g_azanState = AZAN_IDLE;
-
-            // Resume Pomodoro if it was paused by azan
-            if (g_pomodoro.pausedByAzan) {
-                PomodoroManager::resumeFromAzan(g_pomodoro);
-            }
+            resumePomodoroAfterAzan();
         }
 
         // Check if azan finished naturally
         if (g_azanState == AZAN_PLAYING && !AzanManager::isPlaying()) {
             g_azanState = AZAN_IDLE;
-            if (g_pomodoro.pausedByAzan) {
-                PomodoroManager::resumeFromAzan(g_pomodoro);
-            }
+            resumePomodoroAfterAzan();
         }
 
         // Update prayer countdown
         if (g_prayerReady) {
-            PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited);
+            PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, g_settings);
         }
 
         // Update Pomodoro timer
         PomodoroManager::update(g_pomodoro);
+        if (g_pomodoro.phase == POMODORO_FOCUS &&
+            previousPomodoroPhase != POMODORO_FOCUS &&
+            previousPomodoroPhase != POMODORO_PAUSED) {
+            PomodoroStats::recordSessionStarted();
+        }
+        if (previousPomodoroPhase == POMODORO_FOCUS &&
+            g_pomodoro.phase == POMODORO_WAITING_FOR_BREAK) {
+            PomodoroStats::recordFocusCompleted(g_pomodoro.focusMinutes);
+            AzanManager::playPomodoroBeep();
+        }
+        previousPomodoroPhase = g_pomodoro.phase;
 
         // Update voice state machine
         VoiceManager::update(g_voiceState);
@@ -313,6 +417,28 @@ void taskNetwork(void* param) {
                 CacheManager::cleanExpired(CACHE_MAX_AGE_DAYS);
                 lastCacheCleanup = now;
                 initialCacheCleanupPending = false;
+            }
+
+            if (g_ntpSyncRequested) {
+                g_ntpSyncRequested = false;
+                g_timesynced = WifiManager::syncNTP(g_settings);
+                lastNtpSync = millis();
+            }
+
+            if (g_locationRefreshRequested) {
+                g_locationRefreshRequested = false;
+                g_prayerReady = PrayerManager::refresh(g_settings);
+                if (g_prayerReady) {
+                    PrayerManager::getTodayPrayers(g_todayPrayers);
+                    PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, g_settings);
+                }
+                lastPrayerUpdate = millis();
+            }
+
+            if (g_weatherRefreshRequested) {
+                g_weatherRefreshRequested = false;
+                g_weatherReady = WeatherManager::update(g_settings, g_weather);
+                lastWeatherUpdate = millis();
             }
 
             // Refresh weather

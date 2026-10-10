@@ -13,7 +13,11 @@ namespace {
 
     // Button 1 state
     bool btn1_pressed = false;
+    bool btn1_isTouched = false;
+    bool btn2_wasTouched = false;
     unsigned long btn1_lastDebounce = 0;
+    bool anyTouchPressed = false;
+    unsigned long anyTouchLastDebounce = 0;
 
     // Button 2 state
     bool btn2_shortPressed = false;
@@ -37,17 +41,28 @@ void update() {
     btn1_pressed = false;
     btn2_shortPressed = false;
     btn2_longPressed = false;
+    anyTouchPressed = false;
 
-    // --- Touch 1: Screen cycle (Short press) ---
-    // touchRead returns a smaller value when touched on S3
+    // Touch pads report a lower value while touched on ESP32-S3.
     bool b1 = touchRead(PIN_BUTTON_1) < TOUCH_THRESHOLD;
-    if (b1 && (now - btn1_lastDebounce) >= BUTTON_DEBOUNCE_MS) {
-        btn1_pressed = true;
-        btn1_lastDebounce = now;
-    }
-
-    // --- Touch 2: Short press + Long press (5 sec) ---
     bool b2 = touchRead(PIN_BUTTON_2) < TOUCH_THRESHOLD;
+    bool touchStarted = (b1 && !btn1_isTouched) ||
+                        (b2 && !btn2_wasTouched);
+
+    if (b1 && !btn1_isTouched) {
+        if ((now - btn1_lastDebounce) >= BUTTON_DEBOUNCE_MS) {
+            btn1_pressed = true;
+            btn1_lastDebounce = now;
+        }
+    }
+    btn1_isTouched = b1;
+
+    if (touchStarted &&
+        (now - anyTouchLastDebounce) >= BUTTON_DEBOUNCE_MS) {
+        anyTouchPressed = true;
+        anyTouchLastDebounce = now;
+    }
+    btn2_wasTouched = b2;
 
     if (b2) {
         if (!btn2_isHeld) {
@@ -79,6 +94,14 @@ bool isButton2ShortPressed() {
 
 bool isButton2LongPressed() {
     return btn2_longPressed;
+}
+
+bool isAnyTouchPressed() {
+    return anyTouchPressed;
+}
+
+bool isButton2Held() {
+    return btn2_isHeld;
 }
 
 } // namespace ButtonHandler

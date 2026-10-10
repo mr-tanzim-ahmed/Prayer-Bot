@@ -6,9 +6,6 @@
 # IDE configuration files (VS Code)
 .vscode/
 
-# PlatformIO project configuration (keep locally, not needed in repo)
-platformio.ini
-
 # Runtime data / generated files – keep out of version control
 /data/
 

@@ -116,7 +116,8 @@ enum PomodoroPhase : uint8_t {
     POMODORO_FOCUS,
     POMODORO_SHORT_BREAK,
     POMODORO_LONG_BREAK,
-    POMODORO_PAUSED
+    POMODORO_PAUSED,
+    POMODORO_WAITING_FOR_BREAK
 };
 
 struct PomodoroState {
@@ -127,6 +128,7 @@ struct PomodoroState {
     uint16_t longBreakMinutes;
     uint8_t  totalCycles;
     uint8_t  currentCycle;
+    PomodoroPhase pendingBreakPhase;
     unsigned long phaseStartMs;
     unsigned long pausedElapsedMs;
     int32_t  remainingSeconds;

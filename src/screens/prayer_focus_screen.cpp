@@ -28,10 +28,28 @@ namespace {
 
 namespace PrayerFocusScreen {
 
-void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited) {
+void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
+          bool azanPlaying, PrayerName activePrayer) {
     U8G2& oled = DisplayManager::getDisplay();
 
     DisplayManager::clearBuffer();
+
+    if (azanPlaying) {
+        oled.setFont(u8g2_font_6x10_tf);
+        oled.drawStr(2, 9, "PRAYER TIME");
+        oled.drawHLine(0, 12, SCREEN_WIDTH);
+
+        oled.setFont(u8g2_font_7x14B_tf);
+        DisplayManager::drawCenteredText(
+            String(PrayerManager::getPrayerNameStr(activePrayer)), 32);
+
+        oled.setFont(u8g2_font_6x10_tf);
+        DisplayManager::drawCenteredText("Beep alarm active", 45);
+        oled.setFont(u8g2_font_5x8_tf);
+        DisplayManager::drawCenteredText("Touch or shake to stop", 59);
+        DisplayManager::sendBuffer();
+        return;
+    }
 
     // Header
     oled.setFont(u8g2_font_6x10_tf);
@@ -76,9 +94,10 @@ void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited) {
     DisplayManager::sendBuffer();
 }
 
-void update(const NextPrayerInfo& next, const ProhibitedTimes& prohibited) {
+void update(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
+            bool azanPlaying, PrayerName activePrayer) {
     // Redraw every second for countdown updates
-    draw(next, prohibited);
+    draw(next, prohibited, azanPlaying, activePrayer);
 }
 
 } // namespace PrayerFocusScreen

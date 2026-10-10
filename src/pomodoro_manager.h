@@ -18,6 +18,7 @@ namespace PomodoroManager {
 
     // User controls
     void start(PomodoroState& state);
+    void startBreak(PomodoroState& state);
     void togglePause(PomodoroState& state);
     void reset(PomodoroState& state);
 

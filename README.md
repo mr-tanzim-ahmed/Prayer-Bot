@@ -10,13 +10,14 @@ Welcome to **Prayer‑Bot**, a DIY, offline‑first digital companion that helps
 
 ## 🌟 Key Features
 
-- **🕌 Automated Prayer Times & Azan** – Accurate monthly schedules from the free Aladhan API with optional I2S audio playback.
+- **🕌 Automated Prayer Times & Azan** – Monthly schedules from Aladhan with a repeating I2S prayer alarm that stops on either touch sensor or a shake.
 - **🌙 Hijri Calendar & Event Tracker** – Current Islamic date, Ramadan countdown, major holidays, and custom offset handling.
-- **⏱️ Pomodoro Focus Timer** – 25 min work / 5 min break cycles, controllable via a physical button.
-- **🌤️ Live Weather & AQI** – Real‑time temperature, humidity, and air‑quality data from Open‑Meteo.
-- **📱 Web Dashboard (Captive Portal)** – Configure Wi‑Fi, city/division, calculation method, and timer settings from any smartphone.
+- **⏱️ Pomodoro Focus Timer** – 25-minute focus and 5-minute touch-started break by default. A single beep sounds when focus ends; touch a sensor to begin the 2–5 minute break, after which the next focus session starts automatically. The existing long break still follows the configured cycle count.
+- **📈 Weekly Pomodoro History** – Dashboard graph of daily sessions started and completed focus minutes for the last seven days. Daily totals are persisted in LittleFS; only completed focus sessions count toward focus minutes.
+- **🌤️ Live Weather & AQI** – Weather and humidity from OpenWeatherMap and air-quality data from Open-Meteo.
+- **📱 Local Web Dashboard** – Configure location, prayer calculation, prohibited-time offsets, azan volume, weather key, and Pomodoro timings; view device/prayer/weather status and control screens, Pomodoro, zikir counting, and the active alarm from a phone or computer.
 - **📳 Shake‑to‑Snooze** – Vibration sensor lets you dismiss or snooze alerts with a shake.
-- **🕋 Dhikr Screen** – 5‑second Dhikr phrases shown for a total of 100 s, auto‑returning to the main screen.
+- **🕋 Dhikr Screen** – Five Arabic dhikr phrases rotate every 20 seconds, with a touch-to-count counter; the screen returns to the main screen after 100 seconds.
 - **🔧 Robust Memory Management** – All JSON parsing is streamed directly into LittleFS; no dynamic allocations for new features.
 
 ---
@@ -36,11 +37,22 @@ Welcome to **Prayer‑Bot**, a DIY, offline‑first digital companion that helps
 
 ---
 
-## 🚀 Getting Started
+## 🌐 Access the local dashboard
 
-1. **Flash the Firmware** – Open the project in VS Code with PlatformIO (`platformio.ini` is pre‑configured) and run `PlatformIO: Build` → `Upload`.
-2. **First Boot & Wi‑Fi Setup** – On power‑up the device creates its own Wi‑Fi AP. Connect with your phone, open the captive‑portal dashboard, and enter your home Wi‑Fi credentials.
-3. **Configure & Enjoy** – Set your city/division, prayer calculation method, audio volume, and Pomodoro cycles through the web UI. The device will fetch weather and prayer data, then operate fully offline.
+1. Flash the firmware from VS Code/PlatformIO.
+2. On first boot, join the device Wi-Fi network **PrayerBot-Setup** (password **12345678**).
+3. Open **http://192.168.4.1**. This is the ESP32's default local access-point address.
+4. The dashboard starts with **Dhaka** selected. Choose a preset city or enter a custom city name, latitude, longitude, timezone label, and UTC offset; then save your settings.
+5. To give the ESP32 internet access for NTP, prayer schedules, and weather, expand **Wi-Fi setup / change network**, enter your home Wi-Fi credentials, and save. The board restarts. Open the dashboard at the ESP32's new LAN IP address (shown in the dashboard while connected by AP, in the serial log, or in your router's connected-device list).
+
+The dashboard exposes device status, today's prayer times, Hijri date, weather/AQI, screen selection, Pomodoro controls, zikir count controls, and the active azan stop control. Settings are range-validated and saved to LittleFS. The optional OpenWeather API key is never returned by the settings API; the dashboard only reports whether one is configured.
+
+## ⏱️ Pomodoro flow
+
+- Default focus is **25 minutes**; the touch-started break delay defaults to **5 minutes** and can be set from **2 to 5 minutes**.
+- At the end of a focus session, the speaker plays one beep and the timer waits for a touch sensor (or the dashboard's Start/Pause control) before starting the break countdown.
+- The next focus session starts automatically after the break. A configured long break is still used after the selected number of focus sessions.
+- The dashboard's seven-day chart reports sessions started, completed focus sessions, and completed focus minutes. Statistics need valid device local time; partial or interrupted focus sessions are not included in completed-focus totals.
 
 ---
 
@@ -48,6 +60,6 @@ Welcome to **Prayer‑Bot**, a DIY, offline‑first digital companion that helps
 
 - **FreeRTOS** – Separate tasks for networking, UI rendering, sensor reading, and audio playback.
 - **Memory‑Efficient JSON Streaming** – Large monthly calendar payloads are parsed directly into flash storage.
-- **Free APIs** – Aladhan (prayer times) and Open‑Meteo (weather/AQI) – no API keys required.
+- **Free APIs** – Aladhan (prayer times) and Open‑Meteo (air quality); OpenWeatherMap weather requires a user-provided API key.
 
 Feel free to fork, modify, and extend the bot (e.g., add voice commands or additional sensors). Happy building!

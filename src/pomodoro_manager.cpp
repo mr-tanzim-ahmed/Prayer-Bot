@@ -13,7 +13,9 @@ void init(const Settings& settings) {
 }
 
 void update(PomodoroState& state) {
-    if (state.phase == POMODORO_IDLE || state.phase == POMODORO_PAUSED) return;
+    if (state.phase == POMODORO_IDLE ||
+        state.phase == POMODORO_PAUSED ||
+        state.phase == POMODORO_WAITING_FOR_BREAK) return;
 
     unsigned long now = millis();
     unsigned long elapsed = now - state.phaseStartMs;
@@ -38,24 +40,36 @@ void update(PomodoroState& state) {
         switch (state.phase) {
             case POMODORO_FOCUS:
                 state.currentCycle++;
-                if (state.currentCycle >= state.totalCycles) {
-                    state.phase = POMODORO_LONG_BREAK;
-                    state.currentCycle = 0;
-                } else {
-                    state.phase = POMODORO_SHORT_BREAK;
-                }
+                state.pendingBreakPhase =
+                    state.currentCycle >= state.totalCycles
+                        ? POMODORO_LONG_BREAK
+                        : POMODORO_SHORT_BREAK;
+                state.phase = POMODORO_WAITING_FOR_BREAK;
                 break;
 
             case POMODORO_SHORT_BREAK:
             case POMODORO_LONG_BREAK:
+                if (state.phase == POMODORO_LONG_BREAK) {
+                    state.currentCycle = 0;
+                }
                 state.phase = POMODORO_FOCUS;
+                state.phaseStartMs = now;
+                state.remainingSeconds = state.focusMinutes * 60;
                 break;
 
             default:
                 break;
         }
-        state.phaseStartMs = now;
-        state.remainingSeconds = 0;
+        if (state.phase == POMODORO_WAITING_FOR_BREAK) {
+            state.phaseStartMs = 0;
+            state.remainingSeconds =
+                (int32_t)(state.pendingBreakPhase == POMODORO_LONG_BREAK
+                    ? state.longBreakMinutes
+                    : state.shortBreakMinutes) * 60;
+        } else if (state.phase != POMODORO_FOCUS) {
+            state.phaseStartMs = now;
+            state.remainingSeconds = 0;
+        }
     } else {
         state.remainingSeconds = (int32_t)((phaseDurationMs - elapsed) / 1000UL);
     }
@@ -65,6 +79,7 @@ void start(PomodoroState& state) {
     state.phase = POMODORO_FOCUS;
     state.savedPhase = POMODORO_FOCUS;
     state.currentCycle = 0;
+    state.pendingBreakPhase = POMODORO_SHORT_BREAK;
     state.phaseStartMs = millis();
     state.pausedElapsedMs = 0;
     state.pausedByAzan = false;
@@ -72,7 +87,24 @@ void start(PomodoroState& state) {
     Serial.println("[POMODORO] Started.");
 }
 
+void startBreak(PomodoroState& state) {
+    if (state.phase != POMODORO_WAITING_FOR_BREAK) return;
+    state.phase = state.pendingBreakPhase;
+    state.phaseStartMs = millis();
+    state.pausedElapsedMs = 0;
+    state.remainingSeconds = (int32_t)(
+        state.phase == POMODORO_LONG_BREAK
+            ? state.longBreakMinutes
+            : state.shortBreakMinutes) * 60;
+    Serial.println("[POMODORO] Break started by touch.");
+}
+
 void togglePause(PomodoroState& state) {
+    if (state.phase == POMODORO_WAITING_FOR_BREAK) {
+        startBreak(state);
+        return;
+    }
+
     if (state.phase == POMODORO_IDLE) {
         start(state);
         return;
@@ -97,6 +129,7 @@ void reset(PomodoroState& state) {
     state.phase = POMODORO_IDLE;
     state.savedPhase = POMODORO_IDLE;
     state.currentCycle = 0;
+    state.pendingBreakPhase = POMODORO_SHORT_BREAK;
     state.remainingSeconds = 0;
     state.pausedElapsedMs = 0;
     state.pausedByAzan = false;

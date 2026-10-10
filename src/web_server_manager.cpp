@@ -1,465 +1,530 @@
 #include "web_server_manager.h"
 #include "config.h"
+#include "dashboard_html.h"
 #include "storage_manager.h"
 #include "prayer_manager.h"
 #include "weather_manager.h"
 #include "pomodoro_manager.h"
 #include "calendar_manager.h"
+#include "screens/dhikr_screen.h"
+#include "pomodoro_stats.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
+#include <time.h>
+#include <math.h>
+
+extern volatile bool g_locationRefreshRequested;
+extern volatile bool g_weatherRefreshRequested;
+extern volatile bool g_ntpSyncRequested;
+extern PomodoroState g_pomodoro;
+extern volatile int16_t g_webVolumeRequest;
 
 // ============================================================
 //  WEB SERVER MANAGER IMPLEMENTATION
-//  Serves the phone dashboard and REST API.
+//  Serves the local device dashboard and its JSON API.
 // ============================================================
 
 namespace {
     AsyncWebServer* server = nullptr;
     bool serverRunning = false;
-
-    // Reference to settings (set during init)
     Settings* settingsRef = nullptr;
+    constexpr size_t MAX_REQUEST_BODY_BYTES = 2048;
+
+    bool validInteger(JsonVariantConst value, int minimum, int maximum) {
+        if (value.isUnbound()) return true;
+        if (!value.is<int>()) return false;
+        const int number = value.as<int>();
+        return number >= minimum && number <= maximum;
+    }
+
+    bool validCalculationMethod(JsonVariantConst value) {
+        if (value.isUnbound()) return true;
+        if (!value.is<int>()) return false;
+        const int method = value.as<int>();
+        return (method >= 0 && method <= 5) ||
+               (method >= 7 && method <= 23) || method == 99;
+    }
+
+    bool isNumber(JsonVariantConst value) {
+        return value.is<int>() || value.is<float>();
+    }
+
+    bool validNumber(JsonVariantConst value, float minimum, float maximum) {
+        if (value.isUnbound()) return true;
+        if (!isNumber(value)) return false;
+        const float number = value.as<float>();
+        return isfinite(number) && number >= minimum && number <= maximum;
+    }
+
+    bool validString(JsonVariantConst value, size_t maxLength, bool allowEmpty = false) {
+        if (value.isUnbound()) return true;
+        if (!value.is<const char*>()) return false;
+        const char* text = value.as<const char*>();
+        const size_t length = strlen(text);
+        return length <= maxLength && (allowEmpty || length > 0);
+    }
+
+    bool hasOnlyKeys(JsonObjectConst object, const char* const* allowed, size_t allowedCount) {
+        for (JsonPairConst member : object) {
+            const char* key = member.key().c_str();
+            bool found = false;
+            for (size_t i = 0; i < allowedCount; ++i) {
+                if (strcmp(key, allowed[i]) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return false;
+        }
+        return true;
+    }
+
+    bool validSettings(const JsonDocument& doc, String& error) {
+        if (!validString(doc["city"], sizeof(settingsRef->cityName) - 1)) {
+            error = "City is required and must be 1-63 characters.";
+        } else if (!validString(doc["timezone"], sizeof(settingsRef->timezone) - 1)) {
+            error = "Timezone is required and must be 1-39 characters.";
+        } else if (!validNumber(doc["lat"], -90.0f, 90.0f)) {
+            error = "Latitude must be between -90 and 90.";
+        } else if (!validNumber(doc["lon"], -180.0f, 180.0f)) {
+            error = "Longitude must be between -180 and 180.";
+        } else if (!validNumber(doc["utcOff"], -12.0f, 14.0f)) {
+            error = "UTC offset must be between -12 and 14.";
+        } else if (!validCalculationMethod(doc["calcMethod"]) ||
+                   !validInteger(doc["asrSchool"], 0, 1) ||
+                   !validInteger(doc["hijriOffset"], -2, 2) ||
+                   !validInteger(doc["volume"], 0, 100) ||
+                   !validInteger(doc["focusMin"], 1, 120) ||
+                   !validInteger(doc["shortBrk"], 2, 5) ||
+                   !validInteger(doc["longBrk"], 1, 60) ||
+                   !validInteger(doc["pomCycles"], 1, 10) ||
+                   !validInteger(doc["sunriseOff"], 0, 60) ||
+                   !validInteger(doc["zawalOff"], 0, 60) ||
+                   !validInteger(doc["sunsetOff"], 0, 60)) {
+            error = "One or more settings are outside their allowed range.";
+        } else if (!validString(doc["owmKey"], sizeof(settingsRef->owmApiKey) - 1, true)) {
+            error = "OpenWeather API key must be at most 47 characters.";
+        } else if (doc["azanOn"].isUnbound() == false &&
+                   !doc["azanOn"].is<bool>()) {
+            error = "Azan enabled must be true or false.";
+        }
+        return error.isEmpty();
+    }
+
+    String formatTime(const PrayerTime& time) {
+        char text[6];
+        snprintf(text, sizeof(text), "%02u:%02u", time.hour, time.minute);
+        return String(text);
+    }
+
+    String formatDuration(int32_t seconds) {
+        if (seconds < 0) seconds = 0;
+        char text[16];
+        snprintf(text, sizeof(text), "%02ld:%02ld:%02ld",
+                 (long)(seconds / 3600),
+                 (long)((seconds % 3600) / 60),
+                 (long)(seconds % 60));
+        return String(text);
+    }
+
+    const char* pomodoroPhaseName(PomodoroPhase phase) {
+        switch (phase) {
+            case POMODORO_FOCUS: return "Focus";
+            case POMODORO_SHORT_BREAK: return "Short break";
+            case POMODORO_LONG_BREAK: return "Long break";
+            case POMODORO_PAUSED: return "Paused";
+            case POMODORO_WAITING_FOR_BREAK: return "Waiting for touch";
+            default: return "Idle";
+        }
+    }
+
+    void handleSettings(AsyncWebServerRequest* request, const String& body) {
+        JsonDocument doc;
+        if (deserializeJson(doc, body)) {
+            request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+            return;
+        }
+        if (!doc.is<JsonObject>()) {
+            request->send(400, "application/json", "{\"error\":\"Settings body must be a JSON object.\"}");
+            return;
+        }
+        static const char* const settingKeys[] = {
+            "city", "timezone", "lat", "lon", "utcOff", "calcMethod",
+            "asrSchool", "hijriOffset", "azanOn", "volume", "focusMin",
+            "shortBrk", "longBrk", "pomCycles", "sunriseOff", "zawalOff",
+            "sunsetOff", "owmKey"
+        };
+        if (!hasOnlyKeys(doc.as<JsonObjectConst>(), settingKeys,
+                         sizeof(settingKeys) / sizeof(settingKeys[0]))) {
+            request->send(400, "application/json", "{\"error\":\"Settings contain an unknown field.\"}");
+            return;
+        }
+
+        String validationError;
+        if (!validSettings(doc, validationError)) {
+            JsonDocument response;
+            response["error"] = validationError;
+            String json;
+            serializeJson(response, json);
+            request->send(400, "application/json", json);
+            return;
+        }
+
+        const bool locationChanged =
+            (isNumber(doc["lat"]) && doc["lat"].as<float>() != settingsRef->latitude) ||
+            (isNumber(doc["lon"]) && doc["lon"].as<float>() != settingsRef->longitude) ||
+            (doc["calcMethod"].is<int>() && doc["calcMethod"].as<int>() != settingsRef->calcMethod) ||
+            (doc["asrSchool"].is<int>() && doc["asrSchool"].as<int>() != settingsRef->asrSchool) ||
+            (doc["city"].is<const char*>() &&
+             String(doc["city"].as<const char*>()) != String(settingsRef->cityName));
+        const bool timezoneChanged =
+            (isNumber(doc["utcOff"]) && doc["utcOff"].as<float>() != settingsRef->utcOffset) ||
+            (doc["timezone"].is<const char*>() &&
+             String(doc["timezone"].as<const char*>()) != String(settingsRef->timezone));
+        const bool weatherConfigChanged =
+            (doc["owmKey"].is<const char*>() &&
+             String(doc["owmKey"].as<const char*>()) != String(settingsRef->owmApiKey));
+
+        Settings previousSettings = *settingsRef;
+        if (doc["azanOn"].is<bool>())
+            settingsRef->azanEnabled = doc["azanOn"].as<bool>();
+        if (doc["volume"].is<int>())
+            settingsRef->volume = doc["volume"].as<uint8_t>();
+        if (doc["owmKey"].is<const char*>()) {
+            const char* apiKey = doc["owmKey"].as<const char*>();
+            if (apiKey[0] != '\0')
+                strlcpy(settingsRef->owmApiKey, apiKey, sizeof(settingsRef->owmApiKey));
+        }
+        if (doc["city"].is<const char*>())
+            strlcpy(settingsRef->cityName, doc["city"].as<const char*>(), sizeof(settingsRef->cityName));
+        if (doc["timezone"].is<const char*>())
+            strlcpy(settingsRef->timezone, doc["timezone"].as<const char*>(), sizeof(settingsRef->timezone));
+        if (isNumber(doc["lat"])) settingsRef->latitude = doc["lat"].as<float>();
+        if (isNumber(doc["lon"])) settingsRef->longitude = doc["lon"].as<float>();
+        if (isNumber(doc["utcOff"])) settingsRef->utcOffset = doc["utcOff"].as<float>();
+        if (doc["calcMethod"].is<int>()) settingsRef->calcMethod = doc["calcMethod"].as<uint8_t>();
+        if (doc["asrSchool"].is<int>()) settingsRef->asrSchool = doc["asrSchool"].as<uint8_t>();
+        if (doc["hijriOffset"].is<int>()) settingsRef->hijriOffset = doc["hijriOffset"].as<int8_t>();
+        if (doc["focusMin"].is<int>()) settingsRef->focusMinutes = doc["focusMin"].as<uint16_t>();
+        if (doc["shortBrk"].is<int>()) settingsRef->shortBreakMinutes = doc["shortBrk"].as<uint16_t>();
+        if (doc["longBrk"].is<int>()) settingsRef->longBreakMinutes = doc["longBrk"].as<uint16_t>();
+        if (doc["pomCycles"].is<int>()) settingsRef->pomodoroCycles = doc["pomCycles"].as<uint8_t>();
+        if (doc["sunriseOff"].is<int>()) settingsRef->sunriseOffset = doc["sunriseOff"].as<uint8_t>();
+        if (doc["zawalOff"].is<int>()) settingsRef->zawalOffset = doc["zawalOff"].as<uint8_t>();
+        if (doc["sunsetOff"].is<int>()) settingsRef->sunsetOffset = doc["sunsetOff"].as<uint8_t>();
+
+        if (!StorageManager::saveSettings(*settingsRef)) {
+            *settingsRef = previousSettings;
+            PomodoroManager::updateSettings(g_pomodoro, *settingsRef);
+            request->send(500, "application/json", "{\"error\":\"Could not save settings to device storage.\"}");
+            return;
+        }
+
+        g_webVolumeRequest = settingsRef->volume;
+        PomodoroManager::updateSettings(g_pomodoro, *settingsRef);
+        CalendarManager::setHijriOffset(settingsRef->hijriOffset);
+        if (timezoneChanged) g_ntpSyncRequested = true;
+        if (locationChanged) {
+            g_locationRefreshRequested = true;
+            g_weatherRefreshRequested = true;
+        }
+        if (weatherConfigChanged) g_weatherRefreshRequested = true;
+
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+        Serial.println("[WEB] Settings saved.");
+    }
+
+    String* appendRequestBody(AsyncWebServerRequest* request,
+                              uint8_t* data, size_t len,
+                              size_t index, size_t total) {
+        if (index == 0) {
+            delete static_cast<String*>(request->_tempObject);
+            if (total > MAX_REQUEST_BODY_BYTES) {
+                request->send(413, "application/json", "{\"error\":\"Request body is too large.\"}");
+                request->_tempObject = nullptr;
+                return nullptr;
+            }
+            request->_tempObject = new String();
+        }
+        String* body = static_cast<String*>(request->_tempObject);
+        if (!body) return nullptr;
+        body->reserve(total);
+        for (size_t i = 0; i < len; ++i) body->concat((char)data[i]);
+        if (index + len != total) return nullptr;
+        request->_tempObject = nullptr;
+        return body;
+    }
 }
 
-// Extern globals
-extern WeatherData     g_weather;
-extern DailyPrayers    g_todayPrayers;
-extern NextPrayerInfo  g_nextPrayer;
-extern HijriDate       g_hijriDate;
-extern PomodoroState   g_pomodoro;
-
-namespace {
-
-    const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prayer-Bot Dashboard</title>
-    <style>
-        :root {
-            --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --accent: #38bdf8;
-            --border: #334155; --success: #22c55e;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            background: var(--bg); color: var(--text);
-            padding: 20px; line-height: 1.5;
-        }
-        .container { max-width: 800px; margin: 0 auto; }
-        h1 { text-align: center; color: var(--accent); margin-bottom: 30px; font-size: 2rem; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
-        .card {
-            background: var(--card); border: 1px solid var(--border);
-            border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-        }
-        .card h2 {
-            color: var(--accent); font-size: 1.25rem; margin-bottom: 16px;
-            padding-bottom: 8px; border-bottom: 1px solid var(--border);
-        }
-        .form-group { margin-bottom: 16px; }
-        label { display: block; font-size: 0.875rem; color: #94a3b8; margin-bottom: 6px; }
-        input, select {
-            width: 100%; padding: 10px 12px; border: 1px solid var(--border);
-            border-radius: 6px; background: #0f172a; color: var(--text); font-size: 1rem;
-        }
-        input[type="range"] { padding: 0; }
-        .toggle-group { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-        .toggle-group input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent); }
-        .toggle-group label { margin-bottom: 0; font-size: 1rem; color: var(--text); }
-        button {
-            width: 100%; padding: 14px; border: none; border-radius: 8px;
-            background: var(--accent); color: #0f172a; font-weight: 600; font-size: 1.1rem;
-            cursor: pointer; margin-top: 30px; transition: opacity 0.2s;
-        }
-        button:hover { opacity: 0.9; }
-        .status { text-align: center; color: var(--success); margin-top: 12px; font-weight: 500; height: 24px; }
-        .hidden { display: none; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>&#x1F54C; Prayer-Bot Dashboard</h1>
-        <div class="card" id="wifi-card">
-            <h2>&#x1F4F6; WiFi Setup</h2>
-            <div class="form-group">
-                <label>SSID</label>
-                <input type="text" id="wifi-ssid" placeholder="Enter WiFi SSID">
-            </div>
-            <div class="form-group">
-                <label>Password</label>
-                <input type="password" id="wifi-pass" placeholder="Enter WiFi password">
-            </div>
-            <button onclick="connectWifi()">Connect</button>
-            <div class="status" id="wifi-status"></div>
-        </div>
-
-        <div id="main-dashboard" class="hidden">
-            <!-- Existing cards will be placed here -->
-
-
-            <div class="card">
-                <h2>&#x1F50A; Audio & Azan</h2>
-                <div class="toggle-group">
-                    <input type="checkbox" id="azanOn">
-                    <label for="azanOn">Enable Auto Azan</label>
-                </div>
-                <div class="form-group">
-                    <label>Volume</label>
-                    <input type="range" id="volume" min="0" max="100" value="80">
-                </div>
-                <div class="form-group">
-                    <label>Hijri Day Offset (-2 to +2)</label>
-                    <input type="number" id="hijriOffset" min="-2" max="2" value="0">
-                </div>
-            </div>
-
-            <div class="card">
-                <h2>&#x1F4DA; Prayer Method</h2>
-                <div class="form-group">
-                    <label>Calculation Method</label>
-                    <select id="calcMethod">
-                        <option value="1">Univ. of Islamic Sciences, Karachi</option>
-                        <option value="2">Islamic Society of North America</option>
-                        <option value="3">Muslim World League</option>
-                        <option value="4">Umm Al-Qura University</option>
-                        <option value="5">Egyptian General Authority</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Asr School</label>
-                    <select id="asrSchool">
-                        <option value="0">Shafi'i / Standard</option>
-                        <option value="1">Hanafi</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="card">
-                <h2>&#x23F1;&#xFE0F; Pomodoro Timer</h2>
-                <div class="form-group">
-                    <label>Focus Session (minutes)</label>
-                    <input type="number" id="focusMin" value="25" min="1" max="120">
-                </div>
-                <div class="form-group" style="display:flex; gap:10px;">
-                    <div style="flex:1;"><label>Short Break</label><input type="number" id="shortBrk" value="5" min="1" max="30"></div>
-                    <div style="flex:1;"><label>Long Break</label><input type="number" id="longBrk" value="15" min="1" max="60"></div>
-                </div>
-                <div class="form-group">
-                    <label>Cycles before Long Break</label>
-                    <input type="number" id="pomCycles" value="4" min="1" max="10">
-                </div>
-            </div>
-
-        </div>
-
-        <button onclick="saveSettings()">Save & Apply Settings</button>
-        <div class="status" id="status"></div>
-    </div>
-
-    <script>
-        function updateDivisions() {
-            const country = document.getElementById('country').value;
-            if (country === 'BD') {
-                document.getElementById('division-group').classList.remove('hidden');
-                document.getElementById('custom-group').classList.add('hidden');
-                applyLocation();
-            } else {
-                document.getElementById('division-group').classList.add('hidden');
-                document.getElementById('custom-group').classList.remove('hidden');
-            }
-        }
-
-        function applyLocation() {
-            const sel = document.getElementById('division');
-            const [lat, lon] = sel.value.split(',');
-            document.getElementById('city').value = sel.options[sel.selectedIndex].text;
-            document.getElementById('lat').value = lat;
-            document.getElementById('lon').value = lon;
-            fetchLivePreview();
-        }
-
-        async function connectWifi() {
-            const ssid = document.getElementById('wifi-ssid').value.trim();
-            const pass = document.getElementById('wifi-pass').value;
-            const statusEl = document.getElementById('wifi-status');
-            if (!ssid) {
-                statusEl.textContent = 'SSID required';
-                return;
-            }
-            const body = { ssid, pass };
-            try {
-                const r = await fetch('/api/wifi', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const json = await r.json();
-                if (r.ok) {
-                    statusEl.textContent = 'Connected. Loading dashboard...';
-                    // hide WiFi card, show main dashboard
-                    document.getElementById('wifi-card').classList.add('hidden');
-                    document.getElementById('main-dashboard').classList.remove('hidden');
-                    // fetch preview now that we have network
-                    fetchLivePreview();
-                } else {
-                    statusEl.textContent = json.error || 'Connection failed';
-                }
-            } catch (e) {
-                statusEl.textContent = 'Connection error';
-                console.error(e);
-            }
-        }
-        // Check WiFi connection on page load
-        async function checkWifi() {
-            try {
-                const r = await fetch('/api/settings');
-                if (r.ok) {
-                    // WiFi is already configured, hide setup and show dashboard
-                    document.getElementById('wifi-card').classList.add('hidden');
-                    document.getElementById('main-dashboard').classList.remove('hidden');
-                    // Load settings and live preview
-                    loadSettings();
-                    fetchLivePreview();
-                }
-            } catch (_) {
-                // Remain on WiFi setup screen if fetch fails
-            }
-        }
-        // Invoke checkWifi when script loads
-        checkWifi();
-
-            const lat = document.getElementById('lat').value;
-            const lon = document.getElementById('lon').value;
-            const method = document.getElementById('calcMethod') ? document.getElementById('calcMethod').value : 3;
-            
-            // Format current date as DD-MM-YYYY
-            const d = new Date();
-            const dateStr = String(d.getDate()).padStart(2, '0') + '-' + String(d.getMonth()+1).padStart(2, '0') + '-' + d.getFullYear();
-            
-            document.getElementById('live-gregorian').textContent = "Fetching...";
-            
-            try {
-                const res = await fetch(`https://api.aladhan.com/v1/timings/${dateStr}?latitude=${lat}&longitude=${lon}&method=${method}`);
-                const json = await res.json();
-                if(json.code === 200) {
-                    const data = json.data;
-                    document.getElementById('live-gregorian').textContent = data.date.gregorian.weekday.en + ', ' + data.date.gregorian.day + ' ' + data.date.gregorian.month.en + ' ' + data.date.gregorian.year;
-                    document.getElementById('live-hijri').textContent = data.date.hijri.day + ' ' + data.date.hijri.month.en + ' ' + data.date.hijri.year + ' AH';
-                    
-                    document.getElementById('live-sunrise').textContent = data.timings.Sunrise.substring(0,5);
-                    document.getElementById('live-sunset').textContent = data.timings.Maghrib.substring(0,5); // Sunset is Maghrib time
-                }
-            } catch(e) {
-                document.getElementById('live-gregorian').textContent = "Preview unavailable";
-                console.error(e);
-            }
-        }
-
-        async function loadSettings() {
-            try {
-                const r = await fetch('/api/settings');
-                const s = await r.json();
-                document.getElementById('azanOn').checked = s.azanOn;
-                document.getElementById('volume').value = s.volume;
-                document.getElementById('city').value = s.city;
-                document.getElementById('lat').value = s.lat;
-                document.getElementById('lon').value = s.lon;
-                document.getElementById('calcMethod').value = s.calcMethod;
-                document.getElementById('asrSchool').value = s.asrSchool;
-                document.getElementById('hijriOffset').value = s.hijriOffset;
-                document.getElementById('focusMin').value = s.focusMin;
-                document.getElementById('shortBrk').value = s.shortBrk;
-                document.getElementById('longBrk').value = s.longBrk;
-                document.getElementById('pomCycles').value = s.pomCycles;
-                
-                // Try to match division dropdown
-                let matched = false;
-                const divOpts = document.getElementById('division').options;
-                for (let i = 0; i < divOpts.length; i++) {
-                    if (divOpts[i].text === s.city) {
-                        document.getElementById('country').value = 'BD';
-                        document.getElementById('division').selectedIndex = i;
-                        matched = true;
-                        break;
-                    }
-                }
-                if (!matched) document.getElementById('country').value = 'CUSTOM';
-                updateDivisions();
-                
-                fetchLivePreview();
-
-            } catch(e) { console.error(e); }
-        }
-
-        async function saveSettings() {
-            const body = {
-                azanOn: document.getElementById('azanOn').checked,
-                volume: parseInt(document.getElementById('volume').value),
-                city: document.getElementById('city').value,
-                lat: parseFloat(document.getElementById('lat').value),
-                lon: parseFloat(document.getElementById('lon').value),
-                calcMethod: parseInt(document.getElementById('calcMethod').value),
-                asrSchool: parseInt(document.getElementById('asrSchool').value),
-                hijriOffset: parseInt(document.getElementById('hijriOffset').value),
-                focusMin: parseInt(document.getElementById('focusMin').value),
-                shortBrk: parseInt(document.getElementById('shortBrk').value),
-                longBrk: parseInt(document.getElementById('longBrk').value),
-                pomCycles: parseInt(document.getElementById('pomCycles').value)
-            };
-            try {
-                const r = await fetch('/api/settings', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(body)
-                });
-                if (r.ok) {
-                    const status = document.getElementById('status');
-                    status.textContent = 'Settings saved successfully! Board is updating...';
-                    setTimeout(() => status.textContent = '', 4000);
-                }
-            } catch(e) { console.error(e); }
-        }
-        loadSettings();
-    </script>
-</body>
-</html>
-)rawliteral";
-}
+extern WeatherData g_weather;
+extern DailyPrayers g_todayPrayers;
+extern NextPrayerInfo g_nextPrayer;
+extern ProhibitedTimes g_prohibited;
+extern HijriDate g_hijriDate;
+extern IslamicEvent g_todayEvent;
+extern PomodoroState g_pomodoro;
+extern SystemScreen g_currentScreen;
+extern volatile AzanState g_azanState;
+extern bool g_weatherReady;
+extern bool g_prayerReady;
+extern volatile int8_t g_webScreenRequest;
+extern volatile uint8_t g_webPomodoroRequest;
+extern volatile uint8_t g_webDhikrRequest;
+extern volatile bool g_azanStopRequested;
 
 namespace WebServerManager {
 
 void init(Settings& settings) {
     if (server) {
+        server->end();
         delete server;
     }
 
     settingsRef = &settings;
     server = new AsyncWebServer(WEB_SERVER_PORT);
 
-    // --- Dashboard page ---
     server->on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
         request->send(200, "text/html", DASHBOARD_HTML);
     });
 
-    // --- GET settings ---
     server->on("/api/settings", HTTP_GET, [](AsyncWebServerRequest* request) {
         JsonDocument doc;
-        doc["azanOn"]      = settingsRef->azanEnabled;
-        doc["volume"]      = settingsRef->volume;
-        doc["city"]        = settingsRef->cityName;
-        doc["lat"]         = settingsRef->latitude;
-        doc["lon"]         = settingsRef->longitude;
-        doc["calcMethod"]  = settingsRef->calcMethod;
-        doc["asrSchool"]   = settingsRef->asrSchool;
+        doc["azanOn"] = settingsRef->azanEnabled;
+        doc["volume"] = settingsRef->volume;
+        doc["city"] = settingsRef->cityName;
+        doc["lat"] = settingsRef->latitude;
+        doc["lon"] = settingsRef->longitude;
+        doc["timezone"] = settingsRef->timezone;
+        doc["utcOff"] = settingsRef->utcOffset;
+        doc["calcMethod"] = settingsRef->calcMethod;
+        doc["asrSchool"] = settingsRef->asrSchool;
         doc["hijriOffset"] = settingsRef->hijriOffset;
-        doc["focusMin"]    = settingsRef->focusMinutes;
-        doc["shortBrk"]    = settingsRef->shortBreakMinutes;
-        doc["longBrk"]     = settingsRef->longBreakMinutes;
-        doc["pomCycles"]   = settingsRef->pomodoroCycles;
+        doc["focusMin"] = settingsRef->focusMinutes;
+        doc["shortBrk"] = settingsRef->shortBreakMinutes;
+        doc["longBrk"] = settingsRef->longBreakMinutes;
+        doc["pomCycles"] = settingsRef->pomodoroCycles;
+        doc["sunriseOff"] = settingsRef->sunriseOffset;
+        doc["zawalOff"] = settingsRef->zawalOffset;
+        doc["sunsetOff"] = settingsRef->sunsetOffset;
+        doc["owmKeyConfigured"] = settingsRef->owmApiKey[0] != '\0';
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
+    server->on("/api/settings", HTTP_POST,
+        [](AsyncWebServerRequest*) {},
+        nullptr,
+        [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            String* body = appendRequestBody(request, data, len, index, total);
+            if (!body) return;
+            handleSettings(request, *body);
+            delete body;
+        });
+
+    server->on("/api/status", HTTP_GET, [](AsyncWebServerRequest* request) {
+        JsonDocument doc;
+        JsonObject network = doc["network"].to<JsonObject>();
+        network["connected"] = WiFi.status() == WL_CONNECTED;
+        network["mode"] = (WiFi.getMode() & WIFI_AP) ? "access-point" : "station";
+        network["ip"] = (WiFi.getMode() & WIFI_AP) ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+
+        JsonObject prayers = doc["prayers"].to<JsonObject>();
+        prayers["ready"] = g_prayerReady;
+        prayers["fajr"] = formatTime(g_todayPrayers.fajr);
+        prayers["sunrise"] = formatTime(g_todayPrayers.sunrise);
+        prayers["dhuhr"] = formatTime(g_todayPrayers.dhuhr);
+        prayers["asr"] = formatTime(g_todayPrayers.asr);
+        prayers["maghrib"] = formatTime(g_todayPrayers.maghrib);
+        prayers["isha"] = formatTime(g_todayPrayers.isha);
+
+        JsonObject next = doc["nextPrayer"].to<JsonObject>();
+        next["name"] = g_prayerReady ? PrayerManager::getPrayerNameStr(g_nextPrayer.name) : "";
+        next["time"] = formatTime(g_nextPrayer.startTime);
+        next["countdown"] = formatDuration(g_nextPrayer.countdownSeconds);
+        doc["azanPlaying"] = g_azanState == AZAN_PLAYING;
+
+        JsonObject hijri = doc["hijri"].to<JsonObject>();
+        char hijriText[64];
+        snprintf(hijriText, sizeof(hijriText), "%u %s %u %s",
+                 g_hijriDate.day, g_hijriDate.monthName.c_str(),
+                 g_hijriDate.year, g_hijriDate.designation.c_str());
+        hijri["date"] = g_hijriDate.year ? hijriText : "";
+        hijri["event"] = g_todayEvent.name;
+
+        JsonObject weather = doc["weather"].to<JsonObject>();
+        weather["valid"] = g_weatherReady && g_weather.valid;
+        weather["city"] = g_weather.cityName;
+        weather["temperatureC"] = g_weather.temperatureC;
+        weather["humidity"] = g_weather.humidity;
+        weather["aqi"] = g_weather.airQualityIndex;
+        weather["pm25"] = g_weather.pm25;
+
+        JsonObject pomodoro = doc["pomodoro"].to<JsonObject>();
+        pomodoro["phase"] = pomodoroPhaseName(g_pomodoro.phase);
+        pomodoro["remaining"] = formatDuration(g_pomodoro.remainingSeconds);
+        pomodoro["nextBreakMinutes"] =
+            g_pomodoro.pendingBreakPhase == POMODORO_LONG_BREAK
+                ? g_pomodoro.longBreakMinutes
+                : g_pomodoro.shortBreakMinutes;
+        pomodoro["cycle"] = g_pomodoro.currentCycle >= g_pomodoro.totalCycles
+            ? g_pomodoro.totalCycles
+            : g_pomodoro.currentCycle + 1;
+        pomodoro["cycles"] = g_pomodoro.totalCycles;
+        doc["screen"] = (uint8_t)g_currentScreen;
+        doc["dhikrCount"] = DhikrScreen::getCount();
 
         String json;
         serializeJson(doc, json);
         request->send(200, "application/json", json);
     });
 
-    // --- POST settings ---
-    server->on("/api/settings", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        NULL,
+    server->on("/api/stats", HTTP_GET, [](AsyncWebServerRequest* request) {
+        JsonDocument doc;
+        if (!PomodoroStats::getWeeklyStats(doc)) {
+            request->send(503, "application/json", "{\"error\":\"Weekly statistics require a valid local date and writable storage.\"}");
+            return;
+        }
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
+    server->on("/api/control", HTTP_POST,
+        [](AsyncWebServerRequest*) {},
+        nullptr,
         [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            String body;
-            for (size_t i = 0; i < len; i++) {
-                body += (char)data[i];
-            }
+            String* body = appendRequestBody(request, data, len, index, total);
+            if (!body) return;
 
             JsonDocument doc;
-            if (deserializeJson(doc, body)) {
+            if (deserializeJson(doc, *body)) {
+                delete body;
                 request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
                 return;
             }
+            delete body;
+            if (!doc.is<JsonObject>()) {
+                request->send(400, "application/json", "{\"error\":\"Control body must be a JSON object.\"}");
+                return;
+            }
+            static const char* const controlKeys[] = {
+                "screen", "pomodoro", "dhikr", "stopAzan"
+            };
+            if (!hasOnlyKeys(doc.as<JsonObjectConst>(), controlKeys,
+                             sizeof(controlKeys) / sizeof(controlKeys[0]))) {
+                request->send(400, "application/json", "{\"error\":\"Control contains an unknown field.\"}");
+                return;
+            }
 
-            // Update settings
-            settingsRef->azanEnabled = doc["azanOn"] | settingsRef->azanEnabled;
-            settingsRef->volume      = doc["volume"] | settingsRef->volume;
+            JsonVariant screenValue = doc["screen"];
+            JsonVariant pomodoroValue = doc["pomodoro"];
+            JsonVariant dhikrValue = doc["dhikr"];
+            JsonVariant stopAzanValue = doc["stopAzan"];
+            if ((!screenValue.isUnbound() && !screenValue.is<int>()) ||
+                (!pomodoroValue.isUnbound() && !pomodoroValue.is<const char*>()) ||
+                (!dhikrValue.isUnbound() && !dhikrValue.is<const char*>()) ||
+                (!stopAzanValue.isUnbound() && !stopAzanValue.is<bool>())) {
+                request->send(400, "application/json", "{\"error\":\"Control fields have invalid types.\"}");
+                return;
+            }
 
-            bool cityChanged = false;
-            if (doc["city"].is<const char*>()) {
-                String newCity = String((const char*)doc["city"]);
-                if (newCity != String(settingsRef->cityName)) {
-                    strlcpy(settingsRef->cityName, newCity.c_str(), sizeof(settingsRef->cityName));
-                    cityChanged = true;
+            int screen = -1;
+            if (!screenValue.isUnbound()) {
+                screen = screenValue.as<int>();
+                if (screen < 0 || screen >= SYS_SCREEN_COUNT) {
+                    request->send(400, "application/json", "{\"error\":\"Unknown screen.\"}");
+                    return;
                 }
             }
 
-            settingsRef->latitude         = doc["lat"]         | settingsRef->latitude;
-            settingsRef->longitude        = doc["lon"]         | settingsRef->longitude;
-            settingsRef->calcMethod       = doc["calcMethod"]  | settingsRef->calcMethod;
-            settingsRef->asrSchool        = doc["asrSchool"]   | settingsRef->asrSchool;
-            settingsRef->hijriOffset      = doc["hijriOffset"] | settingsRef->hijriOffset;
-            settingsRef->focusMinutes     = doc["focusMin"]    | settingsRef->focusMinutes;
-            settingsRef->shortBreakMinutes = doc["shortBrk"]   | settingsRef->shortBreakMinutes;
-            settingsRef->longBreakMinutes = doc["longBrk"]     | settingsRef->longBreakMinutes;
-            settingsRef->pomodoroCycles   = doc["pomCycles"]   | settingsRef->pomodoroCycles;
-
-            // Save to flash
-            StorageManager::saveSettings(*settingsRef);
-
-            // If city changed, trigger re-fetch of prayer times and weather
-            if (cityChanged) {
-                PrayerManager::refresh(*settingsRef);
-                CalendarManager::setHijriOffset(settingsRef->hijriOffset);
-                // Weather will refresh on next network cycle
-                Serial.println("[WEB] City changed. Re-fetching data...");
+            uint8_t pomodoroCommand = 0;
+            if (!pomodoroValue.isUnbound()) {
+                const char* action = pomodoroValue.as<const char*>();
+                if (strcmp(action, "toggle") == 0) pomodoroCommand = 1;
+                else if (strcmp(action, "reset") == 0) pomodoroCommand = 2;
+                else {
+                    request->send(400, "application/json", "{\"error\":\"Unknown Pomodoro action.\"}");
+                    return;
+                }
             }
 
-            request->send(200, "application/json", "{\"status\":\"ok\"}");
-            Serial.println("[WEB] Settings saved.");
-        }
-    );
+            bool countDhikr = false;
+            if (!dhikrValue.isUnbound()) {
+                if (strcmp(dhikrValue.as<const char*>(), "count") != 0) {
+                    request->send(400, "application/json", "{\"error\":\"Unknown zikir action.\"}");
+                    return;
+                }
+                countDhikr = true;
+            }
 
-    // --- WiFi setup endpoint (for AP mode) ---
+            const bool stopAzan = !stopAzanValue.isUnbound() && stopAzanValue.as<bool>();
+            const bool hasCommand = screen >= 0 || pomodoroCommand != 0 ||
+                                    countDhikr || stopAzan;
+            if (!hasCommand) {
+                request->send(400, "application/json", "{\"error\":\"No supported device command was provided.\"}");
+                return;
+            }
+
+            if (screen >= 0) g_webScreenRequest = (int8_t)screen;
+            if (pomodoroCommand != 0) g_webPomodoroRequest = pomodoroCommand;
+            if (countDhikr) g_webDhikrRequest = 1;
+            if (stopAzan) g_azanStopRequested = true;
+            request->send(200, "application/json", "{\"status\":\"queued\"}");
+        });
+
     server->on("/api/wifi", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        NULL,
+        [](AsyncWebServerRequest*) {},
+        nullptr,
         [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            String body;
-            for (size_t i = 0; i < len; i++) body += (char)data[i];
+            String* body = appendRequestBody(request, data, len, index, total);
+            if (!body) return;
 
             JsonDocument doc;
-            if (deserializeJson(doc, body)) {
+            if (deserializeJson(doc, *body)) {
+                delete body;
                 request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
                 return;
             }
-
-            String ssid = String((const char*)(doc["ssid"] | ""));
-            String pass = String((const char*)(doc["pass"] | ""));
-
-            if (ssid.isEmpty()) {
-                request->send(400, "application/json", "{\"error\":\"SSID required\"}");
+            delete body;
+            if (!doc.is<JsonObject>()) {
+                request->send(400, "application/json", "{\"error\":\"Wi-Fi body must be a JSON object.\"}");
+                return;
+            }
+            static const char* const wifiKeys[] = {"ssid", "pass"};
+            if (!hasOnlyKeys(doc.as<JsonObjectConst>(), wifiKeys,
+                             sizeof(wifiKeys) / sizeof(wifiKeys[0]))) {
+                request->send(400, "application/json", "{\"error\":\"Wi-Fi settings contain an unknown field.\"}");
                 return;
             }
 
-            // Save WiFi credentials
-            StorageManager::writeFile("/wifi_ssid.txt", ssid);
-            StorageManager::writeFile("/wifi_pass.txt", pass);
+            if (!validString(doc["ssid"], 32) || !validString(doc["pass"], 63, true)) {
+                request->send(400, "application/json", "{\"error\":\"Enter an SSID (up to 32 characters) and password (up to 63 characters).\"}");
+                return;
+            }
+            String ssid = doc["ssid"].as<String>();
+            String password = doc["pass"].as<String>();
+            if (!StorageManager::writeFile("/wifi_ssid.txt", ssid) ||
+                !StorageManager::writeFile("/wifi_pass.txt", password)) {
+                request->send(500, "application/json", "{\"error\":\"Could not save Wi-Fi credentials.\"}");
+                return;
+            }
 
             request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Restarting...\"}");
-
-            // Restart to connect with new credentials
             delay(1000);
             ESP.restart();
-        }
-    );
+        });
+
+    server->onNotFound([](AsyncWebServerRequest* request) {
+        request->redirect("/");
+    });
 
     server->begin();
     serverRunning = true;
 
     Serial.print("[WEB] Dashboard: http://");
-    Serial.println(WiFi.getMode() == WIFI_AP ? WiFi.softAPIP() : WiFi.localIP());
+    Serial.println((WiFi.getMode() & WIFI_AP) ? WiFi.softAPIP() : WiFi.localIP());
 }
 
 void stop() {

@@ -18,7 +18,8 @@ namespace PrayerManager {
     void getTodayPrayers(DailyPrayers& prayers);
 
     // Calculate next prayer, countdown, window, prohibited times
-    void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited);
+    void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited,
+                          const Settings& settings);
 
     // Check if it's time to play azan (within ~30 seconds of prayer time)
     bool isAzanTime(const DailyPrayers& prayers);

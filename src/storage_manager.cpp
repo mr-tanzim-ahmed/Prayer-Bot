@@ -87,6 +87,9 @@ bool loadSettings(Settings& settings) {
     // Pomodoro
     settings.focusMinutes      = doc["focusMin"]  | DEFAULT_FOCUS_MIN;
     settings.shortBreakMinutes = doc["shortBrk"]  | DEFAULT_SHORT_BREAK;
+    if (settings.shortBreakMinutes < 2 || settings.shortBreakMinutes > 5) {
+        settings.shortBreakMinutes = DEFAULT_SHORT_BREAK;
+    }
     settings.longBreakMinutes  = doc["longBrk"]   | DEFAULT_LONG_BREAK;
     settings.pomodoroCycles    = doc["pomCycles"]  | DEFAULT_CYCLES;
 
@@ -154,8 +157,13 @@ bool writeFile(const char* path, const String& content) {
         Serial.println(path);
         return false;
     }
-    file.print(content);
+    size_t written = file.print(content);
     file.close();
+    if (written != content.length()) {
+        Serial.print("[STORAGE] Incomplete write: ");
+        Serial.println(path);
+        return false;
+    }
     Serial.print("[STORAGE] Written: ");
     Serial.println(path);
     return true;

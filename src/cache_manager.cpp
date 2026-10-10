@@ -10,10 +10,32 @@ namespace CacheManager {
 static JsonDocument metaDoc;
 
 void init() {
-    String json = StorageManager::readFile(CACHE_META_PATH);
-    if (!json.isEmpty()) {
-        deserializeJson(metaDoc, json);
-    } else {
+    constexpr size_t MAX_CACHE_META_BYTES = 2048;
+    metaDoc.clear();
+    if (!LittleFS.exists(CACHE_META_PATH)) {
+        metaDoc.to<JsonObject>();
+        return;
+    }
+
+    File file = LittleFS.open(CACHE_META_PATH, "r");
+    if (!file) {
+        Serial.println("[CACHE] Could not open metadata; starting with empty metadata.");
+        metaDoc.to<JsonObject>();
+        return;
+    }
+    if (file.size() > MAX_CACHE_META_BYTES) {
+        Serial.println("[CACHE] Metadata exceeds size limit; starting with empty metadata.");
+        file.close();
+        metaDoc.to<JsonObject>();
+        return;
+    }
+
+    DeserializationError error = deserializeJson(metaDoc, file);
+    file.close();
+    if (error || !metaDoc.is<JsonObject>()) {
+        Serial.printf("[CACHE] Invalid metadata; starting with empty metadata: %s\n",
+                      error ? error.c_str() : "root is not an object");
+        metaDoc.clear();
         metaDoc.to<JsonObject>();
     }
 }
@@ -21,7 +43,9 @@ void init() {
 static void saveMeta() {
     String json;
     serializeJson(metaDoc, json);
-    StorageManager::writeFile(CACHE_META_PATH, json);
+    if (!StorageManager::writeFile(CACHE_META_PATH, json)) {
+        Serial.println("[CACHE] Failed to save cache metadata.");
+    }
 }
 
 static uint32_t getCurrentTime() {
@@ -31,7 +55,7 @@ static uint32_t getCurrentTime() {
 }
 
 bool isCacheValid(const char* path, uint32_t maxAgeDays) {
-    if (!metaDoc.containsKey(path)) return false;
+    if (!metaDoc[path].is<uint32_t>()) return false;
     uint32_t timestamp = metaDoc[path] | 0;
     if (timestamp == 0) return false;
     
@@ -54,8 +78,12 @@ void markUpdated(const char* path) {
 void cleanExpired(uint32_t maxAgeDays) {
     uint32_t now = getCurrentTime();
     if (now < 1000000000) return; // Time not synced
-    
-    bool changed = false;
+    constexpr size_t MAX_EXPIRED_ENTRIES = 16;
+    struct ExpiredEntry {
+        char path[64];
+    };
+    ExpiredEntry expired[MAX_EXPIRED_ENTRIES];
+    size_t expiredCount = 0;
     JsonObject root = metaDoc.as<JsonObject>();
     
     for (JsonPair kv : root) {
@@ -72,16 +100,27 @@ void cleanExpired(uint32_t maxAgeDays) {
         else if (strcmp(path, WEATHER_CACHE_PATH) == 0) maxDays = CACHE_WEATHER_MAX_DAYS;
         else if (strcmp(path, FESTIVAL_TABLE_PATH) == 0) maxDays = CACHE_FESTIVAL_MAX_DAYS;
         
-        if (ageSecs > (maxDays * 86400)) {
+        if (ageSecs > (maxDays * 86400UL)) {
             Serial.printf("[CACHE] Expired: %s (age %u days)\n", path, ageSecs / 86400);
-            if (LittleFS.exists(path)) {
-                LittleFS.remove(path);
+            if (expiredCount == MAX_EXPIRED_ENTRIES) {
+                Serial.println("[CACHE] Expired metadata limit reached; remaining entries deferred.");
+                break;
             }
-            root.remove(path);
-            changed = true;
+            strlcpy(expired[expiredCount++].path, path, sizeof(expired[0].path));
         }
     }
-    
+
+    bool changed = false;
+    for (size_t i = 0; i < expiredCount; ++i) {
+        const char* path = expired[i].path;
+        if (!LittleFS.exists(path) || LittleFS.remove(path)) {
+            root.remove(path);
+            changed = true;
+        } else {
+            Serial.printf("[CACHE] Could not remove expired file: %s\n", path);
+        }
+    }
+
     if (changed) saveMeta();
 }
 
@@ -101,7 +140,7 @@ void cleanAll() {
 }
 
 uint32_t getCacheAge(const char* path) {
-    if (!metaDoc.containsKey(path)) return 0xFFFFFFFF;
+    if (!metaDoc[path].is<uint32_t>()) return 0xFFFFFFFF;
     uint32_t timestamp = metaDoc[path] | 0;
     uint32_t now = getCurrentTime();
     if (now < 1000000000 || timestamp == 0) return 0xFFFFFFFF;

@@ -11,15 +11,18 @@
 
 namespace AzanManager {
     // Initialize I2S amplifier
-    void init();
+    bool init();
 
-    // Play azan for the given prayer (selects Fajr or standard)
-    void play(PrayerName prayer);
+    // Start the repeating beep alarm for the given prayer
+    bool play(PrayerName prayer);
 
     // Stop playback
     void stop();
 
-    // Decode audio frame (call frequently in dedicated task)
+    // Play one short notification beep
+    void playPomodoroBeep();
+
+    // Feed audio samples (call frequently in dedicated task)
     void update();
 
     // Is azan currently playing?

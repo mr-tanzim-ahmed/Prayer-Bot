@@ -238,7 +238,8 @@ void getTodayPrayers(DailyPrayers& prayers) {
     }
 }
 
-void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited) {
+void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited,
+                      const Settings& settings) {
     DailyPrayers today;
     getTodayPrayers(today);
 
@@ -310,13 +311,13 @@ void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited) {
     int sunriseMin = timeToMinutes(today.sunrise);
     prohibited.afterSunrise.startHour   = today.sunrise.hour;
     prohibited.afterSunrise.startMinute = today.sunrise.minute;
-    prohibited.afterSunrise.endHour     = (sunriseMin + DEFAULT_SUNRISE_OFFSET) / 60;
-    prohibited.afterSunrise.endMinute   = (sunriseMin + DEFAULT_SUNRISE_OFFSET) % 60;
-    prohibited.afterSunrise.active      = (nowMin >= sunriseMin && nowMin < sunriseMin + DEFAULT_SUNRISE_OFFSET);
+    prohibited.afterSunrise.endHour   = (sunriseMin + settings.sunriseOffset) / 60;
+    prohibited.afterSunrise.endMinute = (sunriseMin + settings.sunriseOffset) % 60;
+    prohibited.afterSunrise.active      = (nowMin >= sunriseMin && nowMin < sunriseMin + settings.sunriseOffset);
 
     // At zawal (solar noon ~ Dhuhr)
     int dhuhrMin = timeToMinutes(today.dhuhr);
-    int zawalStart = dhuhrMin - DEFAULT_ZAWAL_OFFSET;
+    int zawalStart = dhuhrMin - settings.zawalOffset;
     prohibited.atZawal.startHour   = zawalStart / 60;
     prohibited.atZawal.startMinute = zawalStart % 60;
     prohibited.atZawal.endHour     = today.dhuhr.hour;
@@ -325,7 +326,7 @@ void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited) {
 
     // Before sunset (Maghrib)
     int maghribMin = timeToMinutes(today.maghrib);
-    int sunsetStart = maghribMin - DEFAULT_SUNSET_OFFSET;
+    int sunsetStart = maghribMin - settings.sunsetOffset;
     prohibited.beforeSunset.startHour   = sunsetStart / 60;
     prohibited.beforeSunset.startMinute = sunsetStart % 60;
     prohibited.beforeSunset.endHour     = today.maghrib.hour;

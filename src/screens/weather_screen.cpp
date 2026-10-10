@@ -39,7 +39,7 @@ void draw(const WeatherData& weather) {
 
     // Weather status
     oled.setFont(u8g2_font_6x10_tf);
-    String status = WeatherManager::getStatusText(weather.weatherMain);
+    String status = weather.weatherMain;
     if (status.length() > 13) status = status.substring(0, 13);
     oled.drawStr(49, 53, status.c_str());
 
