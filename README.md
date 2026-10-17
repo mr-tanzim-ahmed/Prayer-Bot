@@ -127,6 +127,24 @@ Feel free to fork, modify, and extend the bot (e.g., add voice commands or addit
 
 > The PlatformIO tasks automatically use the configuration from `platformio.ini`.
 
+### Arduino IDE
+
+The project uses the same pinned dependency baseline with PlatformIO and Arduino IDE. Arduino does not provide an official LTS designation for these packages; use these tested, fixed versions rather than allowing automatic upgrades:
+
+- **ESP32 by Espressif Systems** board package: **2.0.17**
+- **ESPAsyncWebServer**: **3.6.0** (mathieucarbou)
+- **AsyncTCP**: **3.3.2** (mathieucarbou)
+- **U8g2**: **2.36.18**
+- **Adafruit MPU6050**: **2.2.9**
+- **Adafruit Unified Sensor**: **1.1.15**
+- **Adafruit BusIO**: **1.17.4**
+- **ESP8266Audio**: **2.2.0**
+- **ArduinoJson**: **7.4.3**
+
+In Arduino IDE, install the ESP32 board package at version **2.0.17** through Boards Manager and install the listed library versions. Remove or rename older duplicate ESPAsyncWebServer and AsyncTCP copies from your Arduino `libraries` folder so the IDE does not select them instead. Open `Prayer-Bot.ino` from the project root and select **ESP32S3 Dev Module**.
+
+PlatformIO pins `espressif32@7.1.3`, which supplies the same Arduino-ESP32 **2.0.17** core, and the exact library versions above. Avoid upgrading the core or libraries independently in either environment unless you also test and update both builds.
+
 ---
 
 ## 📌 Pin Diagram
