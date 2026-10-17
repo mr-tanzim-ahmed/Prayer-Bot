@@ -90,7 +90,7 @@
 // ------------------------------------------------------------
 #define WIFI_CONNECT_TIMEOUT  35000UL
 #define AP_SSID               "Prayer-Bot"
-#define AP_PASSWORD           "CHANGE_THIS_PASSWORD"
+#define AP_PASSWORD           "12345678"
 #define WEB_SERVER_PORT       80
 #define NTP_SERVER            "pool.ntp.org"
 
