@@ -16,6 +16,10 @@ namespace WifiManager {
 
     // Start AP mode for WiFi provisioning
     void startAP();
+    String getSetupAPSSID();
+    bool saveSetupAPSettings(const String& ssid, const String& password);
+    void applyPendingSetupAPSettings();
+    bool saveCredentials(const String& ssid, const String& password);
 
     // Begin a station connection without interrupting the setup access point.
     bool connectToNetwork(const String& ssid, const String& password);

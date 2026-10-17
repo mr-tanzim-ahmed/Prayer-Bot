@@ -6,7 +6,7 @@
 // ============================================================
 //  DHIKR SCREEN (Screen 6)
 //  Automatically loops through 5 Dhikr phrases, each showing
-//  for 20 seconds.
+//  for 5 seconds.
 // ============================================================
 
 namespace DhikrScreen {

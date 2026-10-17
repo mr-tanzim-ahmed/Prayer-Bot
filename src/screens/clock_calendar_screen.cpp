@@ -32,8 +32,13 @@ void draw(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers&
     // Gregorian date
     oled.setFont(u8g2_font_5x8_tf);
     if (timeValid) {
-        char dateBuf[16];
-        snprintf(dateBuf, sizeof(dateBuf), "%02d/%02d/%04d", t.tm_mday, t.tm_mon + 1, t.tm_year + 1900);
+        static const char* const monthNames[] = {
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+        };
+        char dateBuf[24];
+        snprintf(dateBuf, sizeof(dateBuf), "Local: %02d %s %04d",
+                 t.tm_mday, monthNames[t.tm_mon], t.tm_year + 1900);
         DisplayManager::drawCenteredText(String(dateBuf), 38);
     }
 

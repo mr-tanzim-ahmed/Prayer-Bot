@@ -50,7 +50,7 @@ void draw(const PomodoroState& state) {
         DisplayManager::drawCenteredText(String(buf), 50);
     } else {
         oled.setFont(u8g2_font_6x10_tf);
-        DisplayManager::drawCenteredText("Press to start", 45);
+        DisplayManager::drawCenteredText("Hold touch 3 seconds", 45);
     }
 
     // Cycle counter

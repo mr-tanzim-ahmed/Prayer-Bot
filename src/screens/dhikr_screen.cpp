@@ -1,32 +1,51 @@
 #include "dhikr_screen.h"
 #include "../display_manager.h"
 #include "../config.h"
+#include "../assets/dhikr/dhikr_arabic_art.h"
 
 // ============================================================
 //  DHIKR SCREEN IMPLEMENTATION
 // ============================================================
 
-const char* DHIKR_PHRASES[] = {
-    "Subhanallah", 
-    "Alhamdulillah", 
-    "La ilaha illallah", 
-    "Allahu Akbar", 
-    "Astaghfirullah"
-};
-
-const char* DHIKR_ARABIC[] = {
-    "سُبْحَانَ ٱللَّٰهِ", 
-    "ٱلْحَمْدُ لِلَّٰهِ", 
-    "لَا إِلٰهَ إِلَّا ٱللَّٰهُ", 
-    "ٱللَّٰهُ أَكْبَرُ", 
-    "أَسْتَغْفِرُ اللّٰهَ"
-};
-
 namespace DhikrScreen {
 namespace {
-    constexpr unsigned long DHIKR_INTERVAL_MS = 20000UL;
-    constexpr unsigned long DHIKR_CYCLE_MS = 100000UL;
+    constexpr unsigned long DHIKR_INTERVAL_MS = 5000UL;
+    constexpr unsigned long DHIKR_CYCLE_MS = DHIKR_INTERVAL_MS * 5;
     uint32_t dhikrCount = 0;
+
+    const uint8_t* const ARABIC_BITMAPS[] = {
+        DhikrArabicArt::BITMAP_0,
+        DhikrArabicArt::BITMAP_1,
+        DhikrArabicArt::BITMAP_2,
+        DhikrArabicArt::BITMAP_3,
+        DhikrArabicArt::BITMAP_4
+    };
+    constexpr uint16_t ARABIC_WIDTHS[] = {
+        DhikrArabicArt::WIDTH_0,
+        DhikrArabicArt::WIDTH_1,
+        DhikrArabicArt::WIDTH_2,
+        DhikrArabicArt::WIDTH_3,
+        DhikrArabicArt::WIDTH_4
+    };
+
+    void drawArabicPhrase(U8G2& oled, uint8_t index, unsigned long elapsedMs) {
+        const uint16_t phraseWidth = ARABIC_WIDTHS[index];
+        const int availableWidth = SCREEN_WIDTH - 8;
+        constexpr int phraseY = 13;
+        oled.setClipWindow(2, phraseY, SCREEN_WIDTH - 3,
+                           phraseY + DhikrArabicArt::HEIGHT_0 - 1);
+        if (phraseWidth <= availableWidth) {
+            oled.drawXBM((SCREEN_WIDTH - phraseWidth) / 2, phraseY,
+                         phraseWidth, DhikrArabicArt::HEIGHT_0, ARABIC_BITMAPS[index]);
+        } else {
+            const unsigned long travelDistance = SCREEN_WIDTH + phraseWidth + 4;
+            const int x = SCREEN_WIDTH + 2 -
+                (int)((elapsedMs * travelDistance) / DHIKR_INTERVAL_MS);
+            oled.drawXBM(x, phraseY, phraseWidth, DhikrArabicArt::HEIGHT_0,
+                         ARABIC_BITMAPS[index]);
+        }
+        oled.setMaxClipWindow();
+    }
 }
 
 void draw(unsigned long timeOnScreenMs) {
@@ -35,8 +54,7 @@ void draw(unsigned long timeOnScreenMs) {
 
     unsigned long cycleTime = timeOnScreenMs % DHIKR_CYCLE_MS;
     int index = cycleTime / DHIKR_INTERVAL_MS;
-    if (index > 4) index = 4;
-    int remainingSeconds = 20 - ((cycleTime % DHIKR_INTERVAL_MS) / 1000);
+    int remainingSeconds = 5 - ((cycleTime % DHIKR_INTERVAL_MS) / 1000);
 
     oled.setFont(u8g2_font_6x10_tf);
     oled.drawStr(2, 9, "ZIKIR");
@@ -45,26 +63,19 @@ void draw(unsigned long timeOnScreenMs) {
     oled.drawStr(104, 9, phrasePosition);
     oled.drawHLine(0, 12, SCREEN_WIDTH);
 
-    oled.setFont(u8g2_font_unifont_t_arabic);
-    DisplayManager::drawCenteredText(String(DHIKR_ARABIC[index]), 29);
-
-    oled.setFont(u8g2_font_6x10_tf);
-    DisplayManager::drawCenteredText(String(DHIKR_PHRASES[index]), 42);
+    drawArabicPhrase(oled, index, cycleTime % DHIKR_INTERVAL_MS);
 
     char countText[24];
     snprintf(countText, sizeof(countText), "Count: %lu", (unsigned long)dhikrCount);
-    oled.drawStr(2, 53, countText);
+    oled.drawStr(2, 57, countText);
     char remainingText[16];
     snprintf(remainingText, sizeof(remainingText), "Next: %02ds", remainingSeconds);
-    oled.drawStr(82, 53, remainingText);
+    oled.drawStr(82, 57, remainingText);
 
     int elapsedMs = cycleTime % DHIKR_INTERVAL_MS;
-    int barWidth = map(elapsedMs, 0, DHIKR_INTERVAL_MS, 0, SCREEN_WIDTH - 20);
-    oled.drawFrame(10, 57, SCREEN_WIDTH - 20, 5);
-    oled.drawBox(10, 57, barWidth, 5);
-
-    oled.setFont(u8g2_font_5x8_tf);
-    oled.drawStr(2, 63, "Touch sensor to count / change");
+    int barWidth = map(elapsedMs, 0, DHIKR_INTERVAL_MS, 0, SCREEN_WIDTH - 4);
+    oled.drawFrame(2, 60, SCREEN_WIDTH - 4, 4);
+    oled.drawBox(2, 60, barWidth, 4);
 
     DisplayManager::sendBuffer();
 }

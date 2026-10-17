@@ -11,13 +11,13 @@ Welcome to **Prayer‑Bot**, a DIY, offline‑first digital companion that helps
 ## 🌟 Key Features
 
 - **🕌 Automated Prayer Times & Azan** – Monthly schedules from Aladhan with a repeating I2S prayer alarm that stops on the touch sensor or a shake.
-- **🌙 Hijri Calendar & Event Tracker** – Current Islamic date, Ramadan countdown, major holidays, and custom offset handling.
-- **⏱️ Pomodoro Focus Timer** – 25-minute focus and 5-minute touch-started break by default. A single beep sounds when focus ends; touch the sensor to begin the 2–5 minute break, after which the next focus session starts automatically. The existing long break still follows the configured cycle count.
+- **🌙 Hijri Calendar & Event Tracker** – Current Hijri date alongside the local Gregorian date, Ramadan countdown, major holidays, and custom offset handling.
+- **⏱️ Pomodoro Focus Timer** – Hold the touch sensor for 3 seconds on the Pomodoro screen to start a focus session. By default, focus lasts 25 minutes and the break starts with a touch after a single completion beep; the existing long break follows the configured cycle count.
 - **📈 Weekly Pomodoro History** – Dashboard graph of daily sessions started and completed focus minutes for the last seven days. Daily totals are persisted in LittleFS; only completed focus sessions count toward focus minutes.
 - **🌤️ Live Weather & AQI** – Weather and humidity from OpenWeatherMap and air-quality data from Open-Meteo.
 - **📱 Local Web Dashboard** – Configure location, prayer calculation, prohibited-time offsets, azan volume, weather key, and Pomodoro timings; view device/prayer/weather status and control screens, Pomodoro, zikir counting, and the active alarm from a phone or computer.
 - **📳 Shake‑to‑Snooze** – MPU6050 accelerometer lets you dismiss or snooze alerts with a shake.
-- **🕋 Dhikr Screen** – Five Arabic dhikr phrases rotate every 20 seconds, with a touch-to-count counter; the screen returns to the main screen after 100 seconds.
+- **🕋 Dhikr Screen** – Five connected Arabic phrases, shaped with open-licensed Noto Nastaliq Urdu Bold as the closest available Indo-Pak-style font, rotate every 5 seconds; long phrases marquee right-to-left, and touch increments the counter. The screen returns to the main screen after 100 seconds.
 - **👆 Single Touch Navigation** – The GPIO4 touch sensor advances to the next screen on each touch.
 - **🧩 Modular Firmware** – Features are separated into managers and display screens, with shared configuration and data types.
 
@@ -82,13 +82,16 @@ Keep feature behavior in its manager or screen module where practical; use `main
 ### First-time setup
 
 1. Flash and power on the ESP32.
-2. On your phone or computer, open Wi-Fi settings and connect to **PrayerBot-Setup** (password **12345678**).
+2. On your phone or computer, open Wi-Fi settings and connect to the ESP32's **Prayer-Bot** setup hotspot (default password **12345678**).
 3. In a browser on that same device, go to **http://192.168.4.1**. This is the ESP32 setup access point's fixed IP address.
-4. Enter the Wi-Fi name (SSID) and password for either:
+4. Enter the Wi-Fi name (SSID) and password for the separate router network the ESP32 should join:
    - your **2.4 GHz home Wi-Fi router**, or
    - your **mobile phone's 2.4 GHz hotspot**.
-5. Select **Connect to Wi-Fi**. Wait for **“Wi-Fi connected successfully”**, then select **“Next: open dashboard”**. The setup access point stays available during this connection and the dashboard continues to work at **http://192.168.4.1** while your phone/computer remains connected to **PrayerBot-Setup**.
-6. Set the location (Dhaka is the default) and other device settings from the dashboard.
+5. Select **Connect to Wi-Fi**. The ESP32 joins the router while keeping its **Prayer-Bot** setup hotspot active, including after reboot. The dashboard remains available at **http://192.168.4.1** when your phone/computer is connected to the ESP32 hotspot; the router connection is separate.
+6. To change the ESP32's own setup hotspot name or password, use **Wi-Fi setup → Setup hotspot credentials**. Enter a new name and, optionally, a new password (8–63 characters); leave the password blank to keep the current one. The hotspot restarts with the saved credentials, so reconnect your phone/computer using the new name/password. The password is stored on the device and is never returned by the dashboard API. The default password is **12345678**; change it from the dashboard to secure your setup hotspot.
+7. Set the location (Dhaka is the default) and other device settings from the dashboard. Selecting a preset fills its coordinates and timezone; entering a custom city and leaving the city field looks it up automatically. Save the settings to refresh prayer times and weather and sync the selected city's clock offset. When the dashboard opens, it initializes the ESP32 clock from the connected phone/computer's current time, so the clock can be set even without internet. Once the ESP32 is online, NTP updates it to the current time and retries periodically if synchronization is unavailable. The displayed time is not derived from the firmware compile timestamp.
+
+Use **Verify service connections** in the dashboard to test NTP, Aladhan prayer times, OpenWeather, and Open-Meteo air quality. OpenWeather requires a valid API key; the other listed services do not.
 
 ### Open the dashboard later through your router or hotspot
 
@@ -96,7 +99,23 @@ After the ESP32 joins your router or phone hotspot, it receives a **local IP add
 
 If you use a mobile hotspot, its owner phone provides the Wi-Fi connection to the ESP32. Some phones do not allow the hotspot-owner phone to reach connected clients; if the dashboard will not open on that phone, connect a second phone or computer to the hotspot and use the ESP32's displayed Home network IP there.
 
-The dashboard exposes device status, today's prayer times, Hijri date, weather/AQI, screen selection, Pomodoro controls, zikir count controls, and the active azan stop control. Settings are range-validated and saved to LittleFS. The optional OpenWeather API key is never returned by the settings API; the dashboard only reports whether one is configured.
+The header's **Modules** menu links to the overview, setup guide, prayer schedule, prohibited-time windows, clock/calendar screen controls, Pomodoro history, weather, Dhikr, Wi-Fi setup, and device settings. The setup guide gives the basic Wi-Fi, location, and touch steps. The dashboard exposes device status, today's prayer times, all three calculated prohibited-time windows, Hijri date, weather/AQI, screen selection, Pomodoro controls, Dhikr count controls, and the active azan stop control. Settings are range-validated, saved to LittleFS, and reloaded by the dashboard after saving; storage failures are reported without applying unsaved values. The optional OpenWeather API key is never returned by the settings API; the dashboard only reports whether one is configured, and has an explicit clear-key option.
+
+Prayer schedules are fetched as a monthly calendar from Aladhan after the device has internet and valid local time, using the configured location and calculation method. The default is Dhaka, Bangladesh (23.8103, 90.4125), Asia/Dhaka (UTC+6); the downloaded month is cached on the device. This is not a preloaded/offline Bangladesh timetable or CSV, so the first schedule fetch and later month refreshes require network access. The dashboard's prohibited-time panel and the Prayer Focus OLED screen use the device's configured offsets: after sunrise, before Dhuhr (Zawal), and before Maghrib. Confirm calculation settings and local guidance for your area.
+
+## 🕋 Arabic Dhikr phrases
+
+The Dhikr screen cycles through these phrases (transliterations and short meanings are included for reference):
+
+| Arabic | Transliteration | Meaning |
+|---|---|---|
+| سبحان الله | Subhan Allah | Glory be to Allah |
+| الحمد لله | Alhamdulillah | Praise be to Allah |
+| لا إله إلا الله | La ilaha illallah | There is no deity but Allah |
+| الله أكبر | Allahu Akbar | Allah is the Greatest |
+| أستغفر الله | Astaghfirullah | I seek Allah's forgiveness |
+
+The Arabic is shaped into SVG outlines and then rasterized for the monochrome OLED. The project uses **Noto Nastaliq Urdu Bold**, licensed under the SIL Open Font License 1.1, as a close open-licensed Indo-Pak-style calligraphic fallback; it is not an Indo-Pak Quran-specific font. Source SVGs, OLED bitmaps, and the font license are in `src/assets/dhikr/`. There is no CSV data file in this project.
 
 ## ⏱️ Pomodoro flow
 
@@ -111,7 +130,7 @@ The dashboard exposes device status, today's prayer times, Hijri date, weather/A
 
 - **FreeRTOS** – Separate tasks for networking, UI rendering, sensor reading, and audio playback.
 - **JSON handling** – Large API responses are parsed from network streams with ArduinoJson filters; web request bodies are size-limited and validated before settings are applied. JSON documents and Arduino `String` values use dynamic memory, so this is bounded in key paths rather than allocation-free.
-- **Persistent storage and caching** – Settings, prayer/weather cache data, and Pomodoro daily history are stored in LittleFS. Cache metadata tracks expiry for supported cached data.
+- **Persistent storage and caching** – Settings, prayer/weather cache data, and Pomodoro daily history are stored in LittleFS. Writes use a verified temporary file and rename to avoid exposing partially written JSON; filesystem access is serialized across web and background tasks. Once the filesystem is marked initialized, a mount failure no longer triggers an automatic format that could erase saved data. Cache metadata tracks expiry for supported cached data.
 - **Free APIs** – Aladhan (prayer times) and Open‑Meteo (air quality); OpenWeatherMap weather requires a user-provided API key.
 
 Feel free to fork, modify, and extend the bot (e.g., add voice commands or additional sensors). Happy building!
@@ -129,19 +148,17 @@ Feel free to fork, modify, and extend the bot (e.g., add voice commands or addit
 
 ### Arduino IDE
 
-The project uses the same pinned dependency baseline with PlatformIO and Arduino IDE. Arduino does not provide an official LTS designation for these packages; use these tested, fixed versions rather than allowing automatic upgrades:
+For the **single-file Arduino IDE build**, open `Prayer-Bot-Main\Prayer-Bot-Main.ino` from the project folder. It contains the application code in one sketch; you do not need to add the project's `src` files separately. Do not open the root `Prayer-Bot.ino` for this workflow; that is the modular project entry point.
 
-- **ESP32 by Espressif Systems** board package: **2.0.17**
-- **ESPAsyncWebServer**: **3.6.0** (mathieucarbou)
-- **AsyncTCP**: **3.3.2** (mathieucarbou)
-- **U8g2**: **2.36.18**
-- **Adafruit MPU6050**: **2.2.9**
-- **Adafruit Unified Sensor**: **1.1.15**
-- **Adafruit BusIO**: **1.17.4**
-- **ESP8266Audio**: **2.2.0**
-- **ArduinoJson**: **7.4.3**
+- Install **ESP32 by Espressif Systems 2.0.17** from Boards Manager.
+- Install these libraries at the listed versions:
+  - **ArduinoJson**: **7.4.3**
+  - **U8g2**: **2.36.18**
+  - **ESPAsyncWebServer**: **3.6.0** (mathieucarbou)
+  - **AsyncTCP**: **3.3.2** (mathieucarbou)
+- Select **ESP32S3 Dev Module** and compile/upload.
 
-In Arduino IDE, install the ESP32 board package at version **2.0.17** through Boards Manager and install the listed library versions. Remove or rename older duplicate ESPAsyncWebServer and AsyncTCP copies from your Arduino `libraries` folder so the IDE does not select them instead. Open `Prayer-Bot.ino` from the project root and select **ESP32S3 Dev Module**.
+The single-file sketch writes its generated beeps directly through the ESP32 I2S driver, so it does not require ESP8266Audio. The modular project under `src` additionally needs Adafruit MPU6050 **2.2.9**, Adafruit Unified Sensor **1.1.15**, Adafruit BusIO **1.17.4**, and ESP8266Audio **2.2.0**. Use these tested versions rather than allowing automatic upgrades, and remove or rename older duplicate ESPAsyncWebServer and AsyncTCP copies from your Arduino `libraries` folder so the IDE does not select them instead.
 
 PlatformIO pins `espressif32@7.1.3`, which supplies the same Arduino-ESP32 **2.0.17** core, and the exact library versions above. Avoid upgrading the core or libraries independently in either environment unless you also test and update both builds.
 

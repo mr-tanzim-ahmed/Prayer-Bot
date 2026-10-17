@@ -6,40 +6,51 @@
 // ============================================================
 
 namespace {
-    // Touch threshold for ESP32-S3 (lower value means touched, usually drops below 40000 on S3, but Arduino API normalizes it. 
-    // Typical un-touched is > 50000, touched is < 30000. Let's use a dynamic baseline or a fixed threshold of 30000.
-    // Actually, on ESP32-S3 `touchRead()` returns raw values around 40000-60000. Touched is lower.
-    const uint32_t TOUCH_THRESHOLD = 30000;
-
     bool touchPressed = false;
-    bool touchWasActive = false;
-    unsigned long touchLastDebounce = 0;
+    bool touchLongPressed = false;
+    bool previousTouchState = false;
+    bool longPressReported = false;
+    unsigned long touchStartedMs = 0;
+    constexpr unsigned long TOUCH_LONG_PRESS_MS = 3000UL;
 }
 
 namespace ButtonHandler {
 
 void init() {
-    // Capacitive touch pins don't need pinMode() setup in Arduino core
-    Serial.println("[BUTTON] Capacitive touch initialized.");
+    pinMode(PIN_TOUCH_SENSOR, INPUT);
+    previousTouchState = false;
+    touchPressed = false;
+    touchLongPressed = false;
+    longPressReported = false;
+    touchStartedMs = 0;
+    Serial.println("[BUTTON] TTP223 active-HIGH digital input initialized.");
 }
 
 void update() {
-    unsigned long now = millis();
-
     touchPressed = false;
+    touchLongPressed = false;
 
-    // The touch sensor reports a lower value while active on ESP32-S3.
-    bool touched = touchRead(PIN_TOUCH_SENSOR) < TOUCH_THRESHOLD;
-    if (touched && !touchWasActive &&
-        (now - touchLastDebounce) >= TOUCH_DEBOUNCE_MS) {
+    bool currentTouchState = digitalRead(PIN_TOUCH_SENSOR) == HIGH;
+    if (currentTouchState && !previousTouchState) {
         touchPressed = true;
-        touchLastDebounce = now;
+        touchStartedMs = millis();
+        longPressReported = false;
+        Serial.println("[BUTTON] Touch detected.");
+    } else if (currentTouchState && !longPressReported &&
+               (millis() - touchStartedMs) >= TOUCH_LONG_PRESS_MS) {
+        touchLongPressed = true;
+        longPressReported = true;
+        Serial.println("[BUTTON] Three-second touch detected.");
     }
-    touchWasActive = touched;
+    previousTouchState = currentTouchState;
 }
 
 bool isTouchPressed() {
     return touchPressed;
+}
+
+bool isTouchLongPressed() {
+    return touchLongPressed;
 }
 
 } // namespace ButtonHandler

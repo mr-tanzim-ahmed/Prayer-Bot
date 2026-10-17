@@ -12,7 +12,7 @@ This document describes the GPIO wiring between the **ESP32‑S3 (DevKitC‑1)**
 | **MPU6050 / GY‑521 (I2C)** | SDA | **GPIO 11** | Shared I2C bus with the OLED display. |
 | | SCL | **GPIO 12** | Shared I2C bus with the OLED display. |
 | | VCC / GND | **3.3 V / GND** | Power the IMU. |
-| **TTP223B Capacitive Touch** | SIG / OUT | **GPIO 4** | A touch advances to the next screen, counts dhikr, starts Pomodoro break, and dismisses Azan. |
+| **TTP223B Capacitive Touch** | SIG / OUT | **GPIO 4** | Default active-HIGH output. A touch advances to the next screen, counts dhikr, starts Pomodoro break, and dismisses Azan. |
 | | VCC / GND | **3.3 V / GND** | Power the touch sensor. |
 | **MAX98357A I2S Amplifier** | BCLK | **GPIO 5** | I2S bit clock. |
 | | LRC / WS | **GPIO 6** | I2S word select (left/right clock). |
@@ -36,6 +36,8 @@ This document describes the GPIO wiring between the **ESP32‑S3 (DevKitC‑1)**
 - The I2S pins (BCLK, LRC, DIN) must be routed together to minimise skew – keep the audio wires as short as possible.
 - The INMP441 uses a **separate I2S port** (I2S_NUM_0) from the amplifier (I2S_NUM_1) – they do **not** share pins.
 - The firmware debounces the touch sensor in software.
+- The touch input is read as a digital signal; use the TTP223B's default active-HIGH output mode.
+- On ESP32-S3 boards with the onboard addressable RGB LED on GPIO 48, the firmware flashes it white twice after a successful Wi-Fi connection.
 - Shake detection uses the **MPU6050 accelerometer** on the shared I2C bus – no separate vibration sensor is needed.
 
 ### Visual Summary (ASCII schematic)

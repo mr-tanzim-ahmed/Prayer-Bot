@@ -22,14 +22,20 @@ namespace {
     PrayerName lastAzanPrayer = PRAYER_NONE;
     int lastAzanDay = -1;
 
-    // Parse "HH:MM" string into PrayerTime
-    PrayerTime parseTime(const char* str) {
-        PrayerTime pt = {0, 0};
-        if (str && strlen(str) >= 5) {
-            pt.hour = (str[0] - '0') * 10 + (str[1] - '0');
-            pt.minute = (str[3] - '0') * 10 + (str[4] - '0');
+    bool parseTime(const char* str, PrayerTime& time) {
+        if (!str || strlen(str) < 5 ||
+            str[0] < '0' || str[0] > '9' ||
+            str[1] < '0' || str[1] > '9' ||
+            str[2] != ':' ||
+            str[3] < '0' || str[3] > '9' ||
+            str[4] < '0' || str[4] > '9') {
+            return false;
         }
-        return pt;
+        const uint8_t hour = (str[0] - '0') * 10 + (str[1] - '0');
+        const uint8_t minute = (str[3] - '0') * 10 + (str[4] - '0');
+        if (hour > 23 || minute > 59) return false;
+        time = {hour, minute};
+        return true;
     }
 
     int timeToMinutes(PrayerTime pt) {
@@ -74,28 +80,40 @@ bool init(const Settings& settings) {
     String json = StorageManager::readFile(PRAYER_CACHE_PATH);
     if (!json.isEmpty()) {
         JsonDocument doc;
-        if (!deserializeJson(doc, json)) {
-            cachedMonth = doc["month"] | -1;
-            cachedYear  = doc["year"]  | -1;
+        if (!deserializeJson(doc, json) && doc["days"].is<JsonArray>()) {
+            const int cacheMonth = doc["month"] | -1;
+            const int cacheYear = doc["year"] | -1;
 
             int m = currentMonth();
             int y = currentYear();
 
-            if (cachedMonth == m && cachedYear == y) {
+            if (cacheMonth == m && cacheYear == y) {
+                DailyPrayers loadedPrayers[31];
+                int loadedCount = 0;
                 JsonArray days = doc["days"].as<JsonArray>();
-                cachedDaysCount = 0;
                 for (JsonObject day : days) {
-                    if (cachedDaysCount >= 31) break;
-                    cachedPrayers[cachedDaysCount].fajr    = parseTime(day["fajr"]);
-                    cachedPrayers[cachedDaysCount].sunrise  = parseTime(day["sunrise"]);
-                    cachedPrayers[cachedDaysCount].dhuhr   = parseTime(day["dhuhr"]);
-                    cachedPrayers[cachedDaysCount].asr     = parseTime(day["asr"]);
-                    cachedPrayers[cachedDaysCount].maghrib = parseTime(day["maghrib"]);
-                    cachedPrayers[cachedDaysCount].isha    = parseTime(day["isha"]);
-                    cachedDaysCount++;
+                    if (loadedCount >= 31) break;
+                    DailyPrayers& prayer = loadedPrayers[loadedCount];
+                    if (!parseTime(day["fajr"], prayer.fajr) ||
+                        !parseTime(day["sunrise"], prayer.sunrise) ||
+                        !parseTime(day["dhuhr"], prayer.dhuhr) ||
+                        !parseTime(day["asr"], prayer.asr) ||
+                        !parseTime(day["maghrib"], prayer.maghrib) ||
+                        !parseTime(day["isha"], prayer.isha)) {
+                        loadedCount = 0;
+                        break;
+                    }
+                    ++loadedCount;
                 }
-                Serial.printf("[PRAYER] Loaded %d days from cache.\n", cachedDaysCount);
-                return cachedDaysCount > 0;
+                if (loadedCount >= 28) {
+                    memcpy(cachedPrayers, loadedPrayers,
+                           loadedCount * sizeof(DailyPrayers));
+                    cachedMonth = cacheMonth;
+                    cachedYear = cacheYear;
+                    cachedDaysCount = loadedCount;
+                    Serial.printf("[PRAYER] Loaded %d days from cache.\n", cachedDaysCount);
+                    return true;
+                }
             }
         }
     }
@@ -170,61 +188,79 @@ bool refresh(const Settings& settings) {
     }
 
     JsonArray data = doc["data"].as<JsonArray>();
-    cachedDaysCount = 0;
+    if (!doc["data"].is<JsonArray>() || data.size() < 28 || data.size() > 31) {
+        Serial.println("[PRAYER] API response did not contain a complete monthly schedule.");
+        return false;
+    }
 
     // Build cache document
     JsonDocument cacheDoc;
     cacheDoc["month"] = month;
     cacheDoc["year"]  = year;
     JsonArray cacheDays = cacheDoc["days"].to<JsonArray>();
+    DailyPrayers fetchedPrayers[31];
+    int fetchedCount = 0;
 
     for (JsonObject dayObj : data) {
-        if (cachedDaysCount >= 31) break;
-
-        JsonObject timings = dayObj["timings"];
+        if (fetchedCount >= 31) break;
+        JsonObject timings = dayObj["timings"].as<JsonObject>();
         JsonObject hijri = dayObj["date"]["hijri"];
+        const char* rawTimes[] = {
+            timings["Fajr"], timings["Sunrise"], timings["Dhuhr"],
+            timings["Asr"], timings["Maghrib"], timings["Isha"]
+        };
+        DailyPrayers& prayer = fetchedPrayers[fetchedCount];
+        if (!parseTime(rawTimes[0], prayer.fajr) ||
+            !parseTime(rawTimes[1], prayer.sunrise) ||
+            !parseTime(rawTimes[2], prayer.dhuhr) ||
+            !parseTime(rawTimes[3], prayer.asr) ||
+            !parseTime(rawTimes[4], prayer.maghrib) ||
+            !parseTime(rawTimes[5], prayer.isha)) {
+            Serial.printf("[PRAYER] Invalid prayer time in API response at day %d.\n",
+                          fetchedCount + 1);
+            return false;
+        }
 
         // Aladhan returns times like "05:23 (EET)" - extract just HH:MM
-        String fajrStr    = String((const char*)timings["Fajr"]).substring(0, 5);
-        String sunriseStr = String((const char*)timings["Sunrise"]).substring(0, 5);
-        String dhuhrStr   = String((const char*)timings["Dhuhr"]).substring(0, 5);
-        String asrStr     = String((const char*)timings["Asr"]).substring(0, 5);
-        String maghribStr = String((const char*)timings["Maghrib"]).substring(0, 5);
-        String ishaStr    = String((const char*)timings["Isha"]).substring(0, 5);
-
-        cachedPrayers[cachedDaysCount].fajr    = parseTime(fajrStr.c_str());
-        cachedPrayers[cachedDaysCount].sunrise  = parseTime(sunriseStr.c_str());
-        cachedPrayers[cachedDaysCount].dhuhr   = parseTime(dhuhrStr.c_str());
-        cachedPrayers[cachedDaysCount].asr     = parseTime(asrStr.c_str());
-        cachedPrayers[cachedDaysCount].maghrib = parseTime(maghribStr.c_str());
-        cachedPrayers[cachedDaysCount].isha    = parseTime(ishaStr.c_str());
+        String timeStrings[6];
+        for (size_t i = 0; i < 6; ++i) {
+            timeStrings[i] = String(rawTimes[i]).substring(0, 5);
+        }
 
         JsonObject cacheDay = cacheDays.add<JsonObject>();
-        cacheDay["fajr"]    = fajrStr;
-        cacheDay["sunrise"] = sunriseStr;
-        cacheDay["dhuhr"]   = dhuhrStr;
-        cacheDay["asr"]     = asrStr;
-        cacheDay["maghrib"] = maghribStr;
-        cacheDay["isha"]    = ishaStr;
+        cacheDay["fajr"]    = timeStrings[0];
+        cacheDay["sunrise"] = timeStrings[1];
+        cacheDay["dhuhr"]   = timeStrings[2];
+        cacheDay["asr"]     = timeStrings[3];
+        cacheDay["maghrib"] = timeStrings[4];
+        cacheDay["isha"]    = timeStrings[5];
 
         // Save Hijri info to cache
         JsonObject cacheHijri = cacheDay["hijri"].to<JsonObject>();
-        cacheHijri["day"] = hijri["day"].as<int>();
-        cacheHijri["month"] = hijri["month"]["number"].as<int>();
-        cacheHijri["monthName"] = hijri["month"]["en"].as<String>();
-        cacheHijri["year"] = hijri["year"].as<int>();
+        cacheHijri["day"] = hijri["day"] | 1;
+        cacheHijri["month"] = hijri["month"]["number"] | 1;
+        cacheHijri["monthName"] = hijri["month"]["en"] | "Muharram";
+        cacheHijri["year"] = hijri["year"] | 1446;
 
-        cachedDaysCount++;
+        ++fetchedCount;
+    }
+    if (fetchedCount < 28) {
+        Serial.println("[PRAYER] API response ended before the monthly schedule was complete.");
+        return false;
     }
 
+    memcpy(cachedPrayers, fetchedPrayers, fetchedCount * sizeof(DailyPrayers));
+    cachedDaysCount = fetchedCount;
     cachedMonth = month;
     cachedYear  = year;
 
     // Save to flash
     String cacheJson;
-    serializeJson(cacheDoc, cacheJson);
-    if (StorageManager::writeFile(PRAYER_CACHE_PATH, cacheJson)) {
+    if (serializeJson(cacheDoc, cacheJson) > 0 &&
+        StorageManager::writeFile(PRAYER_CACHE_PATH, cacheJson)) {
         CacheManager::markUpdated(PRAYER_CACHE_PATH);
+    } else {
+        Serial.println("[PRAYER] Schedule is active, but the cache could not be saved.");
     }
 
     Serial.printf("[PRAYER] Cached %d days for %d/%d.\n", cachedDaysCount, month, year);

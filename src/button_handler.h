@@ -5,7 +5,7 @@
 
 // ============================================================
 //  BUTTON HANDLER
-//  Manages the TTP223B capacitive touch sensor with debounce.
+//  Manages the TTP223B capacitive touch sensor.
 // ============================================================
 
 namespace ButtonHandler {
@@ -17,6 +17,9 @@ namespace ButtonHandler {
 
     // True for one update when the sensor is newly touched
     bool isTouchPressed();
+
+    // True once when the sensor has been held for three seconds
+    bool isTouchLongPressed();
 }
 
 #endif // BUTTON_HANDLER_H

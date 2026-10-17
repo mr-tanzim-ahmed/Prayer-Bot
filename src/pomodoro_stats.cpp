@@ -132,8 +132,14 @@ bool recordSessionStarted() {
     DayRecord* today = getTodayRecord();
     bool saved = false;
     if (today) {
+        if (today->sessionsStarted == UINT16_MAX) {
+            xSemaphoreGive(statsMutex);
+            Serial.println("[POMODORO-STATS] Session-start count reached its storage limit.");
+            return false;
+        }
         ++today->sessionsStarted;
         saved = saveRecords();
+        if (!saved) --today->sessionsStarted;
     }
     xSemaphoreGive(statsMutex);
     return saved;
@@ -147,9 +153,20 @@ bool recordFocusCompleted(uint16_t focusMinutes) {
     DayRecord* today = getTodayRecord();
     bool saved = false;
     if (today) {
+        const uint32_t addedSeconds = (uint32_t)focusMinutes * 60UL;
+        if (today->sessionsCompleted == UINT16_MAX ||
+            today->focusSeconds > UINT32_MAX - addedSeconds) {
+            xSemaphoreGive(statsMutex);
+            Serial.println("[POMODORO-STATS] Completed-focus totals reached their storage limit.");
+            return false;
+        }
         ++today->sessionsCompleted;
-        today->focusSeconds += (uint32_t)focusMinutes * 60UL;
+        today->focusSeconds += addedSeconds;
         saved = saveRecords();
+        if (!saved) {
+            --today->sessionsCompleted;
+            today->focusSeconds -= addedSeconds;
+        }
     }
     xSemaphoreGive(statsMutex);
     return saved;

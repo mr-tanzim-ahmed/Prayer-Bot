@@ -21,6 +21,7 @@ namespace StorageManager {
     // Generic file read/write
     String readFile(const char* path);
     bool writeFile(const char* path, const String& content);
+    bool removeFile(const char* path);
     bool exists(const char* path);
 }
 

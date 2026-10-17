@@ -60,6 +60,20 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     .wifi h2{margin-bottom:6px}
     .wifi-status{min-height:28px;margin:12px 0;color:var(--accent);font-weight:650}
     .wifi-status.error{color:var(--bad)}
+    .module-menu{position:relative;z-index:4}
+    .module-menu>summary{list-style:none;cursor:pointer;border:1px solid var(--line);border-radius:10px;background:#fff;padding:10px 14px;font-weight:650}
+    .module-menu>summary::-webkit-details-marker{display:none}
+    .module-menu>summary:after{content:"▾";margin-left:9px;color:var(--accent)}
+    .module-menu[open]>summary:after{content:"▴"}
+    .module-menu nav{position:absolute;right:0;top:calc(100% + 7px);display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:4px;width:min(420px,calc(100vw - 24px));padding:9px;background:#fff;border:1px solid var(--line);border-radius:13px;box-shadow:0 12px 30px #19352b20}
+    .module-menu nav a{padding:9px 10px;border-radius:8px;color:var(--text);text-decoration:none;font-size:.9rem}
+    .module-menu nav a:hover,.module-menu nav a:focus-visible{background:var(--accent-soft);color:var(--accent)}
+    .module-menu nav a.wifi-link{color:var(--accent);font-weight:700}
+    .guide-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0 0;padding:0;list-style:none;counter-reset:guide}
+    .guide-steps li{counter-increment:guide;position:relative;padding:12px 12px 12px 42px;background:#f8faf7;border:1px solid #edf1ed;border-radius:12px}
+    .guide-steps li:before{content:counter(guide);position:absolute;left:12px;top:12px;display:grid;place-items:center;width:22px;height:22px;background:var(--accent-soft);color:var(--accent);font-weight:750;border-radius:50%}
+    .prohibited-active{color:var(--bad)!important}
+    [id]{scroll-margin-top:18px}
     .settings{padding:0;overflow:hidden}
     .settings>summary{cursor:pointer;list-style:none;padding:18px 20px;font-weight:700}
     .settings>summary::-webkit-details-marker{display:none}
@@ -72,8 +86,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.82rem;color:var(--muted);margin-top:12px}
     .legend span:before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px;background:#70b58b}
     .legend .sessions:before{border-radius:50%;background:var(--warn)}
-    @media(max-width:760px){main{padding:22px 16px 44px}.grid>.card:not(.wide){grid-column:span 12}.prayers{grid-template-columns:repeat(3,minmax(0,1fr))}}
-    @media(max-width:480px){main{padding:16px 12px 36px}.card{padding:16px;border-radius:14px}.fields{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.chart-wrap{height:220px}.actions button{flex-basis:100%}}
+    @media(max-width:760px){main{padding:22px 16px 44px}.grid>.card:not(.wide){grid-column:span 12}.prayers{grid-template-columns:repeat(3,minmax(0,1fr))}.guide-steps{grid-template-columns:1fr}}
+    @media(max-width:480px){main{padding:16px 12px 36px}.card{padding:16px;border-radius:14px}header{flex-wrap:wrap}header .actions{width:100%}header .actions button{flex-basis:0}.module-menu nav{left:0;right:auto;width:min(420px,calc(100vw - 48px))}.fields{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.chart-wrap{height:220px}.actions button{flex-basis:100%}}
     @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important}}
   </style>
 </head>
@@ -82,6 +96,21 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   <header>
     <div><h1>Prayer-Bot</h1><div class="badge">Your prayer &amp; focus companion</div></div>
     <div class="actions">
+      <details class="module-menu" id="modulesMenu">
+        <summary aria-label="Open dashboard modules">Modules</summary>
+        <nav aria-label="Dashboard modules">
+          <a href="#overview">Device overview</a>
+          <a href="#guide">Getting started</a>
+          <a href="#prayer-times">Prayer times</a>
+          <a href="#prohibited-times">Prohibited times</a>
+          <a href="#device-controls">Clock &amp; Hijri calendar</a>
+          <a href="#pomodoro-stats">Pomodoro &amp; history</a>
+          <a href="#weather">Weather &amp; air quality</a>
+          <a href="#dhikr-controls">Dhikr counter</a>
+          <a class="wifi-link" href="#wifiSetup" onclick="openWifiSetup();return false">Wi-Fi setup</a>
+          <a href="#settings">Device settings</a>
+        </nav>
+      </details>
       <button type="button" onclick="openWifiSetup()">Wi-Fi setup</button>
       <button type="button" onclick="refreshAll()">Refresh</button>
     </div>
@@ -90,8 +119,10 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   <section id="wifiSetup" class="card wifi" hidden>
     <h2>Connect Prayer-Bot to Wi-Fi</h2>
     <p>Connect to your home Wi-Fi to enable prayer times, weather, and online clock sync. The setup network stays available while connecting.</p>
-    <p class="hint">Setup address: <strong>http://192.168.4.1</strong> · Wi-Fi: <strong>PrayerBot-Setup</strong></p>
+    <p class="hint">Setup address: <strong>http://192.168.4.1</strong> · Setup hotspot: <strong id="setupApNameLabel">Prayer-Bot</strong></p>
     <div class="fields" style="margin-top:16px">
+      <div class="field"><label for="wifiNetworks">Nearby Wi-Fi networks</label><select id="wifiNetworks"><option value="">Scan to find networks</option></select></div>
+      <div class="field"><label>&nbsp;</label><button id="scanWifi" type="button" onclick="scanWifiNetworks()">Scan for networks</button></div>
       <div class="field"><label for="wifiSsid">Wi-Fi network name (SSID)</label><input id="wifiSsid" maxlength="32" autocomplete="username" required></div>
       <div class="field"><label for="wifiPass">Wi-Fi password</label><input id="wifiPass" type="password" maxlength="63" autocomplete="new-password"></div>
     </div>
@@ -100,10 +131,18 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <button id="continueWifi" type="button" onclick="continueToDashboard()" hidden>Next: open dashboard</button>
     </div>
     <p id="wifiMessage" class="wifi-status" role="status" aria-live="polite"></p>
+    <h3>Setup hotspot credentials</h3>
+    <p class="hint">Change the device's own Wi-Fi name and password. Leave the password blank to keep it unchanged; the saved password is never displayed.</p>
+    <div class="fields" style="margin-top:12px">
+      <div class="field"><label for="setupApSsid">Setup hotspot name (SSID)</label><input id="setupApSsid" maxlength="32" autocomplete="off" required></div>
+      <div class="field"><label for="setupApPassword">New setup hotspot password</label><input id="setupApPassword" type="password" minlength="8" maxlength="63" autocomplete="new-password" placeholder="Leave blank to keep current"></div>
+    </div>
+    <button type="button" onclick="saveSetupAP()">Save hotspot credentials</button>
+    <p id="setupApMessage" class="wifi-status" role="status" aria-live="polite"></p>
   </section>
 
   <section class="grid" id="dashboardContent" hidden>
-    <article class="card wide">
+    <article class="card wide" id="overview">
       <h2>Device overview</h2>
       <div class="stats">
         <div class="stat"><span>Connection</span><strong id="network">Loading…</strong></div>
@@ -116,7 +155,17 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       </div>
     </article>
 
-    <article class="card wide">
+    <article class="card wide" id="guide">
+      <h2>Getting started</h2>
+      <p>Use the module menu to jump to a feature. For prayer calculations, connect the device to the internet and confirm the location and calculation preferences.</p>
+      <ol class="guide-steps">
+        <li>Connect to the Prayer-Bot hotspot, open this page, and use Wi-Fi setup to join your 2.4 GHz router.</li>
+        <li>Open Device settings, choose your city, check the prayer method and Asr school, then save.</li>
+        <li>Use Quick access to show a screen; tap the device sensor to navigate, or hold it for 3 seconds on Pomodoro to start focus.</li>
+      </ol>
+    </article>
+
+    <article class="card wide" id="pomodoro-stats">
       <h2>Pomodoro — last 7 days</h2>
       <div class="stats">
         <div class="stat"><span>Sessions started</span><strong id="weeklyStarted">0</strong></div>
@@ -128,7 +177,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <p id="statsNote" class="hint">Daily totals are stored on the device. Focus minutes include completed sessions only.</p>
     </article>
 
-    <article class="card wide">
+    <article class="card wide" id="prayer-times">
       <h2>Today's prayer times</h2>
       <div class="prayers">
         <div class="prayer"><span>Fajr</span><strong id="fajr">—</strong></div>
@@ -141,7 +190,17 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <p id="prayerNote" class="hint">Prayer times appear after time sync and schedule load.</p>
     </article>
 
-    <article class="card">
+    <article class="card wide" id="prohibited-times">
+      <h2>Prohibited prayer times today</h2>
+      <div class="stats">
+        <div class="stat"><span>After sunrise</span><strong id="afterSunriseRange">—</strong><span id="afterSunriseState">—</span></div>
+        <div class="stat"><span>Zawal (before Dhuhr)</span><strong id="atZawalRange">—</strong><span id="atZawalState">—</span></div>
+        <div class="stat"><span>Before sunset</span><strong id="beforeSunsetRange">—</strong><span id="beforeSunsetState">—</span></div>
+      </div>
+      <p id="prohibitedNote" class="hint">These windows use the device's configured offsets and daily prayer schedule.</p>
+    </article>
+
+    <article class="card" id="device-controls">
       <h2>Quick access</h2>
       <div class="field">
         <label for="screenSelect">Show screen on device</label>
@@ -156,19 +215,20 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       </div>
       <h3 style="margin-top:18px">Pomodoro</h3>
       <p id="pomodoroStatus">Loading…</p>
+      <p class="hint">On the device, hold the touch sensor for 3 seconds while this screen is open to start an idle focus timer.</p>
       <div class="actions">
         <button type="button" onclick="sendControl({pomodoro:'toggle'})">Start / pause</button>
         <button type="button" onclick="sendControl({pomodoro:'reset'})">Reset</button>
       </div>
-      <h3 style="margin-top:18px">Zikir</h3>
+      <h3 id="dhikr-controls" style="margin-top:18px">Dhikr / Zikir</h3>
       <p id="dhikrStatus">Count: 0</p>
       <button type="button" onclick="sendControl({dhikr:'count'})">Add zikir count</button>
-      <p class="hint">Touch either device pad or tap here to count. The Arabic phrase changes every 20 seconds.</p>
+      <p class="hint">Touch either device pad or tap here to count. The Arabic phrase changes every 5 seconds.</p>
       <h3 style="margin-top:18px">Prayer alarm</h3>
       <button type="button" onclick="sendControl({stopAzan:true})">Stop active alarm</button>
     </article>
 
-    <article class="card">
+    <article class="card" id="weather">
       <h2>Weather &amp; air quality</h2>
       <div class="stats">
         <div class="stat"><span>Location</span><strong id="weatherCity">—</strong></div>
@@ -180,7 +240,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <p class="hint">Weather updates from the device using its configured location and API key.</p>
     </article>
 
-    <details class="card wide settings">
+    <details class="card wide settings" id="settings">
       <summary>Device settings <span class="badge">Location, prayer, alarm &amp; focus preferences</span></summary>
       <div class="settings-body">
       <div class="fields">
@@ -243,6 +303,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <h3>Weather API</h3>
       <div class="field"><label for="owmKey">OpenWeather API key</label><input id="owmKey" type="password" maxlength="47" autocomplete="new-password" placeholder="Not configured"></div>
       <p class="hint">Key status: <span id="owmKeyStatus">Loading…</span>. Leave blank to keep the saved key; a new value replaces it.</p>
+      <div class="toggle"><input id="clearOwmKey" type="checkbox"><label for="clearOwmKey">Clear the saved OpenWeather API key</label></div>
       </div>
     </details>
   </section>
@@ -255,6 +316,12 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   let initialStatus=true;
   let dashboardReady=false;
   let wifiSubmitted=false;
+  document.querySelectorAll('.module-menu nav a').forEach(link=>{
+    link.addEventListener('click',()=>{
+      byId('modulesMenu').open=false;
+      if(link.hash==='#settings') byId('settings').open=true;
+    });
+  });
   const locations={
     dhaka:{city:'Dhaka',lat:23.8103,lon:90.4125,tz:'Asia/Dhaka',utcOff:6},
     chattogram:{city:'Chattogram',lat:22.3569,lon:91.7832,tz:'Asia/Dhaka',utcOff:6},
@@ -287,11 +354,26 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     refreshAll();
   }
   async function api(path, options={}) {
-    const response=await fetch(path,options);
-    const data=await response.json();
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),10000);
+    let response,data;
+    try {
+      response=await fetch(path,{...options,signal:controller.signal});
+      data=await response.json();
+    } catch(e) {
+      if(e.name==='AbortError') throw new Error('The device did not respond in time. Check the connection and try again.');
+      if(e instanceof SyntaxError) throw new Error('The device returned an invalid response. Refresh and try again.');
+      throw new Error('Could not reach the device. Check Wi-Fi and try again.');
+    } finally {
+      clearTimeout(timeout);
+    }
     if(!data || typeof data!=='object' || Array.isArray(data)) throw new Error('Server returned an invalid JSON response.');
     if(!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
     return data;
+  }
+  async function syncDeviceClock() {
+    const epoch=Math.floor(Date.now()/1000);
+    await api('/api/time',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({epoch})});
   }
   async function loadSettings() {
     const s=await api('/api/settings');
@@ -304,10 +386,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     byId('longBrk').value=s.longBrk; byId('pomCycles').value=s.pomCycles;
     byId('sunriseOff').value=s.sunriseOff; byId('zawalOff').value=s.zawalOff;
     byId('sunsetOff').value=s.sunsetOff;
+    byId('setupApSsid').value=s.setupApSsid || 'Prayer-Bot';
+    put('setupApNameLabel',s.setupApSsid || 'Prayer-Bot');
     const preset=Object.keys(locations).find(key=>Math.abs(locations[key].lat-s.lat)<0.01 && Math.abs(locations[key].lon-s.lon)<0.01);
     byId('locationPreset').value=preset || 'custom';
     put('owmKeyStatus',s.owmKeyConfigured?'Configured':'Not configured');
     byId('owmKey').placeholder=s.owmKeyConfigured?'Saved — enter a new key to replace':'Not configured';
+    byId('clearOwmKey').checked=false;
   }
   async function loadStatus() {
     const s=await api('/api/status');
@@ -326,7 +411,9 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         byId('wifiMessage').textContent='Connecting to your Wi-Fi network…';
       } else {
         wifiSubmitted=false;
-        byId('wifiMessage').textContent='Could not connect. Check the network name and password, then try again.';
+        byId('wifiMessage').textContent=s.network.authFailed
+          ? 'Wi-Fi authentication failed. The password may be wrong, or the router rejected the connection.'
+          : 'Could not connect. Check the network name, password, and that the network is 2.4 GHz.';
         byId('wifiMessage').classList.add('error');
         byId('connectWifi').disabled=false;
       }
@@ -342,6 +429,23 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     put('hijri',s.hijri.date || '—'); put('event',s.hijri.event || 'None today');
     for(const name of ['fajr','sunrise','dhuhr','asr','maghrib','isha']) put(name,s.prayers[name]);
     put('prayerNote',s.prayers.ready?'':'Prayer times appear after time sync and schedule load.');
+    const prohibitedWindows=[
+      ['afterSunrise','afterSunrise'],
+      ['atZawal','atZawal'],
+      ['beforeSunset','beforeSunset']
+    ];
+    for(const [key,id] of prohibitedWindows) {
+      const window=s.prohibited?.[key];
+      put(`${id}Range`,s.prohibited?.ready && window ? `${window.start} – ${window.end}` : '—');
+      const state=byId(`${id}State`);
+      state.textContent=s.prohibited?.ready && window
+        ? (window.active?'Active now':'Not active now')
+        : 'Schedule unavailable';
+      state.classList.toggle('prohibited-active',Boolean(s.prohibited?.ready && window?.active));
+    }
+    put('prohibitedNote',s.prohibited?.ready
+      ? 'Calculated from today’s schedule and the prohibited-time offsets in Device settings.'
+      : 'Prohibited windows appear after time sync and prayer schedule load.');
     put('pomodoroStatus',`${s.pomodoro.phase} · ${s.pomodoro.remaining} · cycle ${s.pomodoro.cycle}/${s.pomodoro.cycles}`);
     put('dhikrStatus',`Count: ${s.dhikrCount}`);
     put('weatherCity',s.weather.city || '—');
@@ -411,7 +515,9 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     } catch(e) { put('statsNote',e.message); }
   }
   async function refreshAll() {
-    try { await Promise.all([loadSettings(),loadStatus()]); }
+    try {
+      await Promise.all([loadSettings(),loadStatus(),syncDeviceClock()]);
+    }
     catch(e) { message(e.message,true); }
   }
   async function saveSettings() {
@@ -424,20 +530,42 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       shortBrk:Number(byId('shortBrk').value), longBrk:Number(byId('longBrk').value),
       pomCycles:Number(byId('pomCycles').value),
       sunriseOff:Number(byId('sunriseOff').value),zawalOff:Number(byId('zawalOff').value),
-      sunsetOff:Number(byId('sunsetOff').value)
+      sunsetOff:Number(byId('sunsetOff').value),
+      clearOwmKey:byId('clearOwmKey').checked
     };
     const inputs=[...document.querySelectorAll('#city,#timezone,#lat,#lon,#utcOffset,#hijriOffset,#focusMin,#shortBrk,#longBrk,#pomCycles,#sunriseOff,#zawalOff,#sunsetOff')];
     const invalid=inputs.find(input=>!input.checkValidity());
     if(invalid){invalid.reportValidity();message(`Check the ${invalid.labels[0]?.textContent||invalid.id} field.`,true);return;}
-    const key=byId('owmKey').value.trim(); if(key) body.owmKey=key;
-    byId('saveButton').disabled=true;
+    const key=byId('owmKey').value.trim();
+    if(key && body.clearOwmKey) {
+      message('Enter a new API key or choose to clear the saved key, not both.',true);
+      byId('owmKey').focus();
+      return;
+    }
+    if(key) body.owmKey=key;
+    const button=byId('saveButton');
+    const controls=[...byId('settings').querySelectorAll('input,select')];
+    const previousDisabled=controls.map(control=>control.disabled);
+    controls.forEach(control=>control.disabled=true);
+    button.disabled=true;
+    button.textContent='Saving…';
+    let saveCompleted=false;
     try {
       await api('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      saveCompleted=true;
       byId('owmKey').value='';
-      message('Settings saved. Prayer and weather data will refresh for the selected location.');
-      await refreshAll();
-    } catch(e) { message(e.message,true); }
-    finally { byId('saveButton').disabled=false; }
+      await loadSettings();
+      await loadStatus();
+      message('Settings saved and verified on the device.');
+    } catch(e) {
+      message(saveCompleted
+        ? `Settings were saved, but could not be reloaded for verification: ${e.message}`
+        : e.message,true);
+    } finally {
+      controls.forEach((control,index)=>control.disabled=previousDisabled[index]);
+      button.disabled=false;
+      button.textContent='Save & apply settings';
+    }
   }
   async function sendControl(body) {
     try { await api('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); message('Command sent to device.'); }
@@ -462,6 +590,68 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       byId('wifiMessage').textContent=e.message;
       byId('wifiMessage').classList.add('error');
       byId('connectWifi').disabled=false;
+    }
+  }
+  async function scanWifiNetworks() {
+    const button=byId('scanWifi'), select=byId('wifiNetworks'), message=byId('wifiMessage');
+    button.disabled=true;
+    message.textContent='Scanning for nearby Wi-Fi networks…';
+    message.classList.remove('error');
+    select.replaceChildren(new Option('Scanning…',''));
+    try {
+      await api('/api/wifi/scan',{method:'POST'});
+      let result;
+      for(let attempt=0;attempt<20;attempt++) {
+        await new Promise(resolve=>setTimeout(resolve,1000));
+        result=await api('/api/wifi/scan');
+        if(result.status!=='scanning') break;
+      }
+      if(!result || result.status==='scanning') throw new Error('Wi-Fi scan timed out. Try again.');
+      if(!Array.isArray(result.networks)) throw new Error('Server returned an invalid Wi-Fi scan result.');
+      select.replaceChildren(new Option('Select a network',''));
+      for(const network of result.networks) {
+        if(typeof network.ssid!=='string' || !network.ssid) continue;
+        const option=new Option(`${network.ssid} · ${network.rssi} dBm${network.secured?' · secured':''}`,network.ssid);
+        select.add(option);
+      }
+      if(select.options.length===1) {
+        message.textContent='No Wi-Fi networks found. Check range and try again, or enter the network name below.';
+      } else {
+        message.textContent=`Found ${select.options.length-1} network(s). Select one or enter a network name below.`;
+      }
+    } catch(e) {
+      select.replaceChildren(new Option('Scan to find networks',''));
+      message.textContent=e.message;
+      message.classList.add('error');
+    } finally {
+      button.disabled=false;
+    }
+  }
+  byId('wifiNetworks').addEventListener('change',event=>{
+    if(event.target.value) byId('wifiSsid').value=event.target.value;
+  });
+  async function saveSetupAP() {
+    const ssid=byId('setupApSsid').value.trim();
+    const password=byId('setupApPassword').value;
+    const message=byId('setupApMessage');
+    if(!ssid || ssid.length>32) {
+      message.textContent='Enter a hotspot name containing 1 to 32 characters.';
+      message.classList.add('error');
+      return;
+    }
+    if(password && (password.length<8 || password.length>63)) {
+      message.textContent='A new hotspot password must contain 8 to 63 characters.';
+      message.classList.add('error');
+      return;
+    }
+    try {
+      const result=await api('/api/setup-ap',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,pass:password})});
+      byId('setupApPassword').value='';
+      message.textContent=result.message;
+      message.classList.remove('error');
+    } catch(e) {
+      message.textContent=e.message;
+      message.classList.add('error');
     }
   }
   refreshAll();
