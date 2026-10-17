@@ -788,12 +788,17 @@ void init(Settings& settings) {
                 return;
             }
             WiFi.setSleep(false);
-            if (WiFi.scanComplete() == WIFI_SCAN_RUNNING) {
+            const int16_t running = WiFi.scanComplete();
+            if (running == WIFI_SCAN_RUNNING) {
+                // Scan already in progress — just report scanning
                 request->send(200, "application/json", "{\"status\":\"scanning\"}");
                 return;
             }
-
-            if (WiFi.scanNetworks(true, false) == WIFI_SCAN_FAILED) {
+            // Delete any stale results before starting a fresh async scan
+            if (running >= 0) WiFi.scanDelete();
+            // scanNetworks(async=true) returns WIFI_SCAN_RUNNING on success
+            const int16_t ret = WiFi.scanNetworks(/*async*/true, /*show_hidden*/false);
+            if (ret == WIFI_SCAN_FAILED) {
                 request->send(500, "application/json", "{\"error\":\"Could not start Wi-Fi scan.\"}");
                 return;
             }
@@ -804,14 +809,16 @@ void init(Settings& settings) {
         [](AsyncWebServerRequest* request) {
             const int16_t scanResult = WiFi.scanComplete();
             if (scanResult == WIFI_SCAN_RUNNING) {
+                // Async scan still in progress
                 request->send(200, "application/json", "{\"status\":\"scanning\"}");
                 return;
             }
             if (scanResult == WIFI_SCAN_FAILED) {
-                request->send(500, "application/json", "{\"error\":\"Wi-Fi scan failed.\"}");
+                // No scan has been started yet — treat as pending rather than error
+                request->send(200, "application/json", "{\"status\":\"scanning\"}");
                 return;
             }
-
+            // scanResult >= 0 means scan complete with that many networks found
             JsonDocument doc;
             doc["status"] = "complete";
             JsonArray networks = doc["networks"].to<JsonArray>();
@@ -823,7 +830,6 @@ void init(Settings& settings) {
                 network["rssi"] = WiFi.RSSI(i);
                 network["secured"] = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
             }
-
             String response;
             serializeJson(doc, response);
             WiFi.scanDelete();

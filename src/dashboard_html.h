@@ -990,19 +990,35 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   async function scanWifiNetworks() {
     const button=byId('scanWifi'), sel=byId('wifiNetworks'), msg=byId('wifiMessage');
     button.disabled=true; sel.disabled=true;
-    sel.replaceChildren(new Option('⏳ Scanning for networks…',''));
-    msg.textContent='Scanning — this takes a few seconds…';
+    sel.replaceChildren(new Option('⏳ Scanning for nearby networks…',''));
+    msg.textContent='Starting Wi-Fi scan — please wait…';
     msg.classList.remove('error');
     try {
-      await api('/api/wifi/scan',{method:'POST'});
+      // POST to start scan; retry up to 5× if a connection attempt is still in progress
+      let postOk=false;
+      for(let t=0;t<5;t++) {
+        try {
+          await api('/api/wifi/scan',{method:'POST'});
+          postOk=true; break;
+        } catch(e) {
+          if(t<4) { await new Promise(r=>setTimeout(r,1500)); }
+          else throw e;
+        }
+      }
+      if(!postOk) throw new Error('Could not start Wi-Fi scan. Try again.');
+      // Poll GET until status is 'complete' (up to 20 seconds)
       let result;
       for(let attempt=0;attempt<20;attempt++) {
         await new Promise(resolve=>setTimeout(resolve,1000));
         result=await api('/api/wifi/scan');
-        if(result.status!=='scanning') break;
+        if(result.status==='complete') break;
+        // Update dropdown text to show progress
+        const dots='.'.repeat((attempt%3)+1);
+        sel.options[0].text=`⏳ Scanning${dots}`;
       }
-      if(!result || result.status==='scanning') throw new Error('Wi-Fi scan timed out. Try again.');
+      if(!result || result.status!=='complete') throw new Error('Wi-Fi scan timed out. Try again.');
       if(!Array.isArray(result.networks)) throw new Error('Server returned an invalid Wi-Fi scan result.');
+      // Deduplicate by strongest RSSI
       const strongestBySsid=new Map();
       for(const network of result.networks) {
         if(typeof network.ssid!=='string' || !network.ssid) continue;
@@ -1012,13 +1028,14 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       const networks=[...strongestBySsid.values()].sort((a,b)=>Number(b.rssi)-Number(a.rssi));
       sel.replaceChildren(new Option('— select a network —',''));
       for(const network of networks) {
-        const label=`${network.ssid}  (${network.rssi} dBm${network.secured?' · secured':' · open'})`;
+        const bars=network.rssi>=-60?'▂▄▆█':network.rssi>=-75?'▂▄▆_':network.rssi>=-85?'▂▄__':'▂___';
+        const label=`${bars}  ${network.ssid}  (${network.rssi} dBm${network.secured?' · 🔒':''})`;;
         sel.add(new Option(label,network.ssid));
       }
       if(sel.options.length===1) {
-        msg.textContent='No Wi-Fi networks found. Check range and try again, or enter the network name below.';
+        msg.textContent='No Wi-Fi networks found. Move closer and scan again, or type the network name below.';
       } else {
-        msg.textContent=`Found ${sel.options.length-1} network(s). Select one, then enter its password.`;
+        msg.textContent=`Found ${sel.options.length-1} network(s). Select one, then enter its password below.`;
       }
     } catch(e) {
       sel.replaceChildren(new Option('— tap Scan to discover networks —',''));
