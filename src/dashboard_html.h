@@ -500,6 +500,15 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       gap: 8px;
     }
     .input-with-button input { flex: 1; }
+    /* Wi‑Fi Section Enhancements */
+    #wifiSetup .input-with-button select,
+    #wifiSetup .input-with-button input {
+      min-height: 56px;
+    }
+    #wifiSetup .input-with-button button {
+      min-width: 96px;
+    }
+
     .toggle {
       display: flex;
       align-items: center;
