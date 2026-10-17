@@ -64,7 +64,7 @@ void draw(unsigned long timeOnScreenMs) {
     oled.drawBox(10, 57, barWidth, 5);
 
     oled.setFont(u8g2_font_5x8_tf);
-    oled.drawStr(2, 63, "Touch either pad to count");
+    oled.drawStr(2, 63, "Touch sensor to count / change");
 
     DisplayManager::sendBuffer();
 }

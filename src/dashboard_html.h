@@ -350,7 +350,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     put('aqi',s.weather.valid?String(s.weather.aqi):'—');
     put('pm25',s.weather.valid?`${s.weather.pm25} µg/m³`:'—');
     byId('pomodoroStatus').textContent=s.pomodoro.phase==='Waiting for touch'
-      ? `Focus complete · touch a sensor to start the ${s.pomodoro.nextBreakMinutes}-minute break`
+      ? `Focus complete · touch the sensor to start the ${s.pomodoro.nextBreakMinutes}-minute break`
       : `${s.pomodoro.phase} · ${s.pomodoro.remaining} · cycle ${s.pomodoro.cycle}/${s.pomodoro.cycles}`;
     if(initialStatus) { byId('screenSelect').value=s.screen; initialStatus=false; }
   }

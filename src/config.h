@@ -15,14 +15,13 @@
 // ------------------------------------------------------------
 
 // OLED Display (I2C)
-#define PIN_OLED_SDA          8
-#define PIN_OLED_SCL          9
+#define PIN_OLED_SDA          11
+#define PIN_OLED_SCL          12
 #define OLED_I2C_ADDRESS      0x3C
 #define OLED_USE_SH1106       1        // 1 = SH1106, 0 = SSD1306
 
-// Touch Buttons
-#define PIN_BUTTON_1          4        // Screen cycle
-#define PIN_BUTTON_2          5        // Voice / context action
+// Capacitive touch sensor
+#define PIN_TOUCH_SENSOR      4        // Screen cycle
 
 // MPU6050 IMU (I2C, shared bus with OLED)
 #define MPU6050_I2C_ADDRESS   0x68
@@ -33,9 +32,9 @@
 #define PIN_MIC_SD            18
 
 // I2S Amplifier (MAX98357A)
-#define PIN_AMP_BCLK          12
-#define PIN_AMP_LRC           13
-#define PIN_AMP_DIN           14
+#define PIN_AMP_BCLK          5
+#define PIN_AMP_LRC           6
+#define PIN_AMP_DIN           7
 
 // ------------------------------------------------------------
 //  I2C Configuration
@@ -66,8 +65,7 @@
 #define PRAYER_CACHE_FETCH_DAYS   30                        // Cache a month of prayer data
 #define NTP_SYNC_INTERVAL         (6UL * 3600UL * 1000UL)  // 6 hours
 #define CLOCK_DISPLAY_INTERVAL    1000UL                    // 1 second
-#define BUTTON_DEBOUNCE_MS        200UL
-#define BUTTON_LONG_PRESS_MS      5000UL                    // 5 seconds for voice mode
+#define TOUCH_DEBOUNCE_MS         200UL
 
 // ------------------------------------------------------------
 //  Shake Detection (MPU6050)

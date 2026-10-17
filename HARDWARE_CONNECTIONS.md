@@ -1,66 +1,72 @@
 # Hardware Connections for Prayer‑Bot
 
+[📄 **README**](README.md) | [🔧 **Hardware Connections**](HARDWARE_CONNECTIONS.md) | [📐 **Circuit Diagram**](CIRCUIT.md) | [📜 **License**](LICENSE)
+
 This document describes the GPIO wiring between the **ESP32‑S3 (DevKitC‑1)** and all peripheral modules used in the project.
 
-| Peripheral | ESP32‑S3 Pin | Function | Notes |
-|------------|--------------|----------|-------|
-| **OLED Display (I2C, 128×64)** | **GPIO8** | SDA | Connect to the display **SDA** line. Use a 4.7 kΩ pull‑up resistor to 3.3 V (already on many modules). |
-| | **GPIO9** | SCL | Connect to the display **SCL** line. 4.7 kΩ pull‑up to 3.3 V. |
-| | **3.3 V** | VCC | Power the OLED. |
-| | **GND** | GND | Common ground. |
-| **MAX98357A I2S Amplifier** | **GPIO47** | BCLK (I2S Bit Clock) | I2S0 BCK – drives the audio clock. |
-| | **GPIO21** | LRCLK (I2S Word Select) | I2S0 LRCK – also called WS. |
-| | **GPIO18** | DIN (I2S Data In) | Audio data sent from ESP32 to the amp. |
-| | **GPIO19** | **SD** (Shutdown) | Pull‑low to enable the amp, high to mute (optional). |
-| | **3.3 V** | VCC | Supply the amp (max 3.3 V). |
-| | **GND** | GND | Common ground. |
-| **Vibration / Shake Sensor (SW‑420)** | **GPIO2** | INPUT | Connect the sensor’s **OUT** to GPIO2. Enable the internal pull‑up (`pinMode(2, INPUT_PULLUP)`). |
-| | **3.3 V** | VCC | Power the sensor. |
-| | **GND** | GND | Common ground. |
-| **Push Button (Menu / Pomodoro)** | **GPIO0** | INPUT | Connect one side of the button to GPIO0 and the other to GND. Use `INPUT_PULLUP` to avoid external resistors. |
-| | **3.3 V** (optional) | VCC | If you prefer active‑high logic, wire to 3.3 V and enable `INPUT`. |
-| **INMP441 I2S Microphone (optional)** | **GPIO47** | BCLK | Shares the same BCLK as the audio amp (I2S0 BCK). |
-| | **GPIO21** | LRCLK | Shares the same LRCLK as the amp (I2S0 LRCK). |
-| | **GPIO20** | DOUT (I2S Data Out) | Connect microphone data to GPIO20. |
-| | **3.3 V** | VCC | Power the microphone (max 3.3 V). |
-| | **GND** | GND | Common ground. |
-| **Power Supply** | **USB‑C / VIN** | 5 V | Provide 5 V via the board’s USB‑C connector or a regulated 5 V supply. |
-| | **3.3 V** regulator | 3.3 V | Internally generated for logic. |
-| | **GND** | Ground | All components share this ground. |
+| Component | Component Pin | ESP32‑S3 Connection | Notes |
+|-----------|--------------|---------------------|-------|
+| **1.3″ OLED Display (I2C)** | SDA | **GPIO 11** | I2C data line. Use a 4.7 kΩ pull‑up to 3.3 V (already on many modules). |
+| | SCL | **GPIO 12** | I2C clock line. 4.7 kΩ pull‑up to 3.3 V. |
+| | VCC / GND | **3.3 V / GND** | Power the OLED. |
+| **MPU6050 / GY‑521 (I2C)** | SDA | **GPIO 11** | Shared I2C bus with the OLED display. |
+| | SCL | **GPIO 12** | Shared I2C bus with the OLED display. |
+| | VCC / GND | **3.3 V / GND** | Power the IMU. |
+| **TTP223B Capacitive Touch** | SIG / OUT | **GPIO 4** | A touch advances to the next screen, counts dhikr, starts Pomodoro break, and dismisses Azan. |
+| | VCC / GND | **3.3 V / GND** | Power the touch sensor. |
+| **MAX98357A I2S Amplifier** | BCLK | **GPIO 5** | I2S bit clock. |
+| | LRC / WS | **GPIO 6** | I2S word select (left/right clock). |
+| | DIN | **GPIO 7** | I2S data from ESP32 to amplifier. |
+| | VIN / GND | **3.3 V / GND** | Supply the amp. |
+| | GAIN | Leave unconnected | Uses default gain. |
+| | SD | Do not connect to GND | Leave floating or pull high to enable. |
+| **Speaker** | SPK+ / SPK− | Amplifier outputs | Connect directly to MAX98357A speaker terminals. |
+| **INMP441 I2S Microphone** | SCK | **GPIO 16** | I2S bit clock for mic input. |
+| | WS | **GPIO 17** | I2S word select for mic input. |
+| | SD (data output) | **GPIO 18** | Audio data from mic to ESP32. |
+| | L/R | **GND** | Left‑channel selection. |
+| | VDD / GND | **3.3 V / GND** | Power the microphone. |
+| **Power Supply** | USB‑C / VIN | **5 V** | Provide 5 V via the board's USB‑C connector or a regulated supply. |
+| | 3.3 V regulator | **3.3 V** | Internally generated for logic. |
+| | GND | Ground | All components share this ground. |
 
 ### Wiring Tips
-- Keep **I2C** lines short (under 10 cm) to preserve signal integrity.
+- Keep **I2C** lines short (under 10 cm) to preserve signal integrity.
 - Use **common ground** for all peripherals; a single GND rail on a small breadboard works well.
-- The I2S pins (BCLK, LRCLK, DIN) must be routed together to minimise skew – keep the audio wires as short as possible.
-- If you enable the optional microphone, ensure its **BCLK/LRCLK** are tied to the same pins used by the amplifier; the firmware can switch between audio output and input.
-- Debounce the push‑button in software (`delay(50)` or use a hardware RC filter) to avoid multiple state changes.
-- For the vibration sensor, a simple digital read is sufficient – the sensor outputs HIGH when motion is detected.
+- The I2S pins (BCLK, LRC, DIN) must be routed together to minimise skew – keep the audio wires as short as possible.
+- The INMP441 uses a **separate I2S port** (I2S_NUM_0) from the amplifier (I2S_NUM_1) – they do **not** share pins.
+- The firmware debounces the touch sensor in software.
+- Shake detection uses the **MPU6050 accelerometer** on the shared I2C bus – no separate vibration sensor is needed.
 
 ### Visual Summary (ASCII schematic)
 ```
- ESP32‑S3                  OLED (I2C)          MAX98357A (I2S)          Vibration
-+----------+            +-----------+      +----------------+        Sensor
-|          |            |   SDA 8   |      | BCLK 47  ----+------> OUT
-|   GPIO8  +------------+-----------+      | LRCLK 21 ----+------> OUT
-|          |            |   SCL 9   |      | DIN 18  <----+------> IN
-|   GPIO9  +------------+-----------+      | SD   19  <----+ (optional)
-|          |            |   VCC 3.3V|      | VCC 3.3V      |
-|   3.3V   +------------+-----------+      | GND   GND      |
-|   GND    +------------+-----------+      +----------------+
-|   GPIO2  +----------------------------> Vibration OUT (HIGH on shake)
-|   GPIO0  +----------------------------> Button (pulled‑up)
-|   GPIO47 +----------------------------> I2S BCLK (shared with amp & mic)
-|   GPIO21 +----------------------------> I2S LRCLK (shared)
-|   GPIO18 +----------------------------> I2S DIN (audio to amp)
-|   GPIO20 +----------------------------> I2S DOUT (mic optional)
-+----------+                                              |
-                                                          +--- GND
+ ESP32‑S3                    OLED (I2C)           MAX98357A (I2S)
++----------+              +-----------+        +----------------+
+|          |              |           |        |                |
+|  GPIO11  +-- I2C SDA ---+ SDA       |        | BCLK  <-- GPIO5
+|  GPIO12  +-- I2C SCL ---+ SCL       |        | LRC   <-- GPIO6
+|          |              | VCC 3.3V  |        | DIN   <-- GPIO7
+|          |              | GND       |        | VIN 3.3V       |
+|          |              +-----------+        | GND            |
+|          |                                   +-------+--------+
+|          |      MPU6050 (I2C shared)                 |
+|          |     +----------+                    Speaker +/−
+|  GPIO11  +-----+ SDA      |
+|  GPIO12  +-----+ SCL      |         INMP441 (I2S Mic)
+|          |     | VCC 3.3V |        +----------------+
+|          |     | GND      |        | SCK   <-- GPIO16
+|          |     +----------+        | WS    <-- GPIO17
+|          |                         | SD    --> GPIO18
+|   GPIO4  +-- TTP223B OUT          | L/R   --> GND
+|          |                         | VDD 3.3V       |
++----------+                         +----------------+
 ```
 
-### Summary
-- **I2C**: GPIO8 (SDA) / GPIO9 (SCL)
-- **I2S Audio**: GPIO47 (BCLK) / GPIO21 (LRCLK) / GPIO18 (DIN) – optional mic on GPIO20 (DOUT).
-- **Sensors**: GPIO2 (vibration), GPIO0 (button).
-- **Power**: 5 V via USB‑C, 3.3 V regulator for logic.
+### Pin Summary
+- **I2C Bus**: GPIO 11 (SDA) / GPIO 12 (SCL) – shared by OLED and MPU6050.
+- **I2S Amplifier**: GPIO 5 (BCLK) / GPIO 6 (LRC) / GPIO 7 (DIN).
+- **I2S Microphone**: GPIO 16 (SCK) / GPIO 17 (WS) / GPIO 18 (SD).
+- **Touch Sensor**: GPIO 4 (single TTP223B).
+- **Power**: 5 V via USB‑C, 3.3 V regulator for logic.
 
 Follow this map when assembling your hardware on a breadboard or PCB, and the firmware will detect each peripheral automatically.

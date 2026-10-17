@@ -5,31 +5,18 @@
 
 // ============================================================
 //  BUTTON HANDLER
-//  Manages TTP223B capacitive touch buttons with debounce,
-//  short press, and long press (5 sec) detection.
+//  Manages the TTP223B capacitive touch sensor with debounce.
 // ============================================================
 
 namespace ButtonHandler {
-    // Initialize button GPIOs
+    // Initialize the touch sensor
     void init();
 
-    // Update button state - call every loop iteration
+    // Update touch state - call every loop iteration
     void update();
 
-    // Button 1: Screen cycle (short press only)
-    bool isButton1Pressed();
-
-    // Button 2: Context action (short press)
-    bool isButton2ShortPressed();
-
-    // Button 2: Voice mode (5-second hold)
-    bool isButton2LongPressed();
-
-    // True for one update after either touch pad is newly touched
-    bool isAnyTouchPressed();
-
-    // Whether button 2 is currently being held
-    bool isButton2Held();
+    // True for one update when the sensor is newly touched
+    bool isTouchPressed();
 }
 
 #endif // BUTTON_HANDLER_H

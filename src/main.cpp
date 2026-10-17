@@ -202,7 +202,6 @@ void loop() {
 
 void taskDisplay(void* param) {
     TickType_t lastWake = xTaskGetTickCount();
-    bool suppressButton2Actions = false;
 
     for (;;) {
         // Service OLED health
@@ -238,70 +237,26 @@ void taskDisplay(void* param) {
             AzanManager::setVolume((uint8_t)webVolumeRequest);
         }
 
-        bool anyTouch = ButtonHandler::isAnyTouchPressed();
-        if (g_currentScreen == SYS_SCREEN_DHIKR && anyTouch) {
+        bool touchPressed = ButtonHandler::isTouchPressed();
+        if (g_currentScreen == SYS_SCREEN_DHIKR && touchPressed) {
             DhikrScreen::countTouch();
         }
 
-        bool startedPomodoroBreak = false;
-        if (anyTouch &&
+        if (touchPressed &&
             g_pomodoro.phase == POMODORO_WAITING_FOR_BREAK &&
             g_azanState != AZAN_PLAYING) {
             PomodoroManager::startBreak(g_pomodoro);
-            startedPomodoroBreak = true;
-            suppressButton2Actions = ButtonHandler::isButton2Held();
         }
 
-        if (anyTouch && g_azanState == AZAN_PLAYING) {
+        if (touchPressed && g_azanState == AZAN_PLAYING) {
             g_azanStopRequested = true;
-            suppressButton2Actions = ButtonHandler::isButton2Held();
         }
 
-        if (ButtonHandler::isButton1Pressed() &&
-            g_currentScreen != SYS_SCREEN_DHIKR &&
-            !startedPomodoroBreak &&
-            g_pomodoro.phase != POMODORO_WAITING_FOR_BREAK &&
+        if (touchPressed &&
             g_azanState != AZAN_PLAYING) {
-            // Cycle to next screen
             g_currentScreen = (SystemScreen)((g_currentScreen + 1) % SYS_SCREEN_COUNT);
             g_screenStartMs = millis();
             ScreenRouter::draw(g_currentScreen);
-        }
-
-        if (ButtonHandler::isButton2LongPressed() &&
-            !suppressButton2Actions &&
-            g_currentScreen != SYS_SCREEN_DHIKR &&
-            g_azanState != AZAN_PLAYING) {
-            // Start voice mode
-            if (g_voiceState == VOICE_IDLE && g_azanState == AZAN_IDLE) {
-                g_voiceState = VOICE_LISTENING;
-                VoiceManager::startListening();
-            }
-        }
-
-        if (ButtonHandler::isButton2ShortPressed() &&
-            !suppressButton2Actions &&
-            g_currentScreen != SYS_SCREEN_DHIKR &&
-            g_azanState != AZAN_PLAYING) {
-            // Context action
-            if (g_voiceState == VOICE_PLAYING) {
-                VoiceManager::stopPlayback();
-                g_voiceState = VOICE_IDLE;
-            } else if (g_currentScreen == SYS_SCREEN_POMODORO) {
-                PomodoroManager::togglePause(g_pomodoro);
-            }
-        }
-
-        if (suppressButton2Actions &&
-            !ButtonHandler::isButton2Held() &&
-            !ButtonHandler::isButton2ShortPressed() &&
-            !ButtonHandler::isButton2LongPressed()) {
-            suppressButton2Actions = false;
-        } else if (suppressButton2Actions &&
-                   !ButtonHandler::isButton2Held() &&
-                   (ButtonHandler::isButton2ShortPressed() ||
-                    ButtonHandler::isButton2LongPressed())) {
-            suppressButton2Actions = false;
         }
 
         // Update current screen content (clock tick, countdown, etc.)
