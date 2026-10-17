@@ -140,7 +140,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     <p>Choose your router below, enter its password, and connect. The device confirms a router connection and DHCP address before saving the credentials and restarting.</p>
     <p class="hint">Enable the router's 2.4 GHz Wi-Fi; a 5 GHz-only network cannot be used. For TP-Link compatibility, WPA2-Personal (AES) is a good test setting. Setup address: <strong>http://192.168.4.1</strong> · Setup hotspot: <strong id="setupApNameLabel">Prayer-Bot</strong></p>
     <div class="fields" style="margin-top:16px">
-      <div class="field"><label for="wifiNetworks">Nearby Wi-Fi networks</label><select id="wifiNetworks" onchange="if(this.value)byId('wifiSsid').value=this.value"><option value="">Scan to find networks</option></select></div>
+      <div class="field"><label for="wifiNetworks">Nearby Wi-Fi networks</label><select id="wifiNetworks"><option value="">— tap Scan to discover networks —</option></select></div>
       <div class="field"><label>&nbsp;</label><button id="scanWifi" type="button" onclick="scanWifiNetworks()">Scan for networks</button></div>
       <div class="field"><label for="wifiSsid">Wi-Fi network name (SSID)</label><input id="wifiSsid" maxlength="32" autocomplete="username" required></div>
       <div class="field"><label for="wifiPass">Wi-Fi password</label><input id="wifiPass" type="password" maxlength="63" autocomplete="current-password"><small class="hint">Network scans cannot retrieve a router password. Enter it here; an empty password is allowed for an open network.</small></div>
@@ -510,6 +510,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         byId('connectWifi').disabled=false;
       } else if(s.network.connecting) {
         byId('wifiMessage').textContent='Connecting to your Wi-Fi network…';
+        byId('wifiMessage').classList.remove('error');
       } else {
         wifiSubmitted=false;
         byId('wifiMessage').textContent=s.network.authFailed
@@ -520,16 +521,26 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       }
     } else if(!dashboardReady && s.network.setupRequired) {
       byId('wifiSetup').hidden=false;
+      byId('wifiMessage').textContent='';
+      byId('wifiMessage').classList.remove('error');
       byId('dashboardContent').hidden=true;
       byId('savebar').hidden=true;
     } else if(!dashboardReady) {
+      // Clear any leftover WiFi message when the dashboard shows
+      byId('wifiMessage').textContent='';
+      byId('wifiMessage').classList.remove('error');
       showDashboard();
     }
     put('nextPrayer',s.nextPrayer.name ? `${s.nextPrayer.name} at ${s.nextPrayer.time} (${s.nextPrayer.countdown})` : 'Schedule unavailable');
     put('azanStatus',s.azanPlaying?'Beeping — touch/shake to stop':'Ready');
     put('hijri',s.hijri.date || '—'); put('event',s.hijri.event || 'None today');
     for(const name of ['fajr','sunrise','dhuhr','asr','maghrib','isha']) put(name,s.prayers[name]);
-    put('prayerNote',s.prayers.ready?'':'Prayer times appear after time sync and schedule load.');
+    // Show helpful note and trigger auto-sync if WiFi is up but prayers not yet loaded
+    if(!s.prayers.ready && s.network.connected) {
+      put('prayerNote','Connected — fetching prayer schedule from Aladhan…');
+    } else {
+      put('prayerNote',s.prayers.ready?'':'Prayer times appear after time sync and schedule load.');
+    }
     const prohibitedWindows=[
       ['afterSunrise','afterSunrise'],
       ['atZawal','atZawal'],
@@ -545,7 +556,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       state.classList.toggle('prohibited-active',Boolean(s.prohibited?.ready && window?.active));
     }
     put('prohibitedNote',s.prohibited?.ready
-      ? 'Calculated from today’s schedule and the prohibited-time offsets in Device settings.'
+      ? 'Calculated from today\u2019s schedule and the prohibited-time offsets in Device settings.'
       : 'Prohibited windows appear after time sync and prayer schedule load.');
     put('pomodoroStatus',`${s.pomodoro.phase} · ${s.pomodoro.remaining} · cycle ${s.pomodoro.cycle}/${s.pomodoro.cycles}`);
     put('dhikrStatus',`Count: ${s.dhikrCount}`);
@@ -575,6 +586,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       ? `Focus complete · touch the sensor to start the ${s.pomodoro.nextBreakMinutes}-minute break`
       : `${s.pomodoro.phase} · ${s.pomodoro.remaining} · cycle ${s.pomodoro.cycle}/${s.pomodoro.cycles}`;
     if(initialStatus) { byId('screenSelect').value=s.screen; initialStatus=false; }
+    // Return whether prayers are ready so polling can adapt
+    return !!s.prayers.ready;
   }
   function applyLocationPreset() {
     const location=locations[byId('locationPreset').value];
@@ -975,11 +988,11 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     }
   }
   async function scanWifiNetworks() {
-    const button=byId('scanWifi'), select=byId('wifiNetworks'), message=byId('wifiMessage');
-    button.disabled=true;
-    message.textContent='Scanning for nearby Wi-Fi networks…';
-    message.classList.remove('error');
-    select.replaceChildren(new Option('Scanning…',''));
+    const button=byId('scanWifi'), sel=byId('wifiNetworks'), msg=byId('wifiMessage');
+    button.disabled=true; sel.disabled=true;
+    sel.replaceChildren(new Option('⏳ Scanning for networks…',''));
+    msg.textContent='Scanning — this takes a few seconds…';
+    msg.classList.remove('error');
     try {
       await api('/api/wifi/scan',{method:'POST'});
       let result;
@@ -990,7 +1003,6 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       }
       if(!result || result.status==='scanning') throw new Error('Wi-Fi scan timed out. Try again.');
       if(!Array.isArray(result.networks)) throw new Error('Server returned an invalid Wi-Fi scan result.');
-      select.replaceChildren(new Option('Select a network',''));
       const strongestBySsid=new Map();
       for(const network of result.networks) {
         if(typeof network.ssid!=='string' || !network.ssid) continue;
@@ -998,21 +1010,22 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         if(!previous || Number(network.rssi)>Number(previous.rssi)) strongestBySsid.set(network.ssid,network);
       }
       const networks=[...strongestBySsid.values()].sort((a,b)=>Number(b.rssi)-Number(a.rssi));
+      sel.replaceChildren(new Option('— select a network —',''));
       for(const network of networks) {
-        const option=new Option(`${network.ssid} · ${network.rssi} dBm${network.secured?' · secured':''}`,network.ssid);
-        select.add(option);
+        const label=`${network.ssid}  (${network.rssi} dBm${network.secured?' · secured':' · open'})`;
+        sel.add(new Option(label,network.ssid));
       }
-      if(select.options.length===1) {
-        message.textContent='No Wi-Fi networks found. Check range and try again, or enter the network name below.';
+      if(sel.options.length===1) {
+        msg.textContent='No Wi-Fi networks found. Check range and try again, or enter the network name below.';
       } else {
-        message.textContent=`Found ${select.options.length-1} network(s). Select one or enter a network name below.`;
+        msg.textContent=`Found ${sel.options.length-1} network(s). Select one, then enter its password.`;
       }
     } catch(e) {
-      select.replaceChildren(new Option('Scan to find networks',''));
-      message.textContent=e.message;
-      message.classList.add('error');
+      sel.replaceChildren(new Option('— tap Scan to discover networks —',''));
+      msg.textContent=e.message;
+      msg.classList.add('error');
     } finally {
-      button.disabled=false;
+      button.disabled=false; sel.disabled=false;
     }
   }
   byId('wifiNetworks').addEventListener('change',event=>{
@@ -1028,7 +1041,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   initQuranDropdown();
   refreshAll();
   loadWeeklyStats();
-  setInterval(()=>loadStatus().catch(e=>message(e.message,true)),5000);
+  // Adaptive polling: fast (3s) until prayer data is ready, then regular (5s)
+  let prayerReady=false;
+  async function pollStatus() {
+    try { prayerReady=await loadStatus(); } catch(e) { message(e.message,true); }
+    setTimeout(pollStatus, prayerReady?5000:3000);
+  }
+  setTimeout(pollStatus,3000);
   setInterval(()=>loadWeeklyStats(),30000);
   setInterval(()=>{if(wifiSubmitted)loadStatus().catch(()=>{
     byId('wifiMessage').textContent='Prayer-Bot is reconnecting or restarting. Stay connected to the Prayer-Bot hotspot; this page will resume checking shortly.';

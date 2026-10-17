@@ -162,7 +162,46 @@ curl -X POST http://192.168.4.1/api/settings \
 
 ---
 
-## 🌐 Access the local dashboard
+### 🔒 Secret Credentials File (`src/secrets.h`)
+
+Prayer-Bot uses a **`src/secrets.h`** file to hold your private API keys at compile time. This file is already listed in `.gitignore` so it is **never committed to Git or uploaded to GitHub**.
+
+#### What it looks like
+
+```cpp
+#ifndef SECRETS_H
+#define SECRETS_H
+
+// ============================================================
+// PRAYER-BOT PRIVATE API CREDENTIALS
+// Keep this file out of Git – it is listed in .gitignore.
+// Replace the placeholders below with your real keys.
+// ============================================================
+
+// Google Gemini Flash API key (Surah voice recognition)
+// Get a free key at: https://aistudio.google.com/
+#define DEFAULT_GEMINI_API_KEY "YOUR_GEMINI_KEY_HERE"
+
+// OpenWeatherMap API key (weather & humidity)
+// Get a free key at: https://openweathermap.org/api
+#define DEFAULT_OWM_API_KEY    "YOUR_OWM_KEY_HERE"
+
+#endif // SECRETS_H
+```
+
+#### Setup steps
+
+1. **Create the file** — copy the block above into `src/secrets.h` inside the project (it's already `#include`d by `src/config.h`).
+2. **Fill in your keys** — replace `YOUR_GEMINI_KEY_HERE` and `YOUR_OWM_KEY_HERE` with real values. Both keys can also be set later from the **Web Dashboard → Device settings → Online services & API keys** without needing to reflash.
+3. **Confirm `.gitignore` is correct** — open `.gitignore` at the project root and verify `src/secrets.h` is listed. Do **not** add the real keys to `src/config.h` or any other tracked file.
+4. **Never commit live keys** — if a key is accidentally committed, revoke it immediately at its provider and generate a new one. The dashboard's key fields are cleared after saving so they don't appear in browser history.
+
+> [!CAUTION]
+> API keys pasted into chat windows, commit messages, or issue comments are publicly visible. Always rotate a key that may have been exposed.
+
+---
+
+
 
 ### First-time setup
 
