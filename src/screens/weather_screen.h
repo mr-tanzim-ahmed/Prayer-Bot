@@ -1,7 +1,7 @@
 #ifndef WEATHER_SCREEN_H
 #define WEATHER_SCREEN_H
 
-#include "types.h"
+#include "../types.h"
 
 // ============================================================
 //  WEATHER SCREEN (Screen 4)

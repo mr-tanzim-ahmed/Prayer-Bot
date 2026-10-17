@@ -2,7 +2,7 @@
 #define WEATHER_ICONS_H
 
 #include <U8g2lib.h>
-#include "types.h"
+#include "../types.h"
 
 // ============================================================
 //  WEATHER ICONS

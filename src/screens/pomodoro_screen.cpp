@@ -1,6 +1,6 @@
-#include "screens/pomodoro_screen.h"
-#include "display_manager.h"
-#include "config.h"
+#include "pomodoro_screen.h"
+#include "../display_manager.h"
+#include "../config.h"
 
 // ============================================================
 //  POMODORO SCREEN (Screen 5)

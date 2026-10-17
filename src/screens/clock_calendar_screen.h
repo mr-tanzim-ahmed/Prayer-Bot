@@ -1,7 +1,7 @@
 #ifndef CLOCK_CALENDAR_SCREEN_H
 #define CLOCK_CALENDAR_SCREEN_H
 
-#include "types.h"
+#include "../types.h"
 
 // ============================================================
 //  CLOCK & CALENDAR SCREEN (Screen 3)

@@ -1,7 +1,7 @@
-#include "screens/prayer_focus_screen.h"
-#include "display_manager.h"
-#include "prayer_manager.h"
-#include "config.h"
+#include "prayer_focus_screen.h"
+#include "../display_manager.h"
+#include "../prayer_manager.h"
+#include "../config.h"
 
 // ============================================================
 //  PRAYER FOCUS SCREEN (Screen 1 - Default)

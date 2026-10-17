@@ -115,3 +115,32 @@ The dashboard exposes device status, today's prayer times, Hijri date, weather/A
 - **Free APIs** – Aladhan (prayer times) and Open‑Meteo (air quality); OpenWeatherMap weather requires a user-provided API key.
 
 Feel free to fork, modify, and extend the bot (e.g., add voice commands or additional sensors). Happy building!
+
+## 🛠️ Development Setup (VS Code + PlatformIO)
+
+1. **Install VS Code** – download from https://code.visualstudio.com/ and run the installer.
+2. **Add the PlatformIO extension** – open VS Code, go to Extensions (Ctrl+Shift+X), search for **PlatformIO IDE** and install it.
+3. **Open the project** – choose **File → Open Folder…** and select the `e:\Prayer-Bot` directory.
+4. **Build the firmware** – press the **PlatformIO: Build** button (or run `pio run` in the integrated terminal).
+5. **Upload to the ESP32‑S3** – press **PlatformIO: Upload** (or `pio run --target upload`). Ensure the board is connected via USB.
+6. **Serial monitor** – open **PlatformIO: Serial Monitor** (or `pio device monitor -b 115200`) to view boot logs and interact with the device.
+
+> The PlatformIO tasks automatically use the configuration from `platformio.ini`.
+
+---
+
+## 📌 Pin Diagram
+
+| Function | Pin (label) | GPIO |
+|----------|-------------|------|
+| OLED SDA / MPU6050 SDA (I²C data) | **SDA** | 11 |
+| OLED SCL / MPU6050 SCL (I²C clock) | **SCL** | 12 |
+| Capacitive Touch Sensor (screen advance) | **SIG** | 4 |
+| I²S Amplifier – Bit Clock (BCLK) | **BCLK** | 5 |
+| I²S Amplifier – Word Select / LRCK | **LRC/WS** | 6 |
+| I²S Amplifier – Data In (DIN) | **DIN** | 7 |
+| I²S Microphone – Serial Clock (SCK) | **MIC_SCK** | 16 |
+| I²S Microphone – Word Select (WS) | **MIC_WS** | 17 |
+| I²S Microphone – Data (SD) | **MIC_SD** | 18 |
+
+These pins are defined in `src/config.h` and match the wiring shown in **HARDWARE_CONNECTIONS.md**.

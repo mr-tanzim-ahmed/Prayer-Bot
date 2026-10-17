@@ -1,7 +1,7 @@
 #ifndef POMODORO_SCREEN_H
 #define POMODORO_SCREEN_H
 
-#include "types.h"
+#include "../types.h"
 
 // ============================================================
 //  POMODORO SCREEN (Screen 5)

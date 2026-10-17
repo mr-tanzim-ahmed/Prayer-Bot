@@ -1,7 +1,7 @@
 #ifndef DHIKR_SCREEN_H
 #define DHIKR_SCREEN_H
 
-#include "types.h"
+#include "../types.h"
 
 // ============================================================
 //  DHIKR SCREEN (Screen 6)

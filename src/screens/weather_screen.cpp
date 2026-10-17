@@ -1,8 +1,8 @@
-#include "screens/weather_screen.h"
-#include "display_manager.h"
-#include "weather_manager.h"
-#include "screens/weather_icons.h"
-#include "config.h"
+#include "weather_screen.h"
+#include "../display_manager.h"
+#include "../weather_manager.h"
+#include "weather_icons.h"
+#include "../config.h"
 
 // ============================================================
 //  WEATHER SCREEN (Screen 4)

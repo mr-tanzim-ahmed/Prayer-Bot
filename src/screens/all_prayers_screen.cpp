@@ -1,7 +1,7 @@
-#include "screens/all_prayers_screen.h"
-#include "display_manager.h"
-#include "prayer_manager.h"
-#include "config.h"
+#include "all_prayers_screen.h"
+#include "../display_manager.h"
+#include "../prayer_manager.h"
+#include "../config.h"
 
 // ============================================================
 //  ALL PRAYERS SCREEN (Screen 2)

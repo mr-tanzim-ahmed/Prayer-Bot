@@ -1,6 +1,6 @@
-#include "screens/dhikr_screen.h"
-#include "display_manager.h"
-#include "config.h"
+#include "dhikr_screen.h"
+#include "../display_manager.h"
+#include "../config.h"
 
 // ============================================================
 //  DHIKR SCREEN IMPLEMENTATION
