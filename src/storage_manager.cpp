@@ -86,6 +86,7 @@ void loadDefaults(Settings& settings) {
     settings.sunsetOffset     = DEFAULT_SUNSET_OFFSET;
 
     settings.owmApiKey[0]     = '\0';
+    settings.geminiApiKey[0] = '\0';
 }
 
 bool loadSettings(Settings& settings) {
@@ -143,6 +144,7 @@ bool loadSettings(Settings& settings) {
     bool valid = validString("city", sizeof(loaded.cityName)) &&
                  validString("tz", sizeof(loaded.timezone)) &&
                  validString("owmKey", sizeof(loaded.owmApiKey)) &&
+                 validString("geminiKey", sizeof(loaded.geminiApiKey)) &&
                  number("lat", -90.0f, 90.0f, DEFAULT_LATITUDE, loaded.latitude) &&
                  number("lon", -180.0f, 180.0f, DEFAULT_LONGITUDE, loaded.longitude) &&
                  number("utcOff", -12.0f, 14.0f, DEFAULT_UTC_OFFSET, loaded.utcOffset);
@@ -186,6 +188,9 @@ bool loadSettings(Settings& settings) {
         strlcpy(loaded.timezone, doc["tz"], sizeof(loaded.timezone));
     if (doc["owmKey"].is<const char*>())
         strlcpy(loaded.owmApiKey, doc["owmKey"], sizeof(loaded.owmApiKey));
+    if (doc["geminiKey"].is<const char*>())
+        strlcpy(loaded.geminiApiKey, doc["geminiKey"], sizeof(loaded.geminiApiKey));
+    if (loaded.geminiApiKey[0] == '\0')
     if (loaded.cityName[0] == '\0' || loaded.timezone[0] == '\0') {
         Serial.println("[STORAGE] City and timezone cannot be empty; keeping safe defaults.");
         return false;
@@ -222,6 +227,7 @@ bool saveSettings(const Settings& settings) {
     doc["sunsetOff"]   = settings.sunsetOffset;
 
     doc["owmKey"]      = settings.owmApiKey;
+    doc["geminiKey"]   = settings.geminiApiKey;
 
     String json;
     if (serializeJson(doc, json) == 0 || json.isEmpty()) {

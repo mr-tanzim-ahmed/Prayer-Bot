@@ -10,15 +10,17 @@ Welcome to **Prayer‑Bot**, a DIY, offline‑first digital companion that helps
 
 ## 🌟 Key Features
 
-- **🕌 Automated Prayer Times & Azan** – Monthly schedules from Aladhan with a repeating I2S prayer alarm that stops on the touch sensor or a shake.
+- **🕌 Automated Prayer Times & Azan alert** – Monthly schedules from Aladhan refresh when the Prayer Focus screen opens and every 30 minutes while online, with an OLED sync indicator. A repeating I2S beep alert stops on the touch sensor or a shake. Recorded Adhan audio is not included in this build.
 - **🌙 Hijri Calendar & Event Tracker** – Current Hijri date alongside the local Gregorian date, Ramadan countdown, major holidays, and custom offset handling.
-- **⏱️ Pomodoro Focus Timer** – Hold the touch sensor for 3 seconds on the Pomodoro screen to start a focus session. By default, focus lasts 25 minutes and the break starts with a touch after a single completion beep; the existing long break follows the configured cycle count.
+- **⏱️ Pomodoro Focus Timer** – On the Pomodoro screen, hold the touch sensor for 3 seconds or shake the device to start an idle timer or pause/resume an active timer. A short tap while paused resumes the timer and advances to the next screen; after focus, a short tap starts the break and advances screens. The OLED shows a phase indicator, remaining time, animated status, and session progress.
 - **📈 Weekly Pomodoro History** – Dashboard graph of daily sessions started and completed focus minutes for the last seven days. Daily totals are persisted in LittleFS; only completed focus sessions count toward focus minutes.
-- **🌤️ Live Weather & AQI** – Weather and humidity from OpenWeatherMap and air-quality data from Open-Meteo.
-- **📱 Local Web Dashboard** – Configure location, prayer calculation, prohibited-time offsets, azan volume, weather key, and Pomodoro timings; view device/prayer/weather status and control screens, Pomodoro, zikir counting, and the active alarm from a phone or computer.
-- **📳 Shake‑to‑Snooze** – MPU6050 accelerometer lets you dismiss or snooze alerts with a shake.
-- **🕋 Dhikr Screen** – Five connected Arabic phrases, shaped with open-licensed Noto Nastaliq Urdu Bold as the closest available Indo-Pak-style font, rotate every 5 seconds; long phrases marquee right-to-left, and touch increments the counter. The screen returns to the main screen after 100 seconds.
+- **🌤️ Live Weather & AQI** – Weather and humidity from OpenWeatherMap and air-quality data from Open-Meteo; the OLED refreshes when opened and every 30 minutes, with a rotating sync indicator.
+- **🎧 Surah Voice Player** – With router Wi-Fi/internet available, the last OLED screen listens for a Surah name for three seconds and sends clean 16 kHz mono microphone audio to Gemini for English or Bangla recognition. Shake the device on the Surah screen to stop active playback. The dashboard provides animated English/Bangla voice input; it sends the browser's speech transcript to Gemini through the ESP32, keeping the saved key off the phone/browser. Choose phone or Prayer-Bot audio output; if the primary recitation CDN is unavailable, playback tries an alternate source.
+- **📱 Local Web Dashboard** – Configure location, prayer calculation, prohibited-time offsets, azan volume, and Pomodoro timings; view device/prayer/weather status and control screens, Pomodoro, zikir counting, Surah playback, and the active alarm from a phone or computer.
+- **📳 Shake Controls** – The MPU6050 dismisses an active Azan alert; on the Pomodoro screen it starts or pauses/resumes the timer, and on the Surah screen it stops active playback.
+- **🕋 Dhikr Screen** – Five English transliterations with their English meanings rotate every 5 seconds; touch increments the counter. The screen returns to the main screen after 100 seconds.
 - **👆 Single Touch Navigation** – The GPIO4 touch sensor advances to the next screen on each touch.
+- **🖥️ Seven OLED screens** – Prayer Focus, all prayer times, clock/calendar, weather, Pomodoro, Dhikr, and Quran each show the correct `screen/7` indicator.
 - **🧩 Modular Firmware** – Features are separated into managers and display screens, with shared configuration and data types.
 
 ---
@@ -68,10 +70,10 @@ Keep feature behavior in its manager or screen module where practical; use `main
 |-----------|-------------|
 | **ESP32‑S3 Development Board** (N16R8) | 240 MHz dual‑core MCU with 8 MB PSRAM and 16 MB flash – handles Wi‑Fi, audio, and graphics.
 | **1.3" OLED Display (I2C, SSD1306/SH1106)** | Crisp monochrome UI for time, prayer list, weather, and Dhikr screen.
-| **MAX98357A I2S Audio Amplifier** + small speaker | Plays Azan audio (MP3/AAC) via I2S without CPU load.
+| **MAX98357A I2S Audio Amplifier** + small speaker | Plays repeating prayer/Pomodoro beeps and streamed MP3 Quran recitation over I2S.
 | **MPU6050 / GY‑521 IMU (I2C)** | 6‑axis accelerometer & gyroscope for shake detection; shares the I2C bus with the OLED. |
 | **TTP223B Capacitive Touch Sensor** | GPIO 4 advances to the next screen; it also counts Dhikr, starts a waiting Pomodoro break, and dismisses Azan. |
-| **INMP441 I2S Microphone (optional)** | Future voice‑command extensions (currently unused).
+| **INMP441 I2S Microphone (optional)** | Captures a three-second Surah voice-selection clip for Gemini recognition when configured. |
 | **Micro‑USB Power / 5 V Power Supply** | Powers the board and peripherals.
 | **Optional: SD Card (Micro‑SD slot)** | Can be added for large log storage; the core uses LittleFS on internal flash.
 
@@ -87,11 +89,12 @@ Keep feature behavior in its manager or screen module where practical; use `main
 4. Enter the Wi-Fi name (SSID) and password for the separate router network the ESP32 should join:
    - your **2.4 GHz home Wi-Fi router**, or
    - your **mobile phone's 2.4 GHz hotspot**.
-5. Select **Connect to Wi-Fi**. The ESP32 joins the router while keeping its **Prayer-Bot** setup hotspot active, including after reboot. The dashboard remains available at **http://192.168.4.1** when your phone/computer is connected to the ESP32 hotspot; the router connection is separate.
-6. To change the ESP32's own setup hotspot name or password, use **Wi-Fi setup → Setup hotspot credentials**. Enter a new name and, optionally, a new password (8–63 characters); leave the password blank to keep the current one. The hotspot restarts with the saved credentials, so reconnect your phone/computer using the new name/password. The password is stored on the device and is never returned by the dashboard API. The default password is **12345678**; change it from the dashboard to secure your setup hotspot.
-7. Set the location (Dhaka is the default) and other device settings from the dashboard. Selecting a preset fills its coordinates and timezone; entering a custom city and leaving the city field looks it up automatically. Save the settings to refresh prayer times and weather and sync the selected city's clock offset. When the dashboard opens, it initializes the ESP32 clock from the connected phone/computer's current time, so the clock can be set even without internet. Once the ESP32 is online, NTP updates it to the current time and retries periodically if synchronization is unavailable. The displayed time is not derived from the firmware compile timestamp.
+5. Select **Connect to Wi-Fi**. The ESP32 waits up to 35 seconds for association and a valid DHCP address/gateway, verifies saved credentials by reading them back, and saves them only after the router lease is valid. It then automatically restarts and reconnects. Internet access is not required to save valid router credentials; online services will need working internet separately. It keeps the **Prayer-Bot** setup hotspot active. The dashboard remains available at **http://192.168.4.1** when your phone/computer is connected to the ESP32 hotspot; the router connection is separate. Selecting a scanned network fills its SSID; enter the router password manually because scans cannot read passwords.
+6. Set the location (Dhaka is the default) and other device settings from the dashboard. Selecting a preset fills its coordinates and timezone; entering a custom city and leaving the city field looks it up automatically. Save the settings to refresh prayer times and weather and sync the selected city's clock offset. When the dashboard opens, it initializes the ESP32 clock from the connected phone/computer's current time, so the clock can be set even without internet. Once the ESP32 is online, NTP updates it to the current time and retries periodically if synchronization is unavailable. The displayed time is not derived from the firmware compile timestamp.
 
-Use **Verify service connections** in the dashboard to test NTP, Aladhan prayer times, OpenWeather, and Open-Meteo air quality. OpenWeather requires a valid API key; the other listed services do not.
+Internet-backed features initialize after the ESP32 connects to the router. The station is considered connected only when Wi-Fi reports association and both a DHCP local address and gateway are present. New credentials are saved to LittleFS only after this check and a read-back verification; failed attempts retain the previous credentials. The connection timeout is 35 seconds. Router connectivity does not guarantee internet access: prayer/weather services, speech recognition, and Quran streaming separately require internet. If Wi-Fi disconnects, the firmware attempts to reconnect automatically. The dashboard displays offline status and disables Quran voice/audio controls; Pomodoro and Dhikr remain available locally. Browser voice recognition offers English and Bangla (বাংলা); allow microphone access in the browser. The ESP32 microphone assistant supports English or Bangla and also requires a configured Gemini key on the device.
+
+For dashboard voice playback, select the speech language, press **Start voice input**, allow microphone access, and say the Surah name. Browser speech recognition produces the transcript; Gemini on the ESP32 maps it to a Surah number, then playback starts on the selected phone or Prayer-Bot output. Phone playback uses the browser audio element and falls back to an alternate CDN if the primary stream fails. Prayer-Bot playback streams MP3 audio and also tries an alternate CDN if needed. The ESP32 screen shows a microphone animation while listening, a recognition animation while Gemini is working, and the selected Surah name during playback. Gemini must already be provisioned privately on the device. Never place the API key in dashboard JavaScript or commit it to the repository; rotate keys pasted into chat or logs.
 
 ### Open the dashboard later through your router or hotspot
 
@@ -99,27 +102,31 @@ After the ESP32 joins your router or phone hotspot, it receives a **local IP add
 
 If you use a mobile hotspot, its owner phone provides the Wi-Fi connection to the ESP32. Some phones do not allow the hotspot-owner phone to reach connected clients; if the dashboard will not open on that phone, connect a second phone or computer to the hotspot and use the ESP32's displayed Home network IP there.
 
-The header's **Modules** menu links to the overview, setup guide, prayer schedule, prohibited-time windows, clock/calendar screen controls, Pomodoro history, weather, Dhikr, Wi-Fi setup, and device settings. The setup guide gives the basic Wi-Fi, location, and touch steps. The dashboard exposes device status, today's prayer times, all three calculated prohibited-time windows, Hijri date, weather/AQI, screen selection, Pomodoro controls, Dhikr count controls, and the active azan stop control. Settings are range-validated, saved to LittleFS, and reloaded by the dashboard after saving; storage failures are reported without applying unsaved values. The optional OpenWeather API key is never returned by the settings API; the dashboard only reports whether one is configured, and has an explicit clear-key option.
+The header's **Modules** menu links to the overview, setup guide, prayer schedule, prohibited-time windows, clock/calendar screen controls, Pomodoro history, weather, Dhikr, Quran audio, Wi-Fi setup, and device settings. The setup guide gives the basic Wi-Fi, location, and touch steps. The dashboard exposes device status, today's prayer times, all three calculated prohibited-time windows, Hijri date, weather/AQI, screen selection, Pomodoro controls, Dhikr count controls, Quran voice/player controls, and the active azan stop control. Settings are range-validated, saved to LittleFS, and reloaded by the dashboard after saving; storage failures are reported without applying unsaved values. Service keys are not displayed or editable in the dashboard.
+
+The Prayer-Bot setup network uses its default hotspot name, password, and fixed address `192.168.4.1`; these are not configurable in the dashboard. Router credentials are saved only after association, a valid DHCP address and gateway, and storage read-back verification; then the device restarts. Wi-Fi scanning can populate the router SSID but cannot reveal its password; enter the password manually. Browser voice input uses the browser's speech-recognition support and requires microphone permission. Revoke any API key pasted into chat or public logs and provision replacements privately; API keys are not hardcoded in source.
 
 Prayer schedules are fetched as a monthly calendar from Aladhan after the device has internet and valid local time, using the configured location and calculation method. The default is Dhaka, Bangladesh (23.8103, 90.4125), Asia/Dhaka (UTC+6); the downloaded month is cached on the device. This is not a preloaded/offline Bangladesh timetable or CSV, so the first schedule fetch and later month refreshes require network access. The dashboard's prohibited-time panel and the Prayer Focus OLED screen use the device's configured offsets: after sunrise, before Dhuhr (Zawal), and before Maghrib. Confirm calculation settings and local guidance for your area.
 
-## 🕋 Arabic Dhikr phrases
+## 🕋 Dhikr phrases
 
 The Dhikr screen cycles through these phrases (transliterations and short meanings are included for reference):
 
-| Arabic | Transliteration | Meaning |
-|---|---|---|
-| سبحان الله | Subhan Allah | Glory be to Allah |
-| الحمد لله | Alhamdulillah | Praise be to Allah |
-| لا إله إلا الله | La ilaha illallah | There is no deity but Allah |
-| الله أكبر | Allahu Akbar | Allah is the Greatest |
-| أستغفر الله | Astaghfirullah | I seek Allah's forgiveness |
+| English phrase | Meaning |
+|---|---|
+| Subhan Allah | Glory be to Allah |
+| Alhamdulillah | Praise be to Allah |
+| La ilaha illallah | There is no deity except Allah |
+| Allahu Akbar | Allah is the Greatest |
+| Astaghfirullah | I seek Allah's forgiveness |
 
-The Arabic is shaped into SVG outlines and then rasterized for the monochrome OLED. The project uses **Noto Nastaliq Urdu Bold**, licensed under the SIL Open Font License 1.1, as a close open-licensed Indo-Pak-style calligraphic fallback; it is not an Indo-Pak Quran-specific font. Source SVGs, OLED bitmaps, and the font license are in `src/assets/dhikr/`. There is no CSV data file in this project.
+The Dhikr OLED screen uses English text only; it does not require an Arabic font or Arabic image assets.
 
 ## ⏱️ Pomodoro flow
 
 - Default focus is **25 minutes**; the touch-started break delay defaults to **5 minutes** and can be set from **2 to 5 minutes**.
+- On the Pomodoro OLED screen, hold the touch sensor for 3 seconds to start or pause/resume. While paused, a short tap resumes the timer and goes to the next screen; a short tap while a break is ready starts the break and goes to the next screen. The OLED's animated status and progress bar reflect the current phase.
+- A shake also starts the timer from idle or pauses/resumes an active focus/break timer while the Pomodoro screen is open. A shake while a focus session is waiting for its break does not start the break.
 - At the end of a focus session, the speaker plays one beep and the timer waits for the touch sensor (or the dashboard's Start/Pause control) before starting the break countdown.
 - The next focus session starts automatically after the break. A configured long break is still used after the selected number of focus sessions.
 - The dashboard's seven-day chart reports sessions started, completed focus sessions, and completed focus minutes. Statistics need valid device local time; partial or interrupted focus sessions are not included in completed-focus totals.

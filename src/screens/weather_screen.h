@@ -10,7 +10,8 @@
 // ============================================================
 
 namespace WeatherScreen {
-    void draw(const WeatherData& weather);
+    void draw(const WeatherData& weather, bool syncing);
+    void update(const WeatherData& weather, bool syncing);
 }
 
 #endif // WEATHER_SCREEN_H

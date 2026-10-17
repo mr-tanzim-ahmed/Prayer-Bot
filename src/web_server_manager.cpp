@@ -9,6 +9,8 @@
 #include "screens/dhikr_screen.h"
 #include "pomodoro_stats.h"
 #include "wifi_manager.h"
+#include "voice_manager.h"
+#include "azan_manager.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
@@ -16,6 +18,7 @@
 #include <sys/time.h>
 #include <math.h>
 #include <new>
+#include <stdlib.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -109,15 +112,6 @@ namespace {
                    !validInteger(doc["zawalOff"], 0, 60) ||
                    !validInteger(doc["sunsetOff"], 0, 60)) {
             error = "One or more settings are outside their allowed range.";
-        } else if (!validString(doc["owmKey"], sizeof(settingsRef->owmApiKey) - 1, true)) {
-            error = "OpenWeather API key must be at most 47 characters.";
-        } else if (!doc["clearOwmKey"].isUnbound() &&
-                   !doc["clearOwmKey"].is<bool>()) {
-            error = "Clear API key must be true or false.";
-        } else if (doc["clearOwmKey"].as<bool>() &&
-                   doc["owmKey"].is<const char*>() &&
-                   doc["owmKey"].as<const char*>()[0] != '\0') {
-            error = "Choose either a new API key or clear the saved key.";
         } else if (doc["azanOn"].isUnbound() == false &&
                    !doc["azanOn"].is<bool>()) {
             error = "Azan enabled must be true or false.";
@@ -172,7 +166,7 @@ namespace {
             "city", "timezone", "lat", "lon", "utcOff", "calcMethod",
             "asrSchool", "hijriOffset", "azanOn", "volume", "focusMin",
             "shortBrk", "longBrk", "pomCycles", "sunriseOff", "zawalOff",
-            "sunsetOff", "owmKey", "clearOwmKey"
+            "sunsetOff"
         };
         if (!hasOnlyKeys(doc.as<JsonObjectConst>(), settingKeys,
                          sizeof(settingKeys) / sizeof(settingKeys[0]))) {
@@ -202,12 +196,6 @@ namespace {
             candidate.azanEnabled = doc["azanOn"].as<bool>();
         if (doc["volume"].is<int>())
             candidate.volume = doc["volume"].as<uint8_t>();
-        if (doc["owmKey"].is<const char*>()) {
-            const char* apiKey = doc["owmKey"].as<const char*>();
-            if (apiKey[0] != '\0')
-                strlcpy(candidate.owmApiKey, apiKey, sizeof(candidate.owmApiKey));
-        }
-        if (doc["clearOwmKey"] | false) candidate.owmApiKey[0] = '\0';
         if (doc["city"].is<const char*>())
             strlcpy(candidate.cityName, doc["city"].as<const char*>(), sizeof(candidate.cityName));
         if (doc["timezone"].is<const char*>())
@@ -243,9 +231,6 @@ namespace {
         const bool timezoneChanged =
             candidate.utcOffset != previousSettings.utcOffset ||
             strcmp(candidate.timezone, previousSettings.timezone) != 0;
-        const bool weatherConfigChanged =
-            strcmp(candidate.owmApiKey, previousSettings.owmApiKey) != 0;
-
         g_webVolumeRequest = candidate.volume;
         PomodoroManager::updateSettings(g_pomodoro, candidate);
         CalendarManager::setHijriOffset(candidate.hijriOffset);
@@ -254,7 +239,6 @@ namespace {
             g_locationRefreshRequested = true;
             g_weatherRefreshRequested = true;
         }
-        if (weatherConfigChanged) g_weatherRefreshRequested = true;
 
         request->send(200, "application/json", "{\"status\":\"ok\"}");
         Serial.println("[WEB] Settings saved.");
@@ -356,6 +340,7 @@ void init(Settings& settings) {
         doc["zawalOff"] = snapshot.zawalOffset;
         doc["sunsetOff"] = snapshot.sunsetOffset;
         doc["owmKeyConfigured"] = snapshot.owmApiKey[0] != '\0';
+        doc["geminiKeyConfigured"] = snapshot.geminiApiKey[0] != '\0';
         doc["setupApSsid"] = WifiManager::getSetupAPSSID();
         String json;
         serializeJson(doc, json);
@@ -416,8 +401,8 @@ void init(Settings& settings) {
     server->on("/api/status", HTTP_GET, [](AsyncWebServerRequest* request) {
         JsonDocument doc;
         JsonObject network = doc["network"].to<JsonObject>();
-        const bool stationConnected = WiFi.status() == WL_CONNECTED;
-        const bool connecting = WifiManager::isConnecting();
+        const bool stationConnected = WifiManager::isConnected();
+        const bool connecting = WifiManager::connectionInProgress();
         network["connected"] = stationConnected;
         network["mode"] = (WiFi.getMode() & WIFI_AP)
             ? (stationConnected ? "access-point+station" : "access-point")
@@ -425,12 +410,12 @@ void init(Settings& settings) {
         network["setupRequired"] =
             (WiFi.getMode() & WIFI_AP) && !stationConnected;
         network["connecting"] = connecting;
+        network["restarting"] = WifiManager::shouldRestartAfterConnection();
+        network["connectionFailed"] = WifiManager::didConnectionAttemptFail();
         network["authFailed"] =
             !stationConnected && !connecting && WiFi.status() == WL_CONNECT_FAILED;
-        network["ip"] = (WiFi.getMode() & WIFI_AP)
-            ? WiFi.softAPIP().toString()
-            : WiFi.localIP().toString();
-        network["homeIp"] = WiFi.status() == WL_CONNECTED
+        network["ip"] = WifiManager::getIP();
+        network["homeIp"] = stationConnected
             ? WiFi.localIP().toString()
             : "";
 
@@ -468,6 +453,12 @@ void init(Settings& settings) {
         next["name"] = g_prayerReady ? PrayerManager::getPrayerNameStr(g_nextPrayer.name) : "";
         next["time"] = formatTime(g_nextPrayer.startTime);
         next["countdown"] = formatDuration(g_nextPrayer.countdownSeconds);
+        JsonObject quran = doc["quran"].to<JsonObject>();
+        const uint8_t curSurah = VoiceManager::getPlayingSurah();
+        quran["surah"] = VoiceManager::getSurahName(curSurah);
+        quran["surahNumber"] = curSurah;
+        quran["status"] = VoiceManager::getStatusText();
+        quran["playing"] = AzanManager::isQuranPlaying();
         doc["azanPlaying"] = g_azanState == AZAN_PLAYING;
 
         JsonObject hijri = doc["hijri"].to<JsonObject>();
@@ -535,7 +526,7 @@ void init(Settings& settings) {
                 return;
             }
             static const char* const controlKeys[] = {
-                "screen", "pomodoro", "dhikr", "stopAzan"
+                "screen", "pomodoro", "dhikr", "stopAzan", "quranAction", "quranSurah"
             };
             if (!hasOnlyKeys(doc.as<JsonObjectConst>(), controlKeys,
                              sizeof(controlKeys) / sizeof(controlKeys[0]))) {
@@ -547,10 +538,14 @@ void init(Settings& settings) {
             JsonVariant pomodoroValue = doc["pomodoro"];
             JsonVariant dhikrValue = doc["dhikr"];
             JsonVariant stopAzanValue = doc["stopAzan"];
+            JsonVariant quranActionValue = doc["quranAction"];
+            JsonVariant quranSurahValue = doc["quranSurah"];
             if ((!screenValue.isUnbound() && !screenValue.is<int>()) ||
                 (!pomodoroValue.isUnbound() && !pomodoroValue.is<const char*>()) ||
                 (!dhikrValue.isUnbound() && !dhikrValue.is<const char*>()) ||
-                (!stopAzanValue.isUnbound() && !stopAzanValue.is<bool>())) {
+                (!stopAzanValue.isUnbound() && !stopAzanValue.is<bool>()) ||
+                (!quranActionValue.isUnbound() && !quranActionValue.is<const char*>()) ||
+                (!quranSurahValue.isUnbound() && !quranSurahValue.is<int>())) {
                 request->send(400, "application/json", "{\"error\":\"Control fields have invalid types.\"}");
                 return;
             }
@@ -585,8 +580,9 @@ void init(Settings& settings) {
             }
 
             const bool stopAzan = !stopAzanValue.isUnbound() && stopAzanValue.as<bool>();
+            const bool hasQuranAction = !quranActionValue.isUnbound();
             const bool hasCommand = screen >= 0 || pomodoroCommand != 0 ||
-                                    countDhikr || stopAzan;
+                                    countDhikr || stopAzan || hasQuranAction;
             if (!hasCommand) {
                 request->send(400, "application/json", "{\"error\":\"No supported device command was provided.\"}");
                 return;
@@ -596,53 +592,183 @@ void init(Settings& settings) {
             if (pomodoroCommand != 0) g_webPomodoroRequest = pomodoroCommand;
             if (countDhikr) g_webDhikrRequest = 1;
             if (stopAzan) g_azanStopRequested = true;
+            if (hasQuranAction) {
+                const char* qAct = quranActionValue.as<const char*>();
+                if (strcmp(qAct, "play") == 0) {
+                    int sNum = quranSurahValue.is<int>() ? quranSurahValue.as<int>() : VoiceManager::getPlayingSurah();
+                    VoiceManager::playSurah(sNum);
+                    g_webScreenRequest = SYS_SCREEN_QURAN;
+                } else if (strcmp(qAct, "stop") == 0) {
+                    VoiceManager::stopPlayback();
+                } else if (strcmp(qAct, "next") == 0) {
+                    VoiceManager::nextSurah();
+                } else if (strcmp(qAct, "prev") == 0) {
+                    VoiceManager::prevSurah();
+                }
+            }
             request->send(200, "application/json", "{\"status\":\"queued\"}");
         });
 
-    server->on("/api/setup-ap", HTTP_POST,
+    server->on("/api/quran/recognize", HTTP_POST,
         [](AsyncWebServerRequest*) {},
         nullptr,
         [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
             String* body = appendRequestBody(request, data, len, index, total);
             if (!body) return;
-
             JsonDocument doc;
-            if (deserializeJson(doc, *body)) {
+            if (deserializeJson(doc, *body) || !doc.is<JsonObject>() ||
+                doc.size() != 1 || !doc["transcript"].is<const char*>()) {
+                delete body;
+                request->send(400, "application/json", "{\"error\":\"Send one transcript string to recognize.\"}");
+                return;
+            }
+            const String transcript = doc["transcript"].as<String>();
+            delete body;
+            if (transcript.isEmpty() || transcript.length() > 120) {
+                request->send(400, "application/json", "{\"error\":\"Transcript must contain 1 to 120 characters.\"}");
+                return;
+            }
+            if (WiFi.status() != WL_CONNECTED) {
+                request->send(503, "application/json", "{\"error\":\"Not connected to router Wi-Fi. Connect Wi-Fi for Gemini voice recognition.\"}");
+                return;
+            }
+            uint32_t requestId = 0;
+            if (!VoiceManager::queueDashboardRecognition(transcript.c_str(),
+                                                         requestId)) {
+                request->send(503, "application/json", "{\"error\":\"Voice recognition is busy, unavailable, or could not be queued. Try again shortly.\"}");
+                return;
+            }
+            JsonDocument response;
+            response["requestId"] = requestId;
+            String json;
+            serializeJson(response, json);
+            request->send(202, "application/json", json);
+        });
+
+    server->on("/api/quran/recognize", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (!request->hasParam("id")) {
+            request->send(400, "application/json", "{\"error\":\"A recognition request ID is required.\"}");
+            return;
+        }
+        const String idText = request->getParam("id")->value();
+        char* end = nullptr;
+        const unsigned long parsedId = strtoul(idText.c_str(), &end, 10);
+        if (idText.isEmpty() || !end || *end != '\0' || parsedId == 0 ||
+            parsedId > UINT32_MAX) {
+            request->send(400, "application/json", "{\"error\":\"Recognition request ID is invalid.\"}");
+            return;
+        }
+        uint8_t surahNumber = 0;
+        const char* status = VoiceManager::getDashboardRecognition(
+            static_cast<uint32_t>(parsedId), surahNumber);
+        JsonDocument response;
+        response["status"] = status;
+        if (strcmp(status, "done") == 0) {
+            response["surahNumber"] = surahNumber;
+            response["surah"] = VoiceManager::getSurahName(surahNumber);
+        } else if (strcmp(status, "error") == 0) {
+            response["error"] =
+                strcmp(VoiceManager::getStatusText(), "Gemini key not configured") == 0
+                    ? "Gemini API key is not configured on Prayer-Bot."
+                    : "Gemini could not identify a Surah. Speak its name clearly and try again.";
+        }
+        String json;
+        serializeJson(response, json);
+        request->send(200, "application/json", json);
+    });
+
+    server->on("/api/quran", HTTP_GET, [](AsyncWebServerRequest* request) {
+        JsonDocument doc;
+        const uint8_t cur = VoiceManager::getPlayingSurah();
+        doc["surah"] = cur;
+        doc["name"] = VoiceManager::getSurahName(cur);
+        doc["playing"] = AzanManager::isQuranPlaying();
+        doc["status"] = VoiceManager::getStatusText();
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
+    server->on("/api/quran", HTTP_POST,
+        [](AsyncWebServerRequest*) {},
+        nullptr,
+        [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            String* body = appendRequestBody(request, data, len, index, total);
+            if (!body) return;
+            JsonDocument doc;
+            if (deserializeJson(doc, *body) || !doc.is<JsonObject>()) {
                 delete body;
                 request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
                 return;
             }
             delete body;
-            if (!doc.is<JsonObject>()) {
-                request->send(400, "application/json", "{\"error\":\"Hotspot settings must be a JSON object.\"}");
+            static const char* const quranKeys[] = {"action", "surah"};
+            if (!hasOnlyKeys(doc.as<JsonObjectConst>(), quranKeys,
+                             sizeof(quranKeys) / sizeof(quranKeys[0]))) {
+                request->send(400, "application/json", "{\"error\":\"Quran request contains an unknown field.\"}");
                 return;
             }
-            static const char* const setupAPKeys[] = {"ssid", "pass"};
-            if (!hasOnlyKeys(doc.as<JsonObjectConst>(), setupAPKeys,
-                             sizeof(setupAPKeys) / sizeof(setupAPKeys[0]))) {
-                request->send(400, "application/json", "{\"error\":\"Hotspot settings contain an unknown field.\"}");
+            if (!doc["action"].is<const char*>()) {
+                request->send(400, "application/json", "{\"error\":\"A Quran action is required.\"}");
                 return;
             }
-            if (!validString(doc["ssid"], 32) || !validString(doc["pass"], 63, true)) {
-                request->send(400, "application/json", "{\"error\":\"Enter a hotspot name (up to 32 characters) and a password of 8 to 63 characters, or leave the password blank to keep it.\"}");
+            const char* action = doc["action"].as<const char*>();
+            int surah = doc["surah"] | 0;
+            const bool needsSurah = strcmp(action, "play") == 0 ||
+                                    strcmp(action, "select") == 0;
+            if ((needsSurah && (doc.size() != 2 || !doc["surah"].is<int>())) ||
+                (!needsSurah && doc.size() != 1)) {
+                request->send(400, "application/json", "{\"error\":\"Only play and select actions accept a Surah number.\"}");
                 return;
             }
-            String ssid = doc["ssid"].as<String>();
-            String password = doc["pass"].as<String>();
-            if (!password.isEmpty() && password.length() < 8) {
-                request->send(400, "application/json", "{\"error\":\"A hotspot password must contain at least 8 characters.\"}");
+            const bool needsInternet = strcmp(action, "play") == 0 ||
+                                       strcmp(action, "next") == 0 ||
+                                       strcmp(action, "prev") == 0;
+            if (needsInternet && WiFi.status() != WL_CONNECTED) {
+                request->send(503, "application/json", "{\"error\":\"Not connected to router Wi-Fi. Connect Wi-Fi to play Quran audio.\"}");
                 return;
             }
-            if (!WifiManager::saveSetupAPSettings(ssid, password)) {
-                request->send(500, "application/json", "{\"error\":\"Could not save hotspot settings to device storage.\"}");
-                return;
+            if (strcmp(action, "play") == 0) {
+                if (!doc["surah"].is<int>() || surah < 1 || surah > TOTAL_SURAHS) {
+                    request->send(400, "application/json", "{\"error\":\"Choose a Surah number from 1 to 114.\"}");
+                    return;
+                }
+                g_webScreenRequest = SYS_SCREEN_QURAN;
+                if (!VoiceManager::playSurah(surah)) {
+                    request->send(503, "application/json", "{\"error\":\"Could not queue Quran playback. Check Wi-Fi and audio output.\"}");
+                    return;
+                }
+                request->send(200, "application/json", "{\"status\":\"queued\"}");
+            } else if (strcmp(action, "stop") == 0) {
+                VoiceManager::stopPlayback();
+                request->send(200, "application/json", "{\"status\":\"stopped\"}");
+            } else if (strcmp(action, "next") == 0) {
+                g_webScreenRequest = SYS_SCREEN_QURAN;
+                VoiceManager::nextSurah();
+                request->send(200, "application/json", "{\"status\":\"queued\"}");
+            } else if (strcmp(action, "prev") == 0) {
+                g_webScreenRequest = SYS_SCREEN_QURAN;
+                VoiceManager::prevSurah();
+                request->send(200, "application/json", "{\"status\":\"queued\"}");
+            } else if (strcmp(action, "select") == 0) {
+                if (!doc["surah"].is<int>() || surah < 1 || surah > TOTAL_SURAHS) {
+                    request->send(400, "application/json", "{\"error\":\"Choose a Surah number from 1 to 114.\"}");
+                    return;
+                }
+                VoiceManager::selectSurah(surah);
+                g_webScreenRequest = SYS_SCREEN_QURAN;
+                request->send(200, "application/json", "{\"status\":\"selected\"}");
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Unknown action\"}");
             }
-            request->send(200, "application/json", "{\"status\":\"saved\",\"message\":\"Hotspot settings saved. The hotspot will restart shortly; reconnect using the new name and password.\"}");
         });
 
     server->on("/api/wifi/scan", HTTP_POST,
         [](AsyncWebServerRequest* request) {
-            WiFi.mode(WIFI_AP_STA);
+            if (WifiManager::connectionInProgress()) {
+                request->send(409, "application/json", "{\"error\":\"Wait for the current Wi-Fi connection attempt to finish before scanning.\"}");
+                return;
+            }
             WiFi.setSleep(false);
             if (WiFi.scanComplete() == WIFI_SCAN_RUNNING) {
                 request->send(200, "application/json", "{\"status\":\"scanning\"}");
@@ -711,22 +837,27 @@ void init(Settings& settings) {
                 return;
             }
 
-            if (!validString(doc["ssid"], 32) || !validString(doc["pass"], 63, true)) {
-                request->send(400, "application/json", "{\"error\":\"Enter an SSID (up to 32 characters) and password (up to 63 characters).\"}");
+            if (!doc["ssid"].is<const char*>() ||
+                !doc["pass"].is<const char*>() ||
+                !validString(doc["ssid"], 32) ||
+                !validString(doc["pass"], 63, true) ||
+                (doc["pass"].as<const char*>()[0] != '\0' &&
+                 strlen(doc["pass"].as<const char*>()) < 8)) {
+                request->send(400, "application/json", "{\"error\":\"Enter an SSID (up to 32 characters) and an empty or 8-63 character password.\"}");
                 return;
             }
             String ssid = doc["ssid"].as<String>();
             String password = doc["pass"].as<String>();
-            if (!WifiManager::saveCredentials(ssid, password)) {
-                request->send(500, "application/json", "{\"error\":\"Could not save Wi-Fi credentials.\"}");
+            if (WifiManager::connectionInProgress()) {
+                request->send(409, "application/json", "{\"error\":\"A Wi-Fi connection attempt is already in progress.\"}");
                 return;
             }
-
             if (!WifiManager::connectToNetwork(ssid, password)) {
-                request->send(400, "application/json", "{\"error\":\"Could not start the Wi-Fi connection.\"}");
+                request->send(503, "application/json", "{\"error\":\"Could not start the Wi-Fi connection. Try again shortly.\"}");
                 return;
             }
-            request->send(200, "application/json", "{\"status\":\"connecting\",\"message\":\"Connecting to Wi-Fi...\"}");
+            WifiManager::restartAfterConnection();
+            request->send(200, "application/json", "{\"status\":\"connecting\",\"message\":\"Testing the router connection and DHCP address. Credentials will be saved only after the router lease is valid, then the device will restart.\"}");
         });
 
     server->onNotFound([](AsyncWebServerRequest* request) {

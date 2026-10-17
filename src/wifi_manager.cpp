@@ -17,36 +17,20 @@ namespace {
     unsigned long connectionStartedMs = 0;
     String storedSSID;
     String storedPassword;
-    String setupAPSSID = AP_SSID;
-    String setupAPPassword = AP_PASSWORD;
-    String pendingSetupAPSSID;
-    String pendingSetupAPPassword;
-    bool setupAPSettingsLoaded = false;
-    bool setupAPSettingsPending = false;
+    String pendingSSID;
+    String pendingPassword;
+    bool pendingCredentialSave = false;
+    bool restartWhenConnected = false;
+    bool connectionAttemptFailed = false;
 
-    void loadSetupAPSettings() {
-        if (setupAPSettingsLoaded) return;
-        setupAPSettingsLoaded = true;
-        if (!StorageManager::exists("/setup_ap.json")) return;
+    bool stationHasRouterLease() {
+        if (WiFi.status() != WL_CONNECTED) return false;
 
-        JsonDocument doc;
-        String content = StorageManager::readFile("/setup_ap.json");
-        if (deserializeJson(doc, content) ||
-            !doc["ssid"].is<String>() || !doc["pass"].is<String>()) {
-            Serial.println("[WiFi] Invalid saved setup access point settings; using defaults.");
-            return;
-        }
-
-        String ssid = doc["ssid"].as<String>();
-        String password = doc["pass"].as<String>();
-        if (ssid.isEmpty() || ssid.length() > 32 ||
-            password.length() < 8 || password.length() > 63) {
-            Serial.println("[WiFi] Saved setup access point settings are out of range; using defaults.");
-            return;
-        }
-
-        setupAPSSID = ssid;
-        setupAPPassword = password;
+        const IPAddress localAddress = WiFi.localIP();
+        const IPAddress gatewayAddress = WiFi.gatewayIP();
+        const IPAddress zeroAddress(0, 0, 0, 0);
+        return localAddress != zeroAddress &&
+               gatewayAddress != zeroAddress;
     }
 }
 
@@ -63,7 +47,8 @@ bool init(const Settings& settings) {
             doc["ssid"].is<const char*>() && doc["pass"].is<const char*>()) {
             ssid = doc["ssid"].as<String>();
             pass = doc["pass"].as<String>();
-            if (ssid.isEmpty() || ssid.length() > 32 || pass.length() > 63) {
+            if (ssid.isEmpty() || ssid.length() > 32 ||
+                (!pass.isEmpty() && pass.length() < 8) || pass.length() > 63) {
                 Serial.println("[WiFi] Saved credentials are outside supported limits.");
                 ssid = "";
                 pass = "";
@@ -94,67 +79,45 @@ bool init(const Settings& settings) {
 
     startAP();
     WiFi.setSleep(false);
+    connectionAttemptFailed = false;
+    connectionStartedMs = millis();
+    connectionPending = true;
     if (WiFi.begin(ssid.c_str(), pass.c_str()) == WL_CONNECT_FAILED) {
         Serial.println("[WiFi] Could not start the saved network connection.");
+        connectionPending = false;
+        connectionAttemptFailed = true;
         return false;
     }
 
     Serial.print("[WiFi] Connecting to ");
     Serial.println(ssid);
-    connectionStartedMs = millis();
-    connectionPending = true;
-    return WiFi.status() == WL_CONNECTED;
+    return stationHasRouterLease();
 }
 
 void startAP() {
-    loadSetupAPSettings();
     WiFi.mode(WIFI_AP_STA);
     WiFi.setSleep(false);
-    apMode = WiFi.softAP(setupAPSSID.c_str(), setupAPPassword.c_str());
+    WiFi.setAutoReconnect(true);
+    apMode = WiFi.softAP(AP_SSID, AP_PASSWORD);
     if (!apMode) {
         Serial.println("[WiFi] Failed to start setup access point.");
         return;
     }
 
     Serial.print("[WiFi] AP started: ");
-    Serial.println(setupAPSSID);
+    Serial.println(AP_SSID);
     Serial.print("[WiFi] AP IP: ");
     Serial.println(WiFi.softAPIP());
 }
 
 String getSetupAPSSID() {
-    loadSetupAPSettings();
-    return setupAPSettingsPending ? pendingSetupAPSSID : setupAPSSID;
-}
-
-bool saveSetupAPSettings(const String& ssid, const String& password) {
-    loadSetupAPSettings();
-    if (ssid.isEmpty() || ssid.length() > 32 ||
-        (!password.isEmpty() && (password.length() < 8 || password.length() > 63))) {
-        return false;
-    }
-
-    const String selectedPassword = password.isEmpty()
-        ? (setupAPSettingsPending ? pendingSetupAPPassword : setupAPPassword)
-        : password;
-    JsonDocument doc;
-    doc["ssid"] = ssid;
-    doc["pass"] = selectedPassword;
-    String content;
-    if (serializeJson(doc, content) == 0 || content.isEmpty()) {
-        Serial.println("[WiFi] Could not serialize setup AP settings.");
-        return false;
-    }
-    if (!StorageManager::writeFile("/setup_ap.json", content)) return false;
-
-    pendingSetupAPSSID = ssid;
-    pendingSetupAPPassword = selectedPassword;
-    setupAPSettingsPending = true;
-    return true;
+    return String(AP_SSID);
 }
 
 bool saveCredentials(const String& ssid, const String& password) {
-    if (ssid.isEmpty() || ssid.length() > 32 || password.length() > 63) {
+    if (ssid.isEmpty() || ssid.length() > 32 ||
+        (!password.isEmpty() && password.length() < 8) ||
+        password.length() > 63) {
         return false;
     }
     JsonDocument doc;
@@ -166,6 +129,21 @@ bool saveCredentials(const String& ssid, const String& password) {
         return false;
     }
     if (!StorageManager::writeFile(WIFI_CREDENTIALS_PATH, content)) return false;
+
+    JsonDocument verification;
+    const String savedContent = StorageManager::readFile(WIFI_CREDENTIALS_PATH);
+    if (savedContent.isEmpty() ||
+        deserializeJson(verification, savedContent)) {
+        Serial.println("[WiFi] Saved credentials failed read-back verification.");
+        return false;
+    }
+    const String savedSSID = verification["ssid"] | "";
+    const String savedPassword = verification["pass"] | "";
+    if (savedSSID != ssid || savedPassword != password) {
+        Serial.println("[WiFi] Saved credentials failed read-back verification.");
+        return false;
+    }
+
     if (!StorageManager::removeFile(LEGACY_WIFI_SSID_PATH) ||
         !StorageManager::removeFile(LEGACY_WIFI_PASSWORD_PATH)) {
         Serial.println("[WiFi] New credentials were saved, but legacy credential files could not be removed.");
@@ -173,61 +151,43 @@ bool saveCredentials(const String& ssid, const String& password) {
     return true;
 }
 
-void applyPendingSetupAPSettings() {
-    if (!setupAPSettingsPending) return;
-
-    String previousSSID = setupAPSSID;
-    String previousPassword = setupAPPassword;
-    setupAPSSID = pendingSetupAPSSID;
-    setupAPPassword = pendingSetupAPPassword;
-    setupAPSettingsPending = false;
-
-    WiFi.softAPdisconnect(false);
-    delay(100);
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.setSleep(false);
-    apMode = WiFi.softAP(setupAPSSID.c_str(), setupAPPassword.c_str());
-    if (!apMode) {
-        Serial.println("[WiFi] Failed to apply new setup access point settings; restoring previous settings.");
-        setupAPSSID = previousSSID;
-        setupAPPassword = previousPassword;
-        apMode = WiFi.softAP(setupAPSSID.c_str(), setupAPPassword.c_str());
-        JsonDocument doc;
-        doc["ssid"] = previousSSID;
-        doc["pass"] = previousPassword;
-        String content;
-        serializeJson(doc, content);
-        if (!StorageManager::writeFile("/setup_ap.json", content)) {
-            Serial.println("[WiFi] Failed to restore previous setup AP settings in storage.");
-        }
-    }
-    if (apMode) {
-        Serial.print("[WiFi] Setup AP active: ");
-        Serial.println(setupAPSSID);
-        Serial.print("[WiFi] AP IP: ");
-        Serial.println(WiFi.softAPIP());
-    }
-}
-
 bool connectToNetwork(const String& ssid, const String& password) {
-    if (ssid.isEmpty() || ssid.length() > 32 || password.length() > 63) return false;
-    storedSSID = ssid;
-    storedPassword = password;
+    if (ssid.isEmpty() || ssid.length() > 32 ||
+        (!password.isEmpty() && password.length() < 8) ||
+        password.length() > 63 || connectionPending) {
+        return false;
+    }
 
     WiFi.mode(apMode ? WIFI_AP_STA : WIFI_STA);
     WiFi.setSleep(false);
-    if (WiFi.begin(storedSSID.c_str(), storedPassword.c_str()) == WL_CONNECT_FAILED) {
+    connectionAttemptFailed = false;
+    restartWhenConnected = false;
+    WiFi.disconnect(false, false);
+    if (WiFi.begin(ssid.c_str(), password.c_str()) == WL_CONNECT_FAILED) {
         Serial.println("[WiFi] Could not start the configured network connection.");
+        connectionAttemptFailed = true;
         return false;
     }
+    pendingSSID = ssid;
+    pendingPassword = password;
+    pendingCredentialSave = true;
     connectionStartedMs = millis();
     connectionPending = true;
-    Serial.printf("[WiFi] Connecting to configured network: %s\n", storedSSID.c_str());
+    Serial.printf("[WiFi] Connecting to configured network: %s\n", ssid.c_str());
     return true;
 }
 
+void restartAfterConnection() {
+    restartWhenConnected = true;
+}
+
+bool shouldRestartAfterConnection() {
+    return restartWhenConnected && stationHasRouterLease() &&
+           !connectionPending && !pendingCredentialSave;
+}
+
 bool reconnect() {
-    if (WiFi.status() == WL_CONNECTED) return true;
+    if (stationHasRouterLease()) return true;
     if (storedSSID.isEmpty()) return false;
 
     if (connectionPending && millis() - connectionStartedMs < WIFI_CONNECT_TIMEOUT) {
@@ -236,13 +196,15 @@ bool reconnect() {
     connectionPending = false;
     Serial.println("[WiFi] Reconnecting...");
     WiFi.disconnect();
-    if (WiFi.begin(storedSSID.c_str(), storedPassword.c_str()) == WL_CONNECT_FAILED) {
-        Serial.println("[WiFi] Reconnect attempt could not start.");
-        return false;
-    }
     connectionStartedMs = millis();
     connectionPending = true;
-    return WiFi.status() == WL_CONNECTED;
+    if (WiFi.begin(storedSSID.c_str(), storedPassword.c_str()) == WL_CONNECT_FAILED) {
+        Serial.println("[WiFi] Reconnect attempt could not start.");
+        connectionPending = false;
+        connectionAttemptFailed = true;
+        return false;
+    }
+    return stationHasRouterLease();
 }
 
 bool syncNTP(const Settings& settings) {
@@ -271,27 +233,66 @@ bool syncNTP(const Settings& settings) {
 }
 
 bool isConnected() {
-    return WiFi.status() == WL_CONNECTED;
+    return stationHasRouterLease();
+}
+
+bool connectionInProgress() {
+    return connectionPending;
 }
 
 bool isConnecting() {
     if (!connectionPending) return false;
-    if (WiFi.status() == WL_CONNECTED) {
+    if (stationHasRouterLease()) {
+        if (pendingCredentialSave) {
+            if (!saveCredentials(pendingSSID, pendingPassword)) {
+                Serial.println("[WiFi] Connected, but could not save the new credentials; keeping previous credentials.");
+                connectionAttemptFailed = true;
+                pendingCredentialSave = false;
+                pendingSSID = "";
+                pendingPassword = "";
+                restartWhenConnected = false;
+                WiFi.disconnect(false, false);
+                if (!storedSSID.isEmpty()) {
+                    WiFi.begin(storedSSID.c_str(), storedPassword.c_str());
+                    connectionStartedMs = millis();
+                    connectionPending = true;
+                } else {
+                    connectionPending = false;
+                }
+                return connectionPending;
+            }
+            storedSSID = pendingSSID;
+            storedPassword = pendingPassword;
+            pendingSSID = "";
+            pendingPassword = "";
+            pendingCredentialSave = false;
+            Serial.println("[WiFi] Connected credentials saved and verified.");
+        }
         connectionPending = false;
         Serial.printf("[WiFi] Connected. IP: %s\n", WiFi.localIP().toString().c_str());
         return false;
     }
     if (millis() - connectionStartedMs >= WIFI_CONNECT_TIMEOUT) {
         connectionPending = false;
+        pendingCredentialSave = false;
+        pendingSSID = "";
+        pendingPassword = "";
+        restartWhenConnected = false;
+        connectionAttemptFailed = true;
         Serial.println("[WiFi] Connection attempt timed out.");
         return false;
     }
     return true;
 }
 
+bool didConnectionAttemptFail() {
+    return connectionAttemptFailed;
+}
+
 String getIP() {
+    if (stationHasRouterLease()) return WiFi.localIP().toString();
     if (apMode) return WiFi.softAPIP().toString();
-    return WiFi.localIP().toString();
+    return String();
 }
 
 bool isAPMode() {

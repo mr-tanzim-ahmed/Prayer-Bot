@@ -47,7 +47,7 @@
 // ------------------------------------------------------------
 #define SCREEN_WIDTH          128
 #define SCREEN_HEIGHT         64
-#define TOTAL_SCREENS         6        // Prayer Focus, All Prayers, Clock/Calendar, Weather, Pomodoro, Dhikr
+#define TOTAL_SCREENS         7        // Prayer Focus, All Prayers, Clock/Calendar, Weather, Pomodoro, Dhikr, Quran
 
 // Screen indices
 #define SCREEN_PRAYER_FOCUS   0
@@ -56,11 +56,13 @@
 #define SCREEN_WEATHER        3
 #define SCREEN_POMODORO       4
 #define SCREEN_DHIKR          5
+#define SCREEN_QURAN          6
 
 // ------------------------------------------------------------
 //  Timing Intervals
 // ------------------------------------------------------------
 #define WEATHER_UPDATE_INTERVAL   (30UL * 60UL * 1000UL)   // 30 minutes
+#define PRAYER_FETCH_INTERVAL     (30UL * 60UL * 1000UL)   // 30 minutes
 #define PRAYER_UPDATE_INTERVAL    (60UL * 1000UL)           // 1 minute - recheck next prayer
 #define PRAYER_CACHE_FETCH_DAYS   30                        // Cache a month of prayer data
 #define NTP_SYNC_INTERVAL         (6UL * 3600UL * 1000UL)  // 6 hours
@@ -80,14 +82,14 @@
 #define I2S_MIC_PORT          I2S_NUM_0
 #define I2S_AMP_PORT          I2S_NUM_1
 #define MIC_SAMPLE_RATE       16000
-#define MIC_RECORD_SECONDS    5
+#define MIC_RECORD_SECONDS    3
 #define AMP_SAMPLE_RATE       44100
 #define DEFAULT_VOLUME        80       // 0-100
 
 // ------------------------------------------------------------
 //  WiFi & Network
 // ------------------------------------------------------------
-#define WIFI_CONNECT_TIMEOUT  20000UL  // 20 seconds
+#define WIFI_CONNECT_TIMEOUT  35000UL  // Allow time for association and DHCP
 #define AP_SSID               "Prayer-Bot"
 #define AP_PASSWORD           "12345678"
 #define WEB_SERVER_PORT       80
@@ -100,6 +102,9 @@
 #define OPEN_METEO_WEATHER    "https://api.open-meteo.com/v1/forecast"
 #define OPEN_METEO_AIR        "https://air-quality-api.open-meteo.com/v1/air-quality"
 #define QURAN_AUDIO_BASE      "https://cdn.islamic.network/quran/audio/128/ar.alafasy"
+#define QURAN_CDN_BASE        "http://server8.mp3quran.net/afs/"
+
+// Gemini API Key for Voice Surah Recognition (Google AI Studio)
 
 // OpenWeatherMap current weather endpoint
 #define OPENWEATHER_API_BASE  "https://api.openweathermap.org/data/2.5"

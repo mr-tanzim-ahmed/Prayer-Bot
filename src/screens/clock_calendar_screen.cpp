@@ -22,8 +22,11 @@ void draw(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers&
     // Current time (large)
     oled.setFont(u8g2_font_logisoso24_tf);
     if (timeValid) {
-        char timeBuf[6];
-        snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", t.tm_hour, t.tm_min);
+        const int hour12 = (t.tm_hour % 12 == 0) ? 12 : t.tm_hour % 12;
+        const char* meridiem = t.tm_hour < 12 ? "AM" : "PM";
+        char timeBuf[12];
+        snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d %s",
+                 hour12, t.tm_min, meridiem);
         DisplayManager::drawCenteredText(String(timeBuf), 28);
     } else {
         DisplayManager::drawCenteredText("--:--", 28);
@@ -80,7 +83,7 @@ void draw(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers&
 
     // Page indicator
     oled.setFont(u8g2_font_5x8_tf);
-    oled.drawStr(108, 63, "3/5");
+    oled.drawStr(108, 63, "3/7");
 
     DisplayManager::sendBuffer();
 }

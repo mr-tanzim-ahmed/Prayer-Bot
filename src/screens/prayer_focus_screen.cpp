@@ -24,12 +24,31 @@ namespace {
         snprintf(buf, sizeof(buf), "%02d:%02d:%02d", h, m, s);
         return String(buf);
     }
+
+    void drawSyncIndicator(U8G2& oled, bool syncing) {
+        const int cx = SCREEN_WIDTH - 7;
+        const int cy = 6;
+        const uint8_t frame = syncing
+            ? static_cast<uint8_t>((millis() / 140UL) % 4UL)
+            : 0;
+        static const int8_t directions[4][2] = {
+            {0, -1}, {1, 0}, {0, 1}, {-1, 0}
+        };
+        for (uint8_t i = 0; i < 4; ++i) {
+            const uint8_t direction = (i + frame) % 4;
+            const int8_t dx = directions[direction][0];
+            const int8_t dy = directions[direction][1];
+            const int length = syncing && i == 0 ? 4 : 2;
+            oled.drawLine(cx, cy, cx + dx * length, cy + dy * length);
+        }
+        if (!syncing) oled.drawCircle(cx, cy, 4);
+    }
 }
 
 namespace PrayerFocusScreen {
 
 void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
-          bool azanPlaying, PrayerName activePrayer) {
+          bool azanPlaying, PrayerName activePrayer, bool syncing) {
     U8G2& oled = DisplayManager::getDisplay();
 
     DisplayManager::clearBuffer();
@@ -37,6 +56,7 @@ void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
     if (azanPlaying) {
         oled.setFont(u8g2_font_6x10_tf);
         oled.drawStr(2, 9, "PRAYER TIME");
+        drawSyncIndicator(oled, syncing);
         oled.drawHLine(0, 12, SCREEN_WIDTH);
 
         oled.setFont(u8g2_font_7x14B_tf);
@@ -54,6 +74,7 @@ void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
     // Header
     oled.setFont(u8g2_font_6x10_tf);
     oled.drawStr(2, 9, "NEXT PRAYER");
+    drawSyncIndicator(oled, syncing);
     oled.drawHLine(0, 12, SCREEN_WIDTH);
 
     // Prayer name and time
@@ -89,15 +110,15 @@ void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
     }
 
     // Page indicator
-    oled.drawStr(108, 63, "1/5");
+    oled.drawStr(108, 63, "1/7");
 
     DisplayManager::sendBuffer();
 }
 
 void update(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
-            bool azanPlaying, PrayerName activePrayer) {
+            bool azanPlaying, PrayerName activePrayer, bool syncing) {
     // Redraw every second for countdown updates
-    draw(next, prohibited, azanPlaying, activePrayer);
+    draw(next, prohibited, azanPlaying, activePrayer, syncing);
 }
 
 } // namespace PrayerFocusScreen

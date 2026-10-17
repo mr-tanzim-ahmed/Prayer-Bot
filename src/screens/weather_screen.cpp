@@ -11,39 +11,70 @@
 
 namespace WeatherScreen {
 
-void draw(const WeatherData& weather) {
+namespace {
+    void drawSyncIndicator(U8G2& oled, bool syncing) {
+        const int cx = SCREEN_WIDTH - 7;
+        const int cy = 7;
+        const uint8_t frame = syncing
+            ? static_cast<uint8_t>((millis() / 140UL) % 4UL)
+            : 0;
+        static const int8_t directions[4][2] = {
+            {0, -1}, {1, 0}, {0, 1}, {-1, 0}
+        };
+
+        for (uint8_t i = 0; i < 4; ++i) {
+            const uint8_t direction = (i + frame) % 4;
+            const int8_t dx = directions[direction][0];
+            const int8_t dy = directions[direction][1];
+            const int length = syncing && i == 0 ? 4 : 2;
+            oled.drawLine(cx, cy, cx + dx * length, cy + dy * length);
+        }
+        if (!syncing) oled.drawCircle(cx, cy, 4);
+    }
+}
+
+void draw(const WeatherData& weather, bool syncing) {
     U8G2& oled = DisplayManager::getDisplay();
 
     DisplayManager::clearBuffer();
 
     if (!weather.valid) {
-        DisplayManager::showErrorScreen("Weather", "No data yet...");
+        oled.setFont(u8g2_font_6x10_tf);
+        oled.drawStr(2, 9, "WEATHER");
+        drawSyncIndicator(oled, syncing);
+        oled.drawHLine(0, 12, SCREEN_WIDTH);
+        oled.setFont(u8g2_font_6x10_tf);
+        DisplayManager::drawCenteredText(
+            syncing ? "Syncing weather..." : "No weather data", 32);
+        oled.setFont(u8g2_font_5x8_tf);
+        DisplayManager::drawCenteredText(
+            syncing ? "Please wait" : "Check Wi-Fi and location", 47);
+        oled.drawStr(108, 63, "4/7");
+        DisplayManager::sendBuffer();
         return;
     }
 
-    // Header with city name
     oled.setFont(u8g2_font_6x10_tf);
     String header = weather.cityName + " WEATHER";
-    if (header.length() > 21) header = header.substring(0, 21);
+    while (oled.getStrWidth(header.c_str()) > 103 && header.length() > 8) {
+        header.remove(header.length() - 8, 8);
+    }
     oled.drawStr(2, 9, header.c_str());
+    drawSyncIndicator(oled, syncing);
     oled.drawHLine(0, 12, SCREEN_WIDTH);
 
-    // Weather icon on left
     WeatherIconType iconType = WeatherManager::getIconType(weather.weatherId);
     WeatherIcons::draw(oled, 8, 25, iconType);
 
-    // Temperature
     oled.setFont(u8g2_font_logisoso24_tf);
     String tempText = String(weather.temperatureC, 1) + "C";
     oled.drawStr(49, 42, tempText.c_str());
 
-    // Weather status
     oled.setFont(u8g2_font_6x10_tf);
     String status = weather.weatherMain;
     if (status.length() > 13) status = status.substring(0, 13);
     oled.drawStr(49, 53, status.c_str());
 
-    // Bottom row: Humidity + AQI
     oled.setFont(u8g2_font_5x8_tf);
     String humStr = "H:" + String(weather.humidity) + "%";
     oled.drawStr(2, 63, humStr.c_str());
@@ -53,10 +84,13 @@ void draw(const WeatherData& weather) {
     if (aqiStr.length() > 16) aqiStr = aqiStr.substring(0, 16);
     oled.drawStr(50, 63, aqiStr.c_str());
 
-    // Page indicator
-    oled.drawStr(108, 63, "4/5");
+    oled.drawStr(108, 63, "4/7");
 
     DisplayManager::sendBuffer();
+}
+
+void update(const WeatherData& weather, bool syncing) {
+    draw(weather, syncing);
 }
 
 } // namespace WeatherScreen

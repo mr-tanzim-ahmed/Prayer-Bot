@@ -169,6 +169,8 @@ struct Settings {
 
     // OpenWeatherMap API key (user-provided)
     char    owmApiKey[48];
+    // Gemini API key used only for requested Surah-name recognition
+    char    geminiApiKey[64];
 };
 
 // ------------------------------------------------------------
@@ -182,6 +184,7 @@ enum SystemScreen : uint8_t {
     SYS_SCREEN_WEATHER,
     SYS_SCREEN_POMODORO,
     SYS_SCREEN_DHIKR,
+    SYS_SCREEN_QURAN,
     SYS_SCREEN_COUNT
 };
 

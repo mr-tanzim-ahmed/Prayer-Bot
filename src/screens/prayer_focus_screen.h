@@ -11,9 +11,9 @@
 
 namespace PrayerFocusScreen {
     void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
-              bool azanPlaying, PrayerName activePrayer);
+              bool azanPlaying, PrayerName activePrayer, bool syncing);
     void update(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
-                bool azanPlaying, PrayerName activePrayer);
+                bool azanPlaying, PrayerName activePrayer, bool syncing);
 }
 
 #endif // PRAYER_FOCUS_SCREEN_H

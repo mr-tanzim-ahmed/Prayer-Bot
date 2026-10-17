@@ -16,6 +16,16 @@ namespace AzanManager {
     // Start the repeating beep alarm for the given prayer
     bool play(PrayerName prayer);
 
+    // Play a Surah from the mp3quran.net Maher Al-Muaiqly stream.
+    bool playQuranSurah(uint8_t surahNumber);
+
+    // Stop Quran playback without affecting the prayer alarm state.
+    void stopQuran();
+    bool isQuranPlaying();
+    bool isQuranPending();
+    void processQuranQueue();
+    bool takeQuranStartFailure();
+
     // Stop playback
     void stop();
 

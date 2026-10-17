@@ -60,6 +60,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     .wifi h2{margin-bottom:6px}
     .wifi-status{min-height:28px;margin:12px 0;color:var(--accent);font-weight:650}
     .wifi-status.error{color:var(--bad)}
+    .online-notice{margin:0 0 16px;padding:12px 16px;border:1px solid #e8c5c1;border-radius:12px;background:#fff2f0;color:var(--bad);font-weight:650}
+    .online-notice[hidden]{display:none}
     .module-menu{position:relative;z-index:4}
     .module-menu>summary{list-style:none;cursor:pointer;border:1px solid var(--line);border-radius:10px;background:#fff;padding:10px 14px;font-weight:650}
     .module-menu>summary::-webkit-details-marker{display:none}
@@ -86,8 +88,22 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.82rem;color:var(--muted);margin-top:12px}
     .legend span:before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px;background:#70b58b}
     .legend .sessions:before{border-radius:50%;background:var(--warn)}
-    @media(max-width:760px){main{padding:22px 16px 44px}.grid>.card:not(.wide){grid-column:span 12}.prayers{grid-template-columns:repeat(3,minmax(0,1fr))}.guide-steps{grid-template-columns:1fr}}
-    @media(max-width:480px){main{padding:16px 12px 36px}.card{padding:16px;border-radius:14px}header{flex-wrap:wrap}header .actions{width:100%}header .actions button{flex-basis:0}.module-menu nav{left:0;right:auto;width:min(420px,calc(100vw - 48px))}.fields{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.chart-wrap{height:220px}.actions button{flex-basis:100%}}
+    .voice-panel{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:14px;padding:16px;background:linear-gradient(135deg,#f4f8f4,#edf6f0);border:1px solid var(--line);border-radius:16px}
+    .voice-orb{display:grid;place-items:center;width:64px;height:64px;border:1px solid #cde2d2;border-radius:50%;background:var(--accent-soft);color:var(--accent);transition:transform .2s,background .2s}
+    .voice-orb svg{width:29px;height:29px}
+    .voice-orb.listening{background:#d9f2e1;animation:voice-pulse 1s ease-in-out infinite}
+    .voice-bars{display:flex;align-items:center;justify-content:center;gap:4px;height:36px}
+    .voice-bars i{width:4px;height:8px;border-radius:4px;background:var(--accent);opacity:.45}
+    .listening .voice-bars i{animation:voice-wave .75s ease-in-out infinite alternate;opacity:1}
+    .voice-bars i:nth-child(2n){animation-delay:.15s}.voice-bars i:nth-child(3n){animation-delay:.3s}
+    @keyframes voice-pulse{50%{box-shadow:0 0 0 9px #24765320;transform:scale(1.04)}}
+    @keyframes voice-wave{to{height:30px}}
+    .voice-status{min-height:26px;font-weight:650}
+    .voice-hint{font-size:.78rem;margin-top:5px}
+    @media(prefers-reduced-motion:reduce){.voice-orb.listening,.listening .voice-bars i{animation:none}}
+    @media(max-width:960px){main{max-width:100%;padding:20px 16px 48px}.grid>.card:not(.wide){grid-column:span 12}.prayers{grid-template-columns:repeat(3,minmax(0,1fr))}.guide-steps{grid-template-columns:1fr}}
+    @media(max-width:560px){main{padding:14px 10px 40px}.card{padding:16px 14px;border-radius:14px}header{flex-wrap:wrap;gap:12px}header .actions{width:100%}header .actions button{flex:1 1 auto;min-height:44px}.module-menu nav{left:0;right:auto;width:min(400px,calc(100vw - 28px))}.fields{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.actions{gap:8px}.actions button{flex:1 1 100%;min-height:44px;font-size:.95rem}input,select{min-height:46px;font-size:16px}.chart-wrap{height:200px}}
+    @media(max-width:380px){.prayers{grid-template-columns:repeat(2,minmax(0,1fr))}.stats{grid-template-columns:1fr}}
     @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important}}
   </style>
 </head>
@@ -104,6 +120,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
           <a href="#prayer-times">Prayer times</a>
           <a href="#prohibited-times">Prohibited times</a>
           <a href="#device-controls">Clock &amp; Hijri calendar</a>
+          <a href="#quran-player" style="color:var(--accent);font-weight:700">Al-Quran player</a>
           <a href="#pomodoro-stats">Pomodoro &amp; history</a>
           <a href="#weather">Weather &amp; air quality</a>
           <a href="#dhikr-controls">Dhikr counter</a>
@@ -116,29 +133,23 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     </div>
   </header>
 
+  <p id="onlineOfflineNotice" class="online-notice" role="status" aria-live="polite" hidden></p>
+
   <section id="wifiSetup" class="card wifi" hidden>
     <h2>Connect Prayer-Bot to Wi-Fi</h2>
-    <p>Connect to your home Wi-Fi to enable prayer times, weather, and online clock sync. The setup network stays available while connecting.</p>
-    <p class="hint">Setup address: <strong>http://192.168.4.1</strong> · Setup hotspot: <strong id="setupApNameLabel">Prayer-Bot</strong></p>
+    <p>Choose your router below, enter its password, and connect. The device confirms a router connection and DHCP address before saving the credentials and restarting.</p>
+    <p class="hint">Use a 2.4 GHz Wi-Fi network. Setup address: <strong>http://192.168.4.1</strong> · Setup hotspot: <strong id="setupApNameLabel">Prayer-Bot</strong></p>
     <div class="fields" style="margin-top:16px">
-      <div class="field"><label for="wifiNetworks">Nearby Wi-Fi networks</label><select id="wifiNetworks"><option value="">Scan to find networks</option></select></div>
+      <div class="field"><label for="wifiNetworks">Nearby Wi-Fi networks</label><select id="wifiNetworks" onchange="if(this.value)byId('wifiSsid').value=this.value"><option value="">Scan to find networks</option></select></div>
       <div class="field"><label>&nbsp;</label><button id="scanWifi" type="button" onclick="scanWifiNetworks()">Scan for networks</button></div>
       <div class="field"><label for="wifiSsid">Wi-Fi network name (SSID)</label><input id="wifiSsid" maxlength="32" autocomplete="username" required></div>
-      <div class="field"><label for="wifiPass">Wi-Fi password</label><input id="wifiPass" type="password" maxlength="63" autocomplete="new-password"></div>
+      <div class="field"><label for="wifiPass">Wi-Fi password</label><input id="wifiPass" type="password" maxlength="63" autocomplete="current-password"><small class="hint">Network scans cannot retrieve a router password. Enter it here; an empty password is allowed for an open network.</small></div>
     </div>
     <div class="actions">
       <button id="connectWifi" class="primary" type="button" onclick="saveWifi()">Connect to Wi-Fi</button>
       <button id="continueWifi" type="button" onclick="continueToDashboard()" hidden>Next: open dashboard</button>
     </div>
     <p id="wifiMessage" class="wifi-status" role="status" aria-live="polite"></p>
-    <h3>Setup hotspot credentials</h3>
-    <p class="hint">Change the device's own Wi-Fi name and password. Leave the password blank to keep it unchanged; the saved password is never displayed.</p>
-    <div class="fields" style="margin-top:12px">
-      <div class="field"><label for="setupApSsid">Setup hotspot name (SSID)</label><input id="setupApSsid" maxlength="32" autocomplete="off" required></div>
-      <div class="field"><label for="setupApPassword">New setup hotspot password</label><input id="setupApPassword" type="password" minlength="8" maxlength="63" autocomplete="new-password" placeholder="Leave blank to keep current"></div>
-    </div>
-    <button type="button" onclick="saveSetupAP()">Save hotspot credentials</button>
-    <p id="setupApMessage" class="wifi-status" role="status" aria-live="polite"></p>
   </section>
 
   <section class="grid" id="dashboardContent" hidden>
@@ -208,11 +219,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
           <option value="0">Prayer focus</option><option value="1">All prayer times</option>
           <option value="2">Clock &amp; calendar</option><option value="3">Weather</option>
           <option value="4">Pomodoro</option><option value="5">Zikir counter</option>
+          <option value="6">Surah recitation</option>
         </select>
       </div>
       <div class="actions">
         <button type="button" onclick="sendControl({screen:Number(byId('screenSelect').value)})">Open screen</button>
       </div>
+      <p id="quranStatus" class="hint">Surah player status: Loading…</p>
       <h3 style="margin-top:18px">Pomodoro</h3>
       <p id="pomodoroStatus">Loading…</p>
       <p class="hint">On the device, hold the touch sensor for 3 seconds while this screen is open to start an idle focus timer.</p>
@@ -223,9 +236,47 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <h3 id="dhikr-controls" style="margin-top:18px">Dhikr / Zikir</h3>
       <p id="dhikrStatus">Count: 0</p>
       <button type="button" onclick="sendControl({dhikr:'count'})">Add zikir count</button>
-      <p class="hint">Touch either device pad or tap here to count. The Arabic phrase changes every 5 seconds.</p>
+      <p class="hint">Touch the device pad or tap here to count. The English phrase and its meaning change every 5 seconds.</p>
       <h3 style="margin-top:18px">Prayer alarm</h3>
       <button type="button" onclick="sendControl({stopAzan:true})">Stop active alarm</button>
+    </article>
+
+    <article class="card" id="quran-player">
+      <h2>Al-Quran Audio Player</h2>
+      <p class="hint">Speak a Surah name in English or Bangla, or select one below. Choose whether recitation plays on Prayer-Bot or this phone; the OLED shows the selected Surah. Router Wi-Fi and internet access are required.</p>
+      <div class="voice-panel" style="margin-top:14px">
+        <div id="voiceOrb" class="voice-orb" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"></path></svg></div>
+        <div>
+          <div class="voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <p id="browserVoiceStatus" class="voice-status" role="status" aria-live="polite">Ready to recognize a Surah name.</p>
+          <p class="voice-hint">Browser speech recognition creates a transcript; Gemini on the connected Prayer-Bot identifies the Surah.</p>
+          <label for="voiceLanguage">Voice language</label>
+          <select id="voiceLanguage" data-requires-wifi><option value="en-US">English</option><option value="bn-BD">Bangla (বাংলা)</option></select>
+          <button id="browserVoiceButton" type="button" data-requires-wifi onclick="listenForSurah()">Start voice input</button>
+          <button id="browserVoiceCancel" type="button" onclick="cancelBrowserVoice()" hidden>Cancel listening</button>
+        </div>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label for="quranOutput">Audio output</label>
+        <select id="quranOutput" data-requires-wifi><option value="device">Prayer-Bot speaker</option><option value="phone">This phone / browser</option></select>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label for="quranSurahSelect">Select Surah (1 to 114)</label>
+        <select id="quranSurahSelect" data-requires-wifi>
+          <option value="1">1. Al-Fatiha</option>
+        </select>
+      </div>
+      <div class="actions" style="margin-top:10px">
+        <button type="button" class="primary" data-requires-wifi onclick="playQuran()">&#9654; Play Surah</button>
+        <button type="button" onclick="stopQuran()">&#9632; Stop</button>
+        <button type="button" data-requires-wifi onclick="prevQuran()">&#9198; Prev</button>
+        <button type="button" data-requires-wifi onclick="nextQuran()">&#9197; Next</button>
+      </div>
+      <audio id="phoneQuranAudio" controls preload="none" data-requires-wifi style="display:none;width:100%;margin-top:14px"></audio>
+      <div class="stats" style="margin-top:14px">
+        <div class="stat"><span>Now Playing</span><strong id="quranNowPlaying">None</strong></div>
+        <div class="stat"><span>Stream Status</span><strong id="quranStreamStatus">Idle</strong></div>
+      </div>
     </article>
 
     <article class="card" id="weather">
@@ -300,10 +351,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         <div class="field"><label for="sunsetOff">Before Maghrib (0–60 minutes)</label><input id="sunsetOff" type="number" min="0" max="60" required></div>
       </div>
 
-      <h3>Weather API</h3>
-      <div class="field"><label for="owmKey">OpenWeather API key</label><input id="owmKey" type="password" maxlength="47" autocomplete="new-password" placeholder="Not configured"></div>
-      <p class="hint">Key status: <span id="owmKeyStatus">Loading…</span>. Leave blank to keep the saved key; a new value replaces it.</p>
-      <div class="toggle"><input id="clearOwmKey" type="checkbox"><label for="clearOwmKey">Clear the saved OpenWeather API key</label></div>
+      <h3>Online services</h3>
+      <p class="hint">Weather key: <span id="owmKeyStatus">Loading…</span>. Voice recognition key: <span id="geminiKeyStatus">Loading…</span>. Service keys are not exposed or editable from this dashboard.</p>
       </div>
     </details>
   </section>
@@ -316,6 +365,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   let initialStatus=true;
   let dashboardReady=false;
   let wifiSubmitted=false;
+  let routerWifiConnected=false;
   document.querySelectorAll('.module-menu nav a').forEach(link=>{
     link.addEventListener('click',()=>{
       byId('modulesMenu').open=false;
@@ -371,6 +421,33 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     if(!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
     return data;
   }
+  function setOnlineAvailability(connected) {
+    routerWifiConnected=Boolean(connected);
+    const notice=byId('onlineOfflineNotice');
+    notice.hidden=routerWifiConnected;
+    notice.textContent=routerWifiConnected
+      ? ''
+      : 'Router Wi-Fi is not connected. Internet features (prayer/weather refresh and Quran voice/audio) are unavailable. Connect Wi-Fi to enable them; offline Pomodoro and Dhikr controls remain available.';
+    if(!routerWifiConnected) {
+      setBrowserVoiceState(false,'Not connected to router Wi-Fi. Connect Wi-Fi before using voice input.',true);
+    }
+    document.querySelectorAll('[data-requires-wifi]').forEach(control=>{
+      control.disabled=!routerWifiConnected;
+    });
+    const audio=byId('phoneQuranAudio');
+    audio.controls=routerWifiConnected;
+    if(!routerWifiConnected && !audio.paused) {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      put('quranStreamStatus','Stopped: router Wi-Fi is not connected.');
+    }
+  }
+  async function ensureRouterConnection() {
+    const status=await api('/api/status');
+    setOnlineAvailability(status.network?.connected);
+    if(!routerWifiConnected) throw new Error('Not connected to router Wi-Fi. Connect Wi-Fi and try again.');
+  }
   async function syncDeviceClock() {
     const epoch=Math.floor(Date.now()/1000);
     await api('/api/time',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({epoch})});
@@ -386,24 +463,34 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     byId('longBrk').value=s.longBrk; byId('pomCycles').value=s.pomCycles;
     byId('sunriseOff').value=s.sunriseOff; byId('zawalOff').value=s.zawalOff;
     byId('sunsetOff').value=s.sunsetOff;
-    byId('setupApSsid').value=s.setupApSsid || 'Prayer-Bot';
-    put('setupApNameLabel',s.setupApSsid || 'Prayer-Bot');
     const preset=Object.keys(locations).find(key=>Math.abs(locations[key].lat-s.lat)<0.01 && Math.abs(locations[key].lon-s.lon)<0.01);
     byId('locationPreset').value=preset || 'custom';
     put('owmKeyStatus',s.owmKeyConfigured?'Configured':'Not configured');
-    byId('owmKey').placeholder=s.owmKeyConfigured?'Saved — enter a new key to replace':'Not configured';
-    byId('clearOwmKey').checked=false;
+    put('geminiKeyStatus',s.geminiKeyConfigured?'Configured':'Not configured');
   }
   async function loadStatus() {
     const s=await api('/api/status');
-    put('network',s.network.connected?'Connected to home Wi-Fi':'Setup access point');
+    setOnlineAvailability(s.network?.connected);
+    put('network',s.network.connected?'Connected to home Wi-Fi':'Not connected to router Wi-Fi');
     put('ip',s.network.ip);
     byId('ipLink').href=`http://${s.network.ip}/`;
     put('homeIp',s.network.homeIp || 'Not connected');
     if(!dashboardReady && wifiSubmitted) {
-      if(s.network.connected && !s.network.connecting) {
+      if(s.network.connectionFailed) {
         wifiSubmitted=false;
-        byId('wifiMessage').textContent='Wi-Fi connected successfully. Select Next to open your dashboard.';
+        byId('wifiMessage').textContent='Could not connect with those credentials. Check the selected network and password, then try again.';
+        byId('wifiMessage').classList.add('error');
+        byId('continueWifi').hidden=true;
+        byId('connectWifi').disabled=false;
+      } else if(s.network.restarting) {
+        wifiSubmitted=false;
+        byId('wifiMessage').textContent=`Router connection verified. Credentials saved; Prayer-Bot is restarting. Router IP: ${s.network.homeIp || 'check your router'}.`;
+        byId('wifiMessage').classList.remove('error');
+        byId('continueWifi').hidden=true;
+        byId('connectWifi').disabled=true;
+      } else if(s.network.connected && !s.network.connecting) {
+        wifiSubmitted=false;
+        byId('wifiMessage').textContent='Router connected. Select Next to open the dashboard.';
         byId('wifiMessage').classList.remove('error');
         byId('continueWifi').hidden=false;
         byId('connectWifi').disabled=false;
@@ -448,6 +535,23 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       : 'Prohibited windows appear after time sync and prayer schedule load.');
     put('pomodoroStatus',`${s.pomodoro.phase} · ${s.pomodoro.remaining} · cycle ${s.pomodoro.cycle}/${s.pomodoro.cycles}`);
     put('dhikrStatus',`Count: ${s.dhikrCount}`);
+    if(s.quran) {
+      const qNum=s.quran.surahNumber||'';
+      const qName=s.quran.surah||'None';
+      put('quranStatus',`Surah ${qName} · ${s.quran.status||'Idle'}`);
+      put('quranNowPlaying',qNum?`${qNum}. ${qName}`:qName);
+        const phoneAudio=byId('phoneQuranAudio');
+        const phonePlaying=byId('quranOutput').value==='phone' &&
+          phoneAudio && !phoneAudio.paused && Boolean(phoneAudio.currentSrc);
+        put('quranStreamStatus',phonePlaying?'Playing on this phone':
+          (s.quran.playing?'Playing on Prayer-Bot':(s.quran.status||'Idle')));
+      const qStatEl=byId('quranStreamStatus');
+      if(qStatEl) qStatEl.style.color=s.quran.playing?'var(--accent)':'var(--muted)';
+      const qSel=byId('quranSurahSelect');
+      if(qSel && s.quran.surahNumber && document.activeElement!==qSel) {
+        qSel.value=s.quran.surahNumber;
+      }
+    }
     put('weatherCity',s.weather.city || '—');
     put('temperature',s.weather.valid?`${s.weather.temperatureC} °C`:'Unavailable');
     put('humidity',s.weather.valid?`${s.weather.humidity}%`:'—');
@@ -530,19 +634,11 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       shortBrk:Number(byId('shortBrk').value), longBrk:Number(byId('longBrk').value),
       pomCycles:Number(byId('pomCycles').value),
       sunriseOff:Number(byId('sunriseOff').value),zawalOff:Number(byId('zawalOff').value),
-      sunsetOff:Number(byId('sunsetOff').value),
-      clearOwmKey:byId('clearOwmKey').checked
+      sunsetOff:Number(byId('sunsetOff').value)
     };
     const inputs=[...document.querySelectorAll('#city,#timezone,#lat,#lon,#utcOffset,#hijriOffset,#focusMin,#shortBrk,#longBrk,#pomCycles,#sunriseOff,#zawalOff,#sunsetOff')];
     const invalid=inputs.find(input=>!input.checkValidity());
     if(invalid){invalid.reportValidity();message(`Check the ${invalid.labels[0]?.textContent||invalid.id} field.`,true);return;}
-    const key=byId('owmKey').value.trim();
-    if(key && body.clearOwmKey) {
-      message('Enter a new API key or choose to clear the saved key, not both.',true);
-      byId('owmKey').focus();
-      return;
-    }
-    if(key) body.owmKey=key;
     const button=byId('saveButton');
     const controls=[...byId('settings').querySelectorAll('input,select')];
     const previousDisabled=controls.map(control=>control.disabled);
@@ -553,7 +649,6 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     try {
       await api('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       saveCompleted=true;
-      byId('owmKey').value='';
       await loadSettings();
       await loadStatus();
       message('Settings saved and verified on the device.');
@@ -571,19 +666,281 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     try { await api('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); message('Command sent to device.'); }
     catch(e) { message(e.message,true); }
   }
+  const surahs=[
+    "Al-Fatiha","Al-Baqarah","Aal-E-Imran","An-Nisa","Al-Maidah",
+    "Al-An'am","Al-A'raf","Al-Anfal","At-Tawbah","Yunus",
+    "Hud","Yusuf","Ar-Ra'd","Ibrahim","Al-Hijr",
+    "An-Nahl","Al-Isra","Al-Kahf","Maryam","Taha",
+    "Al-Anbiya","Al-Hajj","Al-Mu'minun","An-Nur","Al-Furqan",
+    "Ash-Shu'ara","An-Naml","Al-Qasas","Al-Ankabut","Ar-Rum",
+    "Luqman","As-Sajdah","Al-Ahzab","Saba","Fatir",
+    "Ya-Sin","As-Saffat","Sad","Az-Zumar","Ghafir",
+    "Fussilat","Ash-Shura","Az-Zukhruf","Ad-Dukhan","Al-Jathiyah",
+    "Al-Ahqaf","Muhammad","Al-Fath","Al-Hujurat","Qaf",
+    "Adh-Dhariyat","At-Tur","An-Najm","Al-Qamar","Ar-Rahman",
+    "Al-Waqi'ah","Al-Hadid","Al-Mujadila","Al-Hashr","Al-Mumtahanah",
+    "As-Saf","Al-Jumu'ah","Al-Munafiqun","At-Taghabun","At-Talaq",
+    "At-Tahrim","Al-Mulk","Al-Qalam","Al-Haqqah","Al-Ma'arij",
+    "Nuh","Al-Jinn","Al-Muzzammil","Al-Muddaththir","Al-Qiyamah",
+    "Al-Insan","Al-Mursalat","An-Naba","An-Nazi'at","Abasa",
+    "At-Takwir","Al-Infitar","Al-Mutaffifin","Al-Inshiqaq","Al-Buruj",
+    "At-Tariq","Al-A'la","Al-Ghashiyah","Al-Fajr","Al-Balad",
+    "Ash-Shams","Al-Lail","Ad-Duha","Ash-Sharh","At-Tin",
+    "Al-Alaq","Al-Qadr","Al-Bayyinah","Az-Zalzalah","Al-Adiyat",
+    "Al-Qari'ah","At-Takathur","Al-Asr","Al-Humazah","Al-Fil",
+    "Quraysh","Al-Ma'un","Al-Kawthar","Al-Kafirun","An-Nasr",
+    "Al-Masad","Al-Ikhlas","Al-Falaq","An-Nas"
+  ];
+  function initQuranDropdown() {
+    const sel=byId('quranSurahSelect');
+    if(!sel) return;
+    sel.replaceChildren();
+    surahs.forEach((name,i)=>{
+      sel.add(new Option(`${i+1}. ${name}`,i+1));
+    });
+    sel.value=1;
+  }
+  let browserRecognition=null;
+  let voiceAttemptGeneration=0;
+  function setBrowserVoiceState(listening,text,error=false) {
+    byId('voiceOrb').classList.toggle('listening',listening);
+    byId('browserVoiceButton').disabled=listening||!routerWifiConnected;
+    byId('browserVoiceCancel').hidden=!listening;
+    byId('browserVoiceStatus').textContent=text;
+    byId('browserVoiceStatus').style.color=error?'var(--bad)':'var(--text)';
+  }
+  function normalizeSurahSpeech(value) {
+    return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
+  }
+  function findSpokenSurah(transcript) {
+    const spoken=normalizeSurahSpeech(transcript);
+    const padded=` ${spoken} `;
+    for(let i=0;i<surahs.length;i++) {
+      const name=normalizeSurahSpeech(surahs[i]);
+      if(padded.includes(` ${name} `)) return i+1;
+    }
+    const aliases={
+      'yasin':36,'ya sin':36,'yasīn':36,'ইয়াসিন':36,'ইয়াসীন':36,'ইয়াসিন':36,'ইয়াসীন':36,
+      'rahman':55,'ar rahman':55,'আর রহমান':55,'আর রাহমান':55,'রহমান':55,
+      'kahf':18,'কাহফ':18,'কাহাফ':18,
+      'fatiha':1,'ফাতিহা':1,'আল ফাতিহা':1,
+      'baqarah':2,'বাকারা':2,'বাকারাহ':2,'আল বাকারা':2,
+      'mulk':67,'মুলক':67,'আল মুলক':67,
+      'waqiah':56,'waqia':56,'ওয়াকিয়া':56,'ওয়াকিয়া':56,'ওয়াকিয়াহ':56,
+      'ikhlas':112,'ইখলাস':112,'আল ইখলাস':112,
+      'falaq':113,'ফালাক':113,'আল ফালাক':113,
+      'nas':114,'নাস':114,'আন নাস':114,
+      'yusuf':12,'ইউসুফ':12,'maryam':19,'মারইয়াম':19,'মারইয়াম':19,
+      'taha':20,'ত্বহা':20,'ta ha':20,'naba':78,'নাবা':78,
+      'muzammil':73,'মুজ্জাম্মিল':73,'muddaththir':74,'মুদ্দাসসির':74
+    };
+    for(const [name,number] of Object.entries(aliases)) {
+      if(padded.includes(` ${normalizeSurahSpeech(name)} `)) return number;
+    }
+    return 0;
+  }
+  async function chooseSurah(number) {
+    await ensureRouterConnection();
+    if(!Number.isInteger(number)||number<1||number>surahs.length) throw new Error('Could not identify a Surah. Try again or select one manually.');
+    byId('quranSurahSelect').value=number;
+    const name=surahs[number-1];
+    await api('/api/quran',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'select',surah:number})});
+    put('quranNowPlaying',`${number}. ${name}`);
+    if(byId('quranOutput').value==='phone') {
+      await api('/api/quran',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stop'})});
+      const audio=byId('phoneQuranAudio');
+      audio.dataset.fallbackUsed='false';
+      audio.onerror=()=>{
+        if(audio.dataset.fallbackUsed==='false') {
+          audio.dataset.fallbackUsed='true';
+          audio.src=`https://cdn.islamic.network/quran/audio/128/ar.alafasy/${number}.mp3`;
+          put('quranStreamStatus','Primary audio source failed; trying alternate…');
+          audio.play().then(()=>{
+            put('quranStreamStatus','Playing on this phone (alternate source)');
+          }).catch(()=>{
+            put('quranStreamStatus','Tap play on the audio controls to start.');
+          });
+        } else {
+          put('quranStreamStatus','Audio could not load. Check internet and try again.');
+        }
+      };
+      audio.src=`https://cdn.mp3quran.net/audio/maher-muaiqly/r1/${String(number).padStart(3,'0')}.mp3`;
+      audio.style.display='block';
+      put('quranStreamStatus','Loading on this phone…');
+      try {
+        await audio.play();
+        put('quranStreamStatus','Playing on this phone');
+      } catch(e) {
+        put('quranStreamStatus',audio.dataset.fallbackUsed==='true'
+          ? 'Trying alternate audio source…'
+          : 'Tap play on the audio controls to start.');
+      }
+      return;
+    }
+    byId('phoneQuranAudio').pause();
+    const response=await api('/api/quran',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'play',surah:number})});
+    put('quranStreamStatus',response.status==='queued'?'Connecting to Prayer-Bot speaker…':'Starting recitation…');
+    await loadStatus();
+  }
+  async function recognizeTranscriptWithGemini(transcript) {
+    const queued=await api('/api/quran/recognize',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({transcript})
+    });
+    if(!Number.isInteger(queued.requestId)||queued.requestId<1) {
+      throw new Error('The device did not return a valid Gemini recognition request.');
+    }
+    for(let attempt=0;attempt<60;attempt++) {
+      await new Promise(resolve=>setTimeout(resolve,750));
+      const result=await api(`/api/quran/recognize?id=${encodeURIComponent(queued.requestId)}`);
+      if(result.status==='done'&&Number.isInteger(result.surahNumber)) return result.surahNumber;
+      if(result.status==='error') throw new Error(result.error||'Gemini could not identify a Surah.');
+      if(result.status==='unknown') throw new Error('Gemini recognition request expired. Try again.');
+      if(result.status!=='queued'&&result.status!=='processing') {
+        throw new Error('The device returned an invalid Gemini recognition status.');
+      }
+      if(attempt%4===0)
+        setBrowserVoiceState(true,'Gemini is identifying the Surah from your speech…');
+    }
+    throw new Error('Gemini recognition timed out. Check the device internet connection and try again.');
+  }
+  let processingSpokenResult=false;
+  async function listenForSurah() {
+    const attempt=++voiceAttemptGeneration;
+    setBrowserVoiceState(true,'Checking router connection…');
+    try {
+      await ensureRouterConnection();
+    } catch(e) {
+      if(attempt!==voiceAttemptGeneration) return;
+      setBrowserVoiceState(false,e.message,true);
+      return;
+    }
+    const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!Recognition) {
+      if(attempt!==voiceAttemptGeneration) return;
+      setBrowserVoiceState(false,'Voice input is not supported in this browser. Select a Surah manually.',true);
+      return;
+    }
+    if(browserRecognition) browserRecognition.abort();
+    browserRecognition=new Recognition();
+    browserRecognition.lang=byId('voiceLanguage').value;
+    browserRecognition.continuous=false;
+    browserRecognition.interimResults=true;
+    browserRecognition.onstart=()=>{
+      if(attempt===voiceAttemptGeneration)
+        setBrowserVoiceState(true,'Listening — say a Surah name…');
+    };
+    browserRecognition.onresult=async event=>{
+      if(attempt!==voiceAttemptGeneration) return;
+      const result=event.results[event.results.length-1];
+      const transcript=result[0].transcript;
+      setBrowserVoiceState(true,`I heard: “${transcript}”`);
+      if(!result.isFinal) return;
+      processingSpokenResult=true;
+      setBrowserVoiceState(true,'Sending transcript securely to Gemini on Prayer-Bot…');
+      let number=0;
+      let fallbackUsed=false;
+      try {
+        try {
+          number=await recognizeTranscriptWithGemini(transcript);
+        } catch(geminiError) {
+          if(attempt!==voiceAttemptGeneration) return;
+          number=findSpokenSurah(transcript);
+          if(!number) throw geminiError;
+          fallbackUsed=true;
+        }
+        if(attempt!==voiceAttemptGeneration) return;
+        setBrowserVoiceState(false,
+          `${fallbackUsed?'Gemini unavailable; local match':'Gemini recognized'}: Surah ${number}, ${surahs[number-1]}`);
+        await chooseSurah(number);
+      } catch(e) {
+        if(attempt===voiceAttemptGeneration)
+          setBrowserVoiceState(false,e.message,true);
+      } finally {
+        if(attempt===voiceAttemptGeneration) processingSpokenResult=false;
+      }
+    };
+    browserRecognition.onerror=event=>{
+      if(attempt!==voiceAttemptGeneration) return;
+      processingSpokenResult=false;
+      const reason=event.error==='not-allowed'
+        ? 'Allow microphone access and try again.'
+        : `Voice input failed (${event.error}).`;
+      setBrowserVoiceState(false,reason,true);
+    };
+    browserRecognition.onend=()=>{
+      if(attempt===voiceAttemptGeneration&&!processingSpokenResult&&byId('voiceOrb').classList.contains('listening'))
+        setBrowserVoiceState(false,'No final Surah name detected. Try again.',true);
+    };
+    try {
+      browserRecognition.start();
+    } catch(e) {
+      setBrowserVoiceState(false,'Could not start voice recognition. Check microphone permission and try again.',true);
+    }
+  }
+  function cancelBrowserVoice() {
+    ++voiceAttemptGeneration;
+    processingSpokenResult=false;
+    if(browserRecognition) browserRecognition.abort();
+    browserRecognition=null;
+    setBrowserVoiceState(false,'Voice input cancelled.');
+  }
+  async function playQuran() {
+    const sel=byId('quranSurahSelect');
+    const surah=Number(sel?.value)||1;
+    try {
+      await chooseSurah(surah);
+      message(`Selected Surah ${surah}: ${surahs[surah-1]||''}.`);
+    } catch(e) { message(e.message,true); }
+  }
+  async function stopQuran() {
+    try {
+      const audio=byId('phoneQuranAudio');
+      audio.pause();
+      audio.dataset.fallbackUsed='false';
+      await api('/api/quran',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stop'})});
+      message('Quran recitation stopped.');
+      await loadStatus();
+    } catch(e) { message(e.message,true); }
+  }
+  async function nextQuran() {
+    try {
+      const next=(Number(byId('quranSurahSelect').value)%surahs.length)+1;
+      if(byId('quranOutput').value==='phone') await chooseSurah(next);
+      else await api('/api/quran',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'next'})});
+      await loadStatus();
+    } catch(e) { message(e.message,true); }
+  }
+  async function prevQuran() {
+    try {
+      const current=Number(byId('quranSurahSelect').value)||1;
+      const previous=current<=1?surahs.length:current-1;
+      if(byId('quranOutput').value==='phone') await chooseSurah(previous);
+      else await api('/api/quran',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'prev'})});
+      await loadStatus();
+    } catch(e) { message(e.message,true); }
+  }
   async function saveWifi() {
     const ssid=byId('wifiSsid').value;
+    const password=byId('wifiPass').value;
     if(!ssid.trim()) {
       byId('wifiMessage').textContent='Enter a Wi-Fi network name.';
       byId('wifiMessage').classList.add('error');
       return;
     }
+    if(password && (password.length<8 || password.length>63)) {
+      byId('wifiMessage').textContent='A Wi-Fi password must contain 8 to 63 characters, or be blank for an open network.';
+      byId('wifiMessage').classList.add('error');
+      byId('wifiPass').focus();
+      return;
+    }
     byId('connectWifi').disabled=true;
     byId('continueWifi').hidden=true;
     try {
-      await api('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,pass:byId('wifiPass').value})});
+      await api('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,pass:password})});
       wifiSubmitted=true;
-      byId('wifiMessage').textContent='Credentials saved. Connecting…';
+      byId('wifiMessage').textContent='Testing the connection. Credentials will be saved after the router connects…';
       byId('wifiMessage').classList.remove('error');
       await loadStatus();
     } catch(e) {
@@ -609,8 +966,14 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       if(!result || result.status==='scanning') throw new Error('Wi-Fi scan timed out. Try again.');
       if(!Array.isArray(result.networks)) throw new Error('Server returned an invalid Wi-Fi scan result.');
       select.replaceChildren(new Option('Select a network',''));
+      const strongestBySsid=new Map();
       for(const network of result.networks) {
         if(typeof network.ssid!=='string' || !network.ssid) continue;
+        const previous=strongestBySsid.get(network.ssid);
+        if(!previous || Number(network.rssi)>Number(previous.rssi)) strongestBySsid.set(network.ssid,network);
+      }
+      const networks=[...strongestBySsid.values()].sort((a,b)=>Number(b.rssi)-Number(a.rssi));
+      for(const network of networks) {
         const option=new Option(`${network.ssid} · ${network.rssi} dBm${network.secured?' · secured':''}`,network.ssid);
         select.add(option);
       }
@@ -628,35 +991,20 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     }
   }
   byId('wifiNetworks').addEventListener('change',event=>{
-    if(event.target.value) byId('wifiSsid').value=event.target.value;
+    if(event.target.value) {
+      const ssid=byId('wifiSsid');
+      if(ssid.value!==event.target.value) byId('wifiPass').value='';
+      ssid.value=event.target.value;
+      byId('wifiPass').focus();
+      byId('wifiMessage').textContent='Network selected. Enter its Wi-Fi password, then connect.';
+      byId('wifiMessage').classList.remove('error');
+    }
   });
-  async function saveSetupAP() {
-    const ssid=byId('setupApSsid').value.trim();
-    const password=byId('setupApPassword').value;
-    const message=byId('setupApMessage');
-    if(!ssid || ssid.length>32) {
-      message.textContent='Enter a hotspot name containing 1 to 32 characters.';
-      message.classList.add('error');
-      return;
-    }
-    if(password && (password.length<8 || password.length>63)) {
-      message.textContent='A new hotspot password must contain 8 to 63 characters.';
-      message.classList.add('error');
-      return;
-    }
-    try {
-      const result=await api('/api/setup-ap',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,pass:password})});
-      byId('setupApPassword').value='';
-      message.textContent=result.message;
-      message.classList.remove('error');
-    } catch(e) {
-      message.textContent=e.message;
-      message.classList.add('error');
-    }
-  }
+  initQuranDropdown();
   refreshAll();
   loadWeeklyStats();
-  setInterval(()=>{loadStatus().catch(e=>message(e.message,true));loadWeeklyStats();},30000);
+  setInterval(()=>loadStatus().catch(e=>message(e.message,true)),5000);
+  setInterval(()=>loadWeeklyStats(),30000);
   setInterval(()=>{if(wifiSubmitted)loadStatus().catch(e=>{byId('wifiMessage').textContent=e.message;});},1500);
   window.addEventListener('resize',()=>loadWeeklyStats());
 </script>

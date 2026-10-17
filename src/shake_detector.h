@@ -6,7 +6,7 @@
 // ============================================================
 //  SHAKE DETECTOR
 //  Reads MPU6050 accelerometer data and detects shake
-//  gestures to stop the azan.
+//  gestures for context-sensitive device controls.
 // ============================================================
 
 namespace ShakeDetector {

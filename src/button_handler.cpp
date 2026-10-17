@@ -32,7 +32,6 @@ void update() {
 
     bool currentTouchState = digitalRead(PIN_TOUCH_SENSOR) == HIGH;
     if (currentTouchState && !previousTouchState) {
-        touchPressed = true;
         touchStartedMs = millis();
         longPressReported = false;
         Serial.println("[BUTTON] Touch detected.");
@@ -41,6 +40,11 @@ void update() {
         touchLongPressed = true;
         longPressReported = true;
         Serial.println("[BUTTON] Three-second touch detected.");
+    } else if (!currentTouchState && previousTouchState) {
+        if (!longPressReported) {
+            touchPressed = true;
+            Serial.println("[BUTTON] Short touch released.");
+        }
     }
     previousTouchState = currentTouchState;
 }

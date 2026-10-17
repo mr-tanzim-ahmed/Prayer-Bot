@@ -6,6 +6,7 @@
 #include "screens/weather_screen.h"
 #include "screens/pomodoro_screen.h"
 #include "screens/dhikr_screen.h"
+#include "screens/surah_screen.h"
 #include "prayer_manager.h"
 
 // Access global state
@@ -14,12 +15,20 @@ extern NextPrayerInfo  g_nextPrayer;
 extern ProhibitedTimes g_prohibited;
 extern HijriDate       g_hijriDate;
 extern IslamicEvent    g_todayEvent;
+extern volatile bool   g_prayerRefreshing;
+extern volatile bool   g_locationRefreshRequested;
 extern WeatherData     g_weather;
+extern volatile bool   g_weatherRefreshRequested;
+extern volatile bool   g_weatherRefreshing;
 extern PomodoroState   g_pomodoro;
 extern volatile AzanState g_azanState;
 extern VoiceState      g_voiceState;
 extern bool            g_weatherReady;
 extern bool            g_prayerReady;
+
+namespace {
+    unsigned long lastQuranRedrawMs = 0;
+}
 
 // Track time on current screen for animations
 extern unsigned long   g_screenStartMs;
@@ -31,7 +40,9 @@ void draw(SystemScreen screen) {
 
     if (g_azanState == AZAN_PLAYING) {
         PrayerFocusScreen::draw(g_nextPrayer, g_prohibited, true,
-                                PrayerManager::getCurrentPrayerName());
+                                PrayerManager::getCurrentPrayerName(),
+                                g_prayerRefreshing ||
+                                    g_locationRefreshRequested);
         return;
     }
     
@@ -41,7 +52,9 @@ void draw(SystemScreen screen) {
         case SYS_SCREEN_PRAYER_FOCUS:
             PrayerFocusScreen::draw(g_nextPrayer, g_prohibited,
                                     g_azanState == AZAN_PLAYING,
-                                    PrayerManager::getCurrentPrayerName());
+                                    PrayerManager::getCurrentPrayerName(),
+                                    g_prayerRefreshing ||
+                                        g_locationRefreshRequested);
             break;
 
         case SYS_SCREEN_ALL_PRAYERS:
@@ -53,7 +66,8 @@ void draw(SystemScreen screen) {
             break;
 
         case SYS_SCREEN_WEATHER:
-            WeatherScreen::draw(g_weather);
+            WeatherScreen::draw(g_weather,
+                                g_weatherRefreshing || g_weatherRefreshRequested);
             break;
 
         case SYS_SCREEN_POMODORO:
@@ -62,6 +76,10 @@ void draw(SystemScreen screen) {
 
         case SYS_SCREEN_DHIKR:
             DhikrScreen::draw(timeOnScreen);
+            break;
+
+        case SYS_SCREEN_QURAN:
+            SurahScreen::draw();
             break;
 
         default:
@@ -74,7 +92,9 @@ void update(SystemScreen screen) {
 
     if (g_azanState == AZAN_PLAYING) {
         PrayerFocusScreen::update(g_nextPrayer, g_prohibited, true,
-                                  PrayerManager::getCurrentPrayerName());
+                                  PrayerManager::getCurrentPrayerName(),
+                                  g_prayerRefreshing ||
+                                      g_locationRefreshRequested);
         return;
     }
 
@@ -84,7 +104,9 @@ void update(SystemScreen screen) {
         case SYS_SCREEN_PRAYER_FOCUS:
             PrayerFocusScreen::update(g_nextPrayer, g_prohibited,
                                       g_azanState == AZAN_PLAYING,
-                                      PrayerManager::getCurrentPrayerName());
+                                      PrayerManager::getCurrentPrayerName(),
+                                      g_prayerRefreshing ||
+                                          g_locationRefreshRequested);
             break;
 
         case SYS_SCREEN_CLOCK_CALENDAR:
@@ -92,7 +114,8 @@ void update(SystemScreen screen) {
             break;
 
         case SYS_SCREEN_WEATHER:
-            // Weather screen is mostly static, redrawn on data change
+            WeatherScreen::update(
+                g_weather, g_weatherRefreshing || g_weatherRefreshRequested);
             break;
 
         case SYS_SCREEN_POMODORO:
@@ -101,6 +124,13 @@ void update(SystemScreen screen) {
 
         case SYS_SCREEN_DHIKR:
             DhikrScreen::update(timeOnScreen);
+            break;
+
+        case SYS_SCREEN_QURAN:
+            if (millis() - lastQuranRedrawMs >= 100) {
+                lastQuranRedrawMs = millis();
+                SurahScreen::draw();
+            }
             break;
 
         default:
