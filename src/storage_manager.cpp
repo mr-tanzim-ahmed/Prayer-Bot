@@ -85,7 +85,7 @@ void loadDefaults(Settings& settings) {
     settings.zawalOffset      = DEFAULT_ZAWAL_OFFSET;
     settings.sunsetOffset     = DEFAULT_SUNSET_OFFSET;
 
-    settings.owmApiKey[0]     = '\0';
+    strlcpy(settings.owmApiKey, DEFAULT_OWM_API_KEY, sizeof(settings.owmApiKey));
     strlcpy(settings.geminiApiKey, DEFAULT_GEMINI_API_KEY, sizeof(settings.geminiApiKey));
 }
 
@@ -188,6 +188,9 @@ bool loadSettings(Settings& settings) {
         strlcpy(loaded.timezone, doc["tz"], sizeof(loaded.timezone));
     if (doc["owmKey"].is<const char*>())
         strlcpy(loaded.owmApiKey, doc["owmKey"], sizeof(loaded.owmApiKey));
+    if (loaded.owmApiKey[0] == '\0') {
+        strlcpy(loaded.owmApiKey, DEFAULT_OWM_API_KEY, sizeof(loaded.owmApiKey));
+    }
     if (doc["geminiKey"].is<const char*>())
         strlcpy(loaded.geminiApiKey, doc["geminiKey"], sizeof(loaded.geminiApiKey));
     if (loaded.geminiApiKey[0] == '\0') {

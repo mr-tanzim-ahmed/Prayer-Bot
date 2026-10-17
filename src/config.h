@@ -3,27 +3,27 @@
 
 #include <Arduino.h>
 #include <driver/i2s.h>
+#include "secrets.h"
 
 // ============================================================
-//  PRAYER-BOT CONFIGURATION
-//  Central configuration for all hardware pins, timing
-//  constants, API endpoints, and default values.
+// PRAYER-BOT CONFIGURATION
+// Central configuration for hardware, timing, APIs and defaults.
 // ============================================================
 
 // ------------------------------------------------------------
-//  Hardware Pin Assignments
+// Hardware Pin Assignments
 // ------------------------------------------------------------
 
 // OLED Display (I2C)
 #define PIN_OLED_SDA          11
 #define PIN_OLED_SCL          12
 #define OLED_I2C_ADDRESS      0x3C
-#define OLED_USE_SH1106       1        // 1 = SH1106, 0 = SSD1306
+#define OLED_USE_SH1106       1
 
 // Capacitive touch sensor
-#define PIN_TOUCH_SENSOR      4        // Screen cycle
+#define PIN_TOUCH_SENSOR      4
 
-// MPU6050 IMU (I2C, shared bus with OLED)
+// MPU6050 IMU (shared I2C bus with OLED)
 #define MPU6050_I2C_ADDRESS   0x68
 
 // I2S Microphone (INMP441)
@@ -37,19 +37,18 @@
 #define PIN_AMP_DIN           7
 
 // ------------------------------------------------------------
-//  I2C Configuration
+// I2C Configuration
 // ------------------------------------------------------------
 #define I2C_CLOCK_SPEED       400000UL
-#define OLED_CHECK_INTERVAL   2000UL   // ms between OLED health checks
+#define OLED_CHECK_INTERVAL   2000UL
 
 // ------------------------------------------------------------
-//  Display
+// Display
 // ------------------------------------------------------------
 #define SCREEN_WIDTH          128
 #define SCREEN_HEIGHT         64
-#define TOTAL_SCREENS         7        // Prayer Focus, All Prayers, Clock/Calendar, Weather, Pomodoro, Dhikr, Quran
+#define TOTAL_SCREENS         7
 
-// Screen indices
 #define SCREEN_PRAYER_FOCUS   0
 #define SCREEN_ALL_PRAYERS    1
 #define SCREEN_CLOCK_CALENDAR 2
@@ -59,74 +58,75 @@
 #define SCREEN_QURAN          6
 
 // ------------------------------------------------------------
-//  Timing Intervals
+// Timing Intervals
 // ------------------------------------------------------------
-#define WEATHER_UPDATE_INTERVAL   (30UL * 60UL * 1000UL)   // 30 minutes
-#define PRAYER_FETCH_INTERVAL     (30UL * 60UL * 1000UL)   // 30 minutes
-#define PRAYER_UPDATE_INTERVAL    (60UL * 1000UL)           // 1 minute - recheck next prayer
-#define PRAYER_CACHE_FETCH_DAYS   30                        // Cache a month of prayer data
-#define NTP_SYNC_INTERVAL         (6UL * 3600UL * 1000UL)  // 6 hours
-#define CLOCK_DISPLAY_INTERVAL    1000UL                    // 1 second
+#define WEATHER_UPDATE_INTERVAL   (30UL * 60UL * 1000UL)
+#define PRAYER_FETCH_INTERVAL     (30UL * 60UL * 1000UL)
+#define PRAYER_UPDATE_INTERVAL    (60UL * 1000UL)
+#define PRAYER_CACHE_FETCH_DAYS   30
+#define NTP_SYNC_INTERVAL         (6UL * 3600UL * 1000UL)
+#define CLOCK_DISPLAY_INTERVAL    1000UL
 #define TOUCH_DEBOUNCE_MS         200UL
 
 // ------------------------------------------------------------
-//  Shake Detection (MPU6050)
+// Shake Detection (MPU6050)
 // ------------------------------------------------------------
-#define SHAKE_THRESHOLD       15000    // Acceleration magnitude threshold
-#define SHAKE_COUNT_REQUIRED  3        // Number of peaks within the window
-#define SHAKE_WINDOW_MS       1000UL   // Time window for shake detection
+#define SHAKE_THRESHOLD       15000
+#define SHAKE_COUNT_REQUIRED  3
+#define SHAKE_WINDOW_MS       1000UL
 
 // ------------------------------------------------------------
-//  Audio
+// Audio
 // ------------------------------------------------------------
 #define I2S_MIC_PORT          I2S_NUM_0
 #define I2S_AMP_PORT          I2S_NUM_1
 #define MIC_SAMPLE_RATE       16000
 #define MIC_RECORD_SECONDS    3
 #define AMP_SAMPLE_RATE       44100
-#define DEFAULT_VOLUME        80       // 0-100
+#define DEFAULT_VOLUME        80
 
 // ------------------------------------------------------------
-//  WiFi & Network
+// WiFi & Network
 // ------------------------------------------------------------
-#define WIFI_CONNECT_TIMEOUT  35000UL  // Allow time for association and DHCP
+#define WIFI_CONNECT_TIMEOUT  35000UL
 #define AP_SSID               "Prayer-Bot"
-#define AP_PASSWORD           "12345678"
+#define AP_PASSWORD           "CHANGE_THIS_PASSWORD"
 #define WEB_SERVER_PORT       80
 #define NTP_SERVER            "pool.ntp.org"
 
 // ------------------------------------------------------------
-//  API Endpoints
+// API Endpoints
 // ------------------------------------------------------------
 #define ALADHAN_API_BASE      "https://api.aladhan.com/v1"
 #define OPEN_METEO_WEATHER    "https://api.open-meteo.com/v1/forecast"
 #define OPEN_METEO_AIR        "https://air-quality-api.open-meteo.com/v1/air-quality"
 #define QURAN_AUDIO_BASE      "https://cdn.islamic.network/quran/audio/128/ar.alafasy"
 #define QURAN_CDN_BASE        "http://server8.mp3quran.net/afs/"
-
-// Gemini API Key for Voice Surah Recognition (Google AI Studio)
-
-// OpenWeatherMap current weather endpoint
 #define OPENWEATHER_API_BASE  "https://api.openweathermap.org/data/2.5"
 
+// API keys are declared in secrets.h.
+// Existing code can continue using:
+// DEFAULT_GEMINI_API_KEY
+// DEFAULT_OWM_API_KEY
+
 // ------------------------------------------------------------
-//  Default Location (Dhaka, Bangladesh)
+// Default Location (Dhaka, Bangladesh)
 // ------------------------------------------------------------
 #define DEFAULT_CITY_NAME     "Dhaka"
 #define DEFAULT_LATITUDE      23.8103f
 #define DEFAULT_LONGITUDE     90.4125f
 #define DEFAULT_TIMEZONE      "Asia/Dhaka"
-#define DEFAULT_UTC_OFFSET    6.0f     // UTC+6
+#define DEFAULT_UTC_OFFSET    6.0f
 
 // ------------------------------------------------------------
-//  Prayer Calculation Defaults
+// Prayer Calculation Defaults
 // ------------------------------------------------------------
-#define DEFAULT_CALC_METHOD   3        // Muslim World League
-#define DEFAULT_ASR_SCHOOL    1        // 1 = Hanafi
-#define DEFAULT_HIJRI_OFFSET  0        // -2 to +2
+#define DEFAULT_CALC_METHOD   3
+#define DEFAULT_ASR_SCHOOL    1
+#define DEFAULT_HIJRI_OFFSET  0
 
 // ------------------------------------------------------------
-//  Pomodoro Defaults
+// Pomodoro Defaults
 // ------------------------------------------------------------
 #define DEFAULT_FOCUS_MIN     25
 #define DEFAULT_SHORT_BREAK   5
@@ -134,14 +134,14 @@
 #define DEFAULT_CYCLES        4
 
 // ------------------------------------------------------------
-//  Prohibited Time Offsets (minutes)
+// Prohibited Time Offsets (minutes)
 // ------------------------------------------------------------
-#define DEFAULT_SUNRISE_OFFSET   15    // minutes after sunrise
-#define DEFAULT_ZAWAL_OFFSET     6     // minutes around solar noon
-#define DEFAULT_SUNSET_OFFSET    15    // minutes before sunset
+#define DEFAULT_SUNRISE_OFFSET   15
+#define DEFAULT_ZAWAL_OFFSET     6
+#define DEFAULT_SUNSET_OFFSET    15
 
 // ------------------------------------------------------------
-//  LittleFS Paths
+// LittleFS Paths
 // ------------------------------------------------------------
 #define SETTINGS_PATH         "/settings.json"
 #define PRAYER_CACHE_PATH     "/prayer_cache.json"
@@ -149,19 +149,18 @@
 #define FESTIVAL_TABLE_PATH   "/festivals.json"
 
 // ------------------------------------------------------------
-//  Cache Management
+// Cache Management
 // ------------------------------------------------------------
-#define CACHE_META_PATH       "/cache_meta.json"
-#define CACHE_MAX_AGE_DAYS    7         // Default max cache age
-#define CACHE_PRAYER_MAX_DAYS 35        // Prayer cache validity
-#define CACHE_WEATHER_MAX_DAYS 1        // Weather cache validity
-#define CACHE_FESTIVAL_MAX_DAYS 365     // Festival data validity
-#define CACHE_CLEANUP_INTERVAL (24UL * 3600UL * 1000UL) // Run cleanup daily
+#define CACHE_META_PATH        "/cache_meta.json"
+#define CACHE_MAX_AGE_DAYS     7
+#define CACHE_PRAYER_MAX_DAYS  35
+#define CACHE_WEATHER_MAX_DAYS 1
+#define CACHE_FESTIVAL_MAX_DAYS 365
+#define CACHE_CLEANUP_INTERVAL (24UL * 3600UL * 1000UL)
 
 // ------------------------------------------------------------
-//  Surah Count & AI Voice API
+// Quran
 // ------------------------------------------------------------
 #define TOTAL_SURAHS          114
-#define DEFAULT_GEMINI_API_KEY ""
 
 #endif // CONFIG_H

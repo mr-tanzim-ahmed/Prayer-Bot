@@ -13,3 +13,4 @@
 *.bin
 *.elf
 *.map
+secrets.h

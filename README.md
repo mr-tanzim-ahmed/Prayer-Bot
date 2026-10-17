@@ -56,6 +56,8 @@ Prayer-Bot/
 | Pomodoro weekly totals | `src/pomodoro_stats.h`, `src/pomodoro_stats.cpp` |
 | Dashboard UI and its JSON API | `src/dashboard_html.h`, `src/web_server_manager.h`, `src/web_server_manager.cpp` |
 | Persistent settings and cache | `src/storage_manager.h`, `src/storage_manager.cpp`, `src/cache_manager.h`, `src/cache_manager.cpp` |
+| Voice recognition & Al-Quran assistant | `src/voice_manager.h`, `src/voice_manager.cpp`, `src/screens/surah_screen.h/.cpp` |
+| Online API keys and default configuration | `src/config.h`, `src/storage_manager.cpp`, `src/dashboard_html.h` |
 | OLED screen presentation | `src/screens/` and `src/screen_router.h`, `src/screen_router.cpp` |
 | Shared settings, screen IDs, and defaults | `src/types.h`, `src/config.h` |
 | Startup, task scheduling, and integration | `src/main.cpp` |
@@ -76,6 +78,87 @@ Keep feature behavior in its manager or screen module where practical; use `main
 | **INMP441 I2S Microphone (optional)** | Captures a three-second Surah voice-selection clip for Gemini recognition when configured. |
 | **Micro‑USB Power / 5 V Power Supply** | Powers the board and peripherals.
 | **Optional: SD Card (Micro‑SD slot)** | Can be added for large log storage; the core uses LittleFS on internal flash.
+
+---
+
+## 🔑 API Keys & Services Configuration
+
+Prayer-Bot connects to cloud APIs for AI speech recognition, weather conditions, prayer times, and Quran audio streaming.
+
+### Summary of APIs Used
+
+| Service / Feature | Provider | Purpose | Where to Configure |
+|---|---|---|---|
+| **Al-Quran Voice Recognition** | [Google Gemini Flash AI](https://aistudio.google.com/) | Maps spoken Surah names (English & Bangla / বাংলা) to Surah 1–114 | `src/config.h` or Web Dashboard |
+| **Live Weather & Air Quality** | [OpenWeatherMap](https://openweathermap.org/api) | Current temperature, humidity, and condition | `src/config.h` or Web Dashboard |
+| **Prayer Times & Timetable** | [Aladhan API](https://aladhan.com/prayer-times-api) | Monthly accurate calculation for Fajr, Dhuhr, Asr, Maghrib, Isha | Automatic (Free, no key needed) |
+| **Air Quality Index (AQI)** | [Open-Meteo](https://open-meteo.com/en/docs/air-quality-api) | European AQI & PM2.5 monitoring | Automatic (Free, no key needed) |
+| **Al-Quran MP3 Audio Streaming** | [MP3Quran CDN](https://mp3quran.net/) | Primary: Maher Al-Muaiqly / Fallback: Mishary Rashid Alafasy | `src/config.h` (Pre-configured) |
+
+---
+
+### How to Change Keys
+
+You can configure and change API keys in two different ways:
+
+#### Option 1: Via the Web Dashboard (Recommended — No Reflashing Needed)
+1. Connect your phone or computer to the **Prayer-Bot** Wi-Fi hotspot or open the device IP in your browser (e.g. `http://192.168.4.1` or `http://<device-ip>/`).
+2. Expand the **Device settings** card at the bottom.
+3. Scroll to **Online services & API keys**.
+4. Enter your keys:
+   - **Gemini Flash API key**: Paste your Google Gemini API key.
+   - **OpenWeatherMap API key**: Paste your OpenWeatherMap API key.
+5. Click **Save & apply settings**.
+   - The settings are automatically validated, saved to `/settings.json` in the ESP32's LittleFS flash storage, and applied immediately without requiring a reboot.
+
+#### Option 2: Directly in Source Code (`src/config.h`)
+Open [`src/config.h`](src/config.h) in your editor and update the default constants:
+
+```cpp
+// ------------------------------------------------------------
+//  Surah Count & Online API Keys
+// ------------------------------------------------------------
+#define TOTAL_SURAHS          114
+
+// 1. Google Gemini Flash API Key (for Slide 7 voice recognition & dashboard voice assistant)
+// Get your free key at: https://aistudio.google.com/
+#define DEFAULT_GEMINI_API_KEY "YOUR_GOOGLE_API_KEY"
+
+// 2. OpenWeatherMap API Key (for Slide 4 weather & humidity)
+// Get your free key at: https://openweathermap.org/api
+#define DEFAULT_OWM_API_KEY    "YOUR_OPENWEATHERMAP_API_KEY_HERE"
+```
+
+Then rebuild and flash the firmware to your ESP32-S3.
+
+#### Option 3: Via HTTP REST API
+You can also update keys programmatically by sending an HTTP POST request to `/api/settings`:
+
+```bash
+curl -X POST http://192.168.4.1/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "city": "Dhaka",
+    "timezone": "Asia/Dhaka",
+    "lat": 23.8103,
+    "lon": 90.4125,
+    "utcOff": 6,
+    "calcMethod": 1,
+    "asrSchool": 1,
+    "hijriOffset": 0,
+    "azanOn": true,
+    "volume": 80,
+    "focusMin": 25,
+    "shortBrk": 5,
+    "longBrk": 15,
+    "pomCycles": 4,
+    "sunriseOff": 15,
+    "zawalOff": 6,
+    "sunsetOff": 15,
+    "geminiKey": "YOUR_GEMINI_API_KEY",
+    "owmKey": "YOUR_OPENWEATHERMAP_API_KEY_HERE"
+  }'
+```
 
 ---
 
