@@ -30,6 +30,9 @@ namespace PrayerManager {
     // Force re-fetch from API (e.g. after city change)
     bool refresh(const Settings& settings);
 
+    // Check if live prayer data was fetched from API
+    bool isLiveSynced();
+
     // Get prayer name as string
     const char* getPrayerNameStr(PrayerName name);
 }

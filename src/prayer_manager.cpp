@@ -31,6 +31,7 @@ namespace {
     int cachedDaysCount = 0;
     DailyPrayers singleTodayPrayers = defaultDhakaPrayers;
     bool hasTodayPrayers = true;
+    bool liveSynced = false;
     PrayerName lastAzanPrayer = PRAYER_NONE;
     int lastAzanDay = -1;
 
@@ -87,11 +88,18 @@ namespace {
         client.setInsecure();
 
         HTTPClient http;
+        const float lat = (settings.latitude >= -90.0f && settings.latitude <= 90.0f && settings.latitude != 0.0f)
+            ? settings.latitude : DEFAULT_LATITUDE;
+        const float lon = (settings.longitude >= -180.0f && settings.longitude <= 180.0f && settings.longitude != 0.0f)
+            ? settings.longitude : DEFAULT_LONGITUDE;
+        const uint8_t method = settings.calcMethod;
+        const uint8_t school = settings.asrSchool;
+
         String url = String(ALADHAN_API_BASE) + "/timings"
-            "?latitude=" + String(settings.latitude, 4) +
-            "&longitude=" + String(settings.longitude, 4) +
-            "&method=" + String(settings.calcMethod) +
-            "&school=" + String(settings.asrSchool);
+            "?latitude=" + String(lat, 4) +
+            "&longitude=" + String(lon, 4) +
+            "&method=" + String(method) +
+            "&school=" + String(school);
 
         Serial.printf("[PRAYER] Fetching live prayer timings: %s\n", url.c_str());
         if (!http.begin(client, url)) {
@@ -135,18 +143,27 @@ namespace {
         }
 
         DailyPrayers fetched;
-        if (!parseTime(timings["Fajr"], fetched.fajr) ||
-            !parseTime(timings["Sunrise"], fetched.sunrise) ||
-            !parseTime(timings["Dhuhr"], fetched.dhuhr) ||
-            !parseTime(timings["Asr"], fetched.asr) ||
-            !parseTime(timings["Maghrib"], fetched.maghrib) ||
-            !parseTime(timings["Isha"], fetched.isha)) {
-            Serial.println("[PRAYER] Could not parse prayer times from API response.");
+        const char* fStr = timings["Fajr"];
+        const char* sStr = timings["Sunrise"];
+        const char* dStr = timings["Dhuhr"];
+        const char* aStr = timings["Asr"];
+        const char* mStr = timings["Maghrib"];
+        const char* iStr = timings["Isha"];
+
+        if (!parseTime(fStr, fetched.fajr) ||
+            !parseTime(sStr, fetched.sunrise) ||
+            !parseTime(dStr, fetched.dhuhr) ||
+            !parseTime(aStr, fetched.asr) ||
+            !parseTime(mStr, fetched.maghrib) ||
+            !parseTime(iStr, fetched.isha) ||
+            fetched.fajr.hour == 0) {
+            Serial.println("[PRAYER] Could not parse valid non-zero prayer times from API response.");
             return false;
         }
 
         singleTodayPrayers = fetched;
         hasTodayPrayers = true;
+        liveSynced = true;
 
         // Auto-set device clock from Aladhan trusted server timestamp if clock is not synced
         const uint32_t ts = data["date"]["timestamp"] | 0;
@@ -156,7 +173,7 @@ namespace {
             Serial.printf("[PRAYER] Synced device clock from Aladhan API timestamp: %u\n", ts);
         }
 
-        const int day = data["date"]["gregorian"]["day"] | currentDay();
+        const int day = data["date"]["gregorian"]["day"] | (currentDay() > 0 ? currentDay() : 1);
         if (day >= 1 && day <= 31) {
             cachedPrayers[day - 1] = fetched;
             if (cachedDaysCount < day) cachedDaysCount = day;
@@ -165,12 +182,12 @@ namespace {
         // Save today's timing & Hijri info to LittleFS cache for offline resilience
         JsonDocument cacheDoc;
         cacheDoc["day"] = day;
-        cacheDoc["fajr"] = String(timings["Fajr"].as<const char*>()).substring(0, 5);
-        cacheDoc["sunrise"] = String(timings["Sunrise"].as<const char*>()).substring(0, 5);
-        cacheDoc["dhuhr"] = String(timings["Dhuhr"].as<const char*>()).substring(0, 5);
-        cacheDoc["asr"] = String(timings["Asr"].as<const char*>()).substring(0, 5);
-        cacheDoc["maghrib"] = String(timings["Maghrib"].as<const char*>()).substring(0, 5);
-        cacheDoc["isha"] = String(timings["Isha"].as<const char*>()).substring(0, 5);
+        cacheDoc["fajr"] = String(fStr).substring(0, 5);
+        cacheDoc["sunrise"] = String(sStr).substring(0, 5);
+        cacheDoc["dhuhr"] = String(dStr).substring(0, 5);
+        cacheDoc["asr"] = String(aStr).substring(0, 5);
+        cacheDoc["maghrib"] = String(mStr).substring(0, 5);
+        cacheDoc["isha"] = String(iStr).substring(0, 5);
 
         JsonObject hijri = data["date"]["hijri"];
         if (!hijri.isNull()) {
@@ -283,6 +300,14 @@ void getTodayPrayers(DailyPrayers& prayers) {
     } else {
         prayers = defaultDhakaPrayers;
     }
+
+    // Safeguard: Ensure no prayer time is ever 00:00
+    if (prayers.fajr.hour == 0 && prayers.fajr.minute == 0)       prayers.fajr    = defaultDhakaPrayers.fajr;
+    if (prayers.sunrise.hour == 0 && prayers.sunrise.minute == 0) prayers.sunrise = defaultDhakaPrayers.sunrise;
+    if (prayers.dhuhr.hour == 0 && prayers.dhuhr.minute == 0)     prayers.dhuhr   = defaultDhakaPrayers.dhuhr;
+    if (prayers.asr.hour == 0 && prayers.asr.minute == 0)         prayers.asr     = defaultDhakaPrayers.asr;
+    if (prayers.maghrib.hour == 0 && prayers.maghrib.minute == 0) prayers.maghrib = defaultDhakaPrayers.maghrib;
+    if (prayers.isha.hour == 0 && prayers.isha.minute == 0)       prayers.isha    = defaultDhakaPrayers.isha;
 }
 
 void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited,
@@ -290,18 +315,23 @@ void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited,
     DailyPrayers today;
     getTodayPrayers(today);
 
+    // Safeguards for prohibited-time window offsets (defaults: 15, 10, 15)
+    const uint8_t sOff = settings.sunriseOffset > 0 ? settings.sunriseOffset : DEFAULT_SUNRISE_OFFSET;
+    const uint8_t zOff = settings.zawalOffset > 0   ? settings.zawalOffset   : DEFAULT_ZAWAL_OFFSET;
+    const uint8_t mOff = settings.sunsetOffset > 0  ? settings.sunsetOffset  : DEFAULT_SUNSET_OFFSET;
+
     // --- Prohibited times (Calculated directly from today's Sunrise, Dhuhr, and Maghrib) ---
     // 1. After sunrise: [Sunrise, Sunrise + sunriseOffset]
     const int sunriseMin = timeToMinutes(today.sunrise);
     prohibited.afterSunrise.startHour   = today.sunrise.hour;
     prohibited.afterSunrise.startMinute = today.sunrise.minute;
-    const int afterSunriseEnd = sunriseMin + settings.sunriseOffset;
+    const int afterSunriseEnd = sunriseMin + sOff;
     prohibited.afterSunrise.endHour   = (afterSunriseEnd / 60) % 24;
     prohibited.afterSunrise.endMinute = afterSunriseEnd % 60;
 
     // 2. At zawal (solar noon before Dhuhr): [Dhuhr - zawalOffset, Dhuhr]
     const int dhuhrMin = timeToMinutes(today.dhuhr);
-    int zawalStart = dhuhrMin - settings.zawalOffset;
+    int zawalStart = dhuhrMin - zOff;
     if (zawalStart < 0) zawalStart += 1440;
     prohibited.atZawal.startHour   = (zawalStart / 60) % 24;
     prohibited.atZawal.startMinute = zawalStart % 60;
@@ -310,7 +340,7 @@ void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited,
 
     // 3. Before sunset (before Maghrib): [Maghrib - sunsetOffset, Maghrib]
     const int maghribMin = timeToMinutes(today.maghrib);
-    int sunsetStart = maghribMin - settings.sunsetOffset;
+    int sunsetStart = maghribMin - mOff;
     if (sunsetStart < 0) sunsetStart += 1440;
     prohibited.beforeSunset.startHour   = (sunsetStart / 60) % 24;
     prohibited.beforeSunset.startMinute = sunsetStart % 60;
@@ -455,6 +485,10 @@ const char* getPrayerNameStr(PrayerName name) {
         case PRAYER_ISHA:    return "Isha";
         default:             return "--";
     }
+}
+
+bool isLiveSynced() {
+    return liveSynced;
 }
 
 } // namespace PrayerManager

@@ -420,13 +420,65 @@ void init(Settings& settings) {
             request->send(200, "application/json", "{\"ok\":true,\"source\":\"dashboard-local-machine\"}");
         });
 
-    server->on("/api/prayer/refresh", HTTP_POST, [](AsyncWebServerRequest* request) {
-        g_locationRefreshRequested = true;
-        request->send(200, "application/json", "{\"status\":\"refreshing\"}");
-    });
+    auto handlePrayerRefresh = [](AsyncWebServerRequest* request) {
+        if (settingsRef && WifiManager::isConnected()) {
+            if (PrayerManager::refresh(*settingsRef)) {
+                PrayerManager::getTodayPrayers(g_todayPrayers);
+                PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, *settingsRef);
+                CalendarManager::getHijriDate(g_hijriDate);
+                CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
+            }
+        } else {
+            g_locationRefreshRequested = true;
+        }
+
+        DailyPrayers today;
+        PrayerManager::getTodayPrayers(today);
+        ProhibitedTimes prob = g_prohibited;
+        if (prob.afterSunrise.startHour == 0 && prob.afterSunrise.startMinute == 0 && settingsRef) {
+            PrayerManager::updateNextPrayer(g_nextPrayer, prob, *settingsRef);
+        }
+
+        JsonDocument doc;
+        doc["status"] = "ok";
+        doc["liveSynced"] = PrayerManager::isLiveSynced();
+        JsonObject prayers = doc["prayers"].to<JsonObject>();
+        prayers["ready"] = true;
+        prayers["liveSynced"] = PrayerManager::isLiveSynced();
+        prayers["fajr"] = formatTime(today.fajr);
+        prayers["sunrise"] = formatTime(today.sunrise);
+        prayers["dhuhr"] = formatTime(today.dhuhr);
+        prayers["asr"] = formatTime(today.asr);
+        prayers["maghrib"] = formatTime(today.maghrib);
+        prayers["isha"] = formatTime(today.isha);
+
+        JsonObject prohibited = doc["prohibited"].to<JsonObject>();
+        prohibited["ready"] = true;
+        JsonObject afterSunrise = prohibited["afterSunrise"].to<JsonObject>();
+        afterSunrise["start"] = formatTime(prob.afterSunrise.startHour, prob.afterSunrise.startMinute);
+        afterSunrise["end"] = formatTime(prob.afterSunrise.endHour, prob.afterSunrise.endMinute);
+        afterSunrise["active"] = prob.afterSunrise.active;
+
+        JsonObject atZawal = prohibited["atZawal"].to<JsonObject>();
+        atZawal["start"] = formatTime(prob.atZawal.startHour, prob.atZawal.startMinute);
+        atZawal["end"] = formatTime(prob.atZawal.endHour, prob.atZawal.endMinute);
+        atZawal["active"] = prob.atZawal.active;
+
+        JsonObject beforeSunset = prohibited["beforeSunset"].to<JsonObject>();
+        beforeSunset["start"] = formatTime(prob.beforeSunset.startHour, prob.beforeSunset.startMinute);
+        beforeSunset["end"] = formatTime(prob.beforeSunset.endHour, prob.beforeSunset.endMinute);
+        beforeSunset["active"] = prob.beforeSunset.active;
+
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    };
+
+    server->on("/api/prayer/refresh", HTTP_POST, handlePrayerRefresh);
+    server->on("/api/prayer/refresh", HTTP_GET, handlePrayerRefresh);
 
     server->on("/api/status", HTTP_GET, [](AsyncWebServerRequest* request) {
-        if (!g_prayerReady && WifiManager::isConnected()) {
+        if (!PrayerManager::isLiveSynced() && WifiManager::isConnected()) {
             g_locationRefreshRequested = true;
         }
         JsonDocument doc;
@@ -449,35 +501,37 @@ void init(Settings& settings) {
             ? WiFi.localIP().toString()
             : "";
 
+        DailyPrayers today;
+        PrayerManager::getTodayPrayers(today);
+        ProhibitedTimes prob = g_prohibited;
+        if (prob.afterSunrise.startHour == 0 && prob.afterSunrise.startMinute == 0 && settingsRef) {
+            PrayerManager::updateNextPrayer(g_nextPrayer, prob, *settingsRef);
+        }
+
         JsonObject prayers = doc["prayers"].to<JsonObject>();
-        prayers["ready"] = g_prayerReady;
-        prayers["fajr"] = formatTime(g_todayPrayers.fajr);
-        prayers["sunrise"] = formatTime(g_todayPrayers.sunrise);
-        prayers["dhuhr"] = formatTime(g_todayPrayers.dhuhr);
-        prayers["asr"] = formatTime(g_todayPrayers.asr);
-        prayers["maghrib"] = formatTime(g_todayPrayers.maghrib);
-        prayers["isha"] = formatTime(g_todayPrayers.isha);
+        prayers["ready"] = true;
+        prayers["liveSynced"] = PrayerManager::isLiveSynced();
+        prayers["fajr"] = formatTime(today.fajr);
+        prayers["sunrise"] = formatTime(today.sunrise);
+        prayers["dhuhr"] = formatTime(today.dhuhr);
+        prayers["asr"] = formatTime(today.asr);
+        prayers["maghrib"] = formatTime(today.maghrib);
+        prayers["isha"] = formatTime(today.isha);
 
         JsonObject prohibited = doc["prohibited"].to<JsonObject>();
-        prohibited["ready"] = g_prayerReady;
+        prohibited["ready"] = true;
         JsonObject afterSunrise = prohibited["afterSunrise"].to<JsonObject>();
-        afterSunrise["start"] = formatTime(g_prohibited.afterSunrise.startHour,
-                                           g_prohibited.afterSunrise.startMinute);
-        afterSunrise["end"] = formatTime(g_prohibited.afterSunrise.endHour,
-                                         g_prohibited.afterSunrise.endMinute);
-        afterSunrise["active"] = g_prohibited.afterSunrise.active;
+        afterSunrise["start"] = formatTime(prob.afterSunrise.startHour, prob.afterSunrise.startMinute);
+        afterSunrise["end"] = formatTime(prob.afterSunrise.endHour, prob.afterSunrise.endMinute);
+        afterSunrise["active"] = prob.afterSunrise.active;
         JsonObject atZawal = prohibited["atZawal"].to<JsonObject>();
-        atZawal["start"] = formatTime(g_prohibited.atZawal.startHour,
-                                      g_prohibited.atZawal.startMinute);
-        atZawal["end"] = formatTime(g_prohibited.atZawal.endHour,
-                                    g_prohibited.atZawal.endMinute);
-        atZawal["active"] = g_prohibited.atZawal.active;
+        atZawal["start"] = formatTime(prob.atZawal.startHour, prob.atZawal.startMinute);
+        atZawal["end"] = formatTime(prob.atZawal.endHour, prob.atZawal.endMinute);
+        atZawal["active"] = prob.atZawal.active;
         JsonObject beforeSunset = prohibited["beforeSunset"].to<JsonObject>();
-        beforeSunset["start"] = formatTime(g_prohibited.beforeSunset.startHour,
-                                           g_prohibited.beforeSunset.startMinute);
-        beforeSunset["end"] = formatTime(g_prohibited.beforeSunset.endHour,
-                                         g_prohibited.beforeSunset.endMinute);
-        beforeSunset["active"] = g_prohibited.beforeSunset.active;
+        beforeSunset["start"] = formatTime(prob.beforeSunset.startHour, prob.beforeSunset.startMinute);
+        beforeSunset["end"] = formatTime(prob.beforeSunset.endHour, prob.beforeSunset.endMinute);
+        beforeSunset["active"] = prob.beforeSunset.active;
 
         JsonObject next = doc["nextPrayer"].to<JsonObject>();
         next["name"] = g_prayerReady ? PrayerManager::getPrayerNameStr(g_nextPrayer.name) : "";

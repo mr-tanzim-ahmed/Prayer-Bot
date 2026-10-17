@@ -429,10 +429,8 @@ void taskScheduler(void* param) {
             resumePomodoroAfterAzan();
         }
 
-        // Update prayer countdown
-        if (g_prayerReady) {
-            PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, taskSettings);
-        }
+        // Update prayer countdown & prohibited windows continuously
+        PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, taskSettings);
 
         // Update Pomodoro timer
         PomodoroManager::update(g_pomodoro);
@@ -557,18 +555,19 @@ void taskNetwork(void* param) {
                 lastWeatherUpdate = millis();
             }
 
-            if (!g_prayerReady &&
-                (now - lastPrayerUpdate) >= 10000UL) {
+            if (!PrayerManager::isLiveSynced() &&
+                (now - lastPrayerUpdate) >= 8000UL) {
                 g_prayerRefreshing = true;
-                g_prayerReady = PrayerManager::refresh(taskSettings);
-                g_prayerRefreshing = false;
-                if (g_prayerReady) {
+                if (PrayerManager::refresh(taskSettings)) {
+                    g_prayerReady = true;
                     PrayerManager::getTodayPrayers(g_todayPrayers);
                     PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, taskSettings);
                     CalendarManager::getHijriDate(g_hijriDate);
                     CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
                     lastPrayerFetch = millis();
+                    Serial.println("[MAIN] Live prayer data fetched from Aladhan API.");
                 }
+                g_prayerRefreshing = false;
                 lastPrayerUpdate = now;
             }
 
