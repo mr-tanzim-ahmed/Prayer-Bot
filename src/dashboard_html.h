@@ -534,7 +534,10 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     put('nextPrayer',s.nextPrayer.name ? `${s.nextPrayer.name} at ${s.nextPrayer.time} (${s.nextPrayer.countdown})` : 'Schedule unavailable');
     put('azanStatus',s.azanPlaying?'Beeping — touch/shake to stop':'Ready');
     put('hijri',s.hijri.date || '—'); put('event',s.hijri.event || 'None today');
-    for(const name of ['fajr','sunrise','dhuhr','asr','maghrib','isha']) put(name,s.prayers[name]);
+    for(const name of ['fajr','sunrise','dhuhr','asr','maghrib','isha']) {
+      const val = s.prayers[name];
+      put(name, (val && val !== '00:00') ? val : '—');
+    }
     // Show helpful note and trigger auto-sync if WiFi is up but prayers not yet loaded
     if(!s.prayers.ready && s.network.connected) {
       put('prayerNote','Connected — fetching prayer schedule from Aladhan…');
@@ -548,12 +551,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     ];
     for(const [key,id] of prohibitedWindows) {
       const window=s.prohibited?.[key];
-      put(`${id}Range`,s.prohibited?.ready && window ? `${window.start} – ${window.end}` : '—');
+      const valid = window && window.start && window.start !== '00:00' && window.end && window.end !== '00:00';
+      put(`${id}Range`, valid ? `${window.start} – ${window.end}` : '—');
       const state=byId(`${id}State`);
-      state.textContent=s.prohibited?.ready && window
+      state.textContent=valid
         ? (window.active?'Active now':'Not active now')
         : 'Schedule unavailable';
-      state.classList.toggle('prohibited-active',Boolean(s.prohibited?.ready && window?.active));
+      state.classList.toggle('prohibited-active',Boolean(valid && window?.active));
     }
     put('prohibitedNote',s.prohibited?.ready
       ? 'Calculated from today\u2019s schedule and the prohibited-time offsets in Device settings.'

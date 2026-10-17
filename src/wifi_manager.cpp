@@ -69,6 +69,16 @@ bool init(const Settings& settings) {
     }
 
     if (ssid.isEmpty()) {
+#ifdef DEFAULT_STA_SSID
+        if (strlen(DEFAULT_STA_SSID) > 0) {
+            ssid = DEFAULT_STA_SSID;
+            pass = DEFAULT_STA_PASSWORD;
+            Serial.printf("[WiFi] No saved credentials; auto-connecting to default network: %s\n", ssid.c_str());
+        }
+#endif
+    }
+
+    if (ssid.isEmpty()) {
         Serial.println("[WiFi] No saved credentials. Starting AP...");
         startAP();
         return false;
@@ -196,7 +206,18 @@ bool shouldRestartAfterConnection() {
 
 bool reconnect() {
     if (stationHasRouterLease()) return true;
-    if (storedSSID.isEmpty()) return false;
+    if (storedSSID.isEmpty()) {
+#ifdef DEFAULT_STA_SSID
+        if (strlen(DEFAULT_STA_SSID) > 0) {
+            storedSSID = DEFAULT_STA_SSID;
+            storedPassword = DEFAULT_STA_PASSWORD;
+        } else {
+            return false;
+        }
+#else
+        return false;
+#endif
+    }
 
     if (connectionPending && millis() - connectionStartedMs < WIFI_CONNECT_TIMEOUT) {
         return false;
@@ -247,6 +268,18 @@ bool isConnected() {
 
 bool connectionInProgress() {
     return connectionPending;
+}
+
+void abortConnection() {
+    if (connectionPending) {
+        Serial.println("[WiFi] Aborting active connection attempt for scan.");
+        connectionPending = false;
+        pendingCredentialSave = false;
+        pendingSSID = "";
+        pendingPassword = "";
+        restartWhenConnected = false;
+        WiFi.disconnect(false, false);
+    }
 }
 
 bool isConnecting() {

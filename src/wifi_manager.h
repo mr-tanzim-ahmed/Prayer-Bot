@@ -30,6 +30,7 @@ namespace WifiManager {
 
     // Read-only connection state; isConnecting() also finalizes saved credentials.
     bool connectionInProgress();
+    void abortConnection();
 
     // Sync time via NTP
     bool syncNTP(const Settings& settings);

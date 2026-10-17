@@ -28,6 +28,8 @@ extern volatile bool g_ntpSyncRequested;
 extern PomodoroState g_pomodoro;
 extern SemaphoreHandle_t g_settingsMutex;
 extern volatile int16_t g_webVolumeRequest;
+extern bool g_timesynced;
+extern bool g_prayerReady;
 
 // ============================================================
 //  WEB SERVER MANAGER IMPLEMENTATION
@@ -413,10 +415,20 @@ void init(Settings& settings) {
             }
 
             Serial.println("[TIME] Initialized device clock from dashboard local machine; NTP will correct it when online.");
+            g_timesynced = true;
+            g_locationRefreshRequested = true;
             request->send(200, "application/json", "{\"ok\":true,\"source\":\"dashboard-local-machine\"}");
         });
 
+    server->on("/api/prayer/refresh", HTTP_POST, [](AsyncWebServerRequest* request) {
+        g_locationRefreshRequested = true;
+        request->send(200, "application/json", "{\"status\":\"refreshing\"}");
+    });
+
     server->on("/api/status", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (!g_prayerReady && WifiManager::isConnected()) {
+            g_locationRefreshRequested = true;
+        }
         JsonDocument doc;
         JsonObject network = doc["network"].to<JsonObject>();
         const bool stationConnected = WifiManager::isConnected();
@@ -784,8 +796,8 @@ void init(Settings& settings) {
     server->on("/api/wifi/scan", HTTP_POST,
         [](AsyncWebServerRequest* request) {
             if (WifiManager::connectionInProgress()) {
-                request->send(409, "application/json", "{\"error\":\"Wait for the current Wi-Fi connection attempt to finish before scanning.\"}");
-                return;
+                WifiManager::abortConnection();
+                delay(100);
             }
             WiFi.setSleep(false);
             const int16_t running = WiFi.scanComplete();

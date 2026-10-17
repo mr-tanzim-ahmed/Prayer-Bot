@@ -91,6 +91,8 @@
 #define WIFI_CONNECT_TIMEOUT  35000UL
 #define AP_SSID               "Prayer-Bot"
 #define AP_PASSWORD           "12345678"
+#define DEFAULT_STA_SSID      "Firefly"
+#define DEFAULT_STA_PASSWORD  "QWErty123456"
 #define WEB_SERVER_PORT       80
 #define NTP_SERVER            "pool.ntp.org"
 
@@ -124,6 +126,20 @@
 #define DEFAULT_CALC_METHOD   3
 #define DEFAULT_ASR_SCHOOL    1
 #define DEFAULT_HIJRI_OFFSET  0
+
+// Default Dhaka Base Prayer Times (fallback before network fetch)
+#define DEFAULT_DHAKA_FAJR_H     4
+#define DEFAULT_DHAKA_FAJR_M     41
+#define DEFAULT_DHAKA_SUNRISE_H  5
+#define DEFAULT_DHAKA_SUNRISE_M  57
+#define DEFAULT_DHAKA_DHUHR_H    11
+#define DEFAULT_DHAKA_DHUHR_M    44
+#define DEFAULT_DHAKA_ASR_H      15
+#define DEFAULT_DHAKA_ASR_M      53
+#define DEFAULT_DHAKA_MAGHRIB_H  17
+#define DEFAULT_DHAKA_MAGHRIB_M  30
+#define DEFAULT_DHAKA_ISHA_H     18
+#define DEFAULT_DHAKA_ISHA_M     41
 
 // ------------------------------------------------------------
 // Pomodoro Defaults

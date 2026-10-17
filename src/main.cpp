@@ -162,38 +162,41 @@ void setup() {
     }
     VoiceManager::init();
 
-    // 6. Connect WiFi (or start AP for setup)
+    // 6. Initialize prayer & calendar base data unconditionally (cached / Dhaka defaults)
+    g_prayerReady = PrayerManager::init(g_settings);
+    PrayerManager::getTodayPrayers(g_todayPrayers);
+    PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, g_settings);
+    CalendarManager::init(g_settings);
+    CalendarManager::getHijriDate(g_hijriDate);
+    CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
+    Serial.println("[MAIN] Prayer data and calendar initialized.");
+
+    // 7. Connect WiFi (or start AP for setup)
     DisplayManager::showConnectingScreen();
     g_wifiConnected = WifiManager::init(g_settings);
 
     if (g_wifiConnected) {
         Serial.println("[MAIN] WiFi connected.");
 
-        // 7. Sync time via NTP
+        // Sync time via NTP
         g_timesynced = WifiManager::syncNTP(g_settings);
 
-        // 8. Fetch prayer data
-        g_prayerReady = PrayerManager::init(g_settings);
-        if (g_prayerReady) {
+        // Fetch live prayer data
+        if (PrayerManager::refresh(g_settings)) {
             PrayerManager::getTodayPrayers(g_todayPrayers);
             PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, g_settings);
-            Serial.println("[MAIN] Prayer data ready.");
+            CalendarManager::getHijriDate(g_hijriDate);
+            CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
+            Serial.println("[MAIN] Live prayer data fetched.");
         }
 
-        // 9. Fetch weather
+        // Fetch weather
         g_weatherReady = WeatherManager::update(g_settings, g_weather);
         if (g_weatherReady) {
             Serial.println("[MAIN] Weather data ready.");
         }
 
-        // 10. Initialize calendar
-        CalendarManager::init(g_settings);
-        CalendarManager::getHijriDate(g_hijriDate);
-        CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
-        Serial.println("[MAIN] Calendar initialized.");
-
-        // 11. Initialize voice
-        // 12. Start web server
+        // Start web server
         WebServerManager::init(g_settings);
         Serial.println("[MAIN] Web server started.");
     } else {
@@ -497,21 +500,20 @@ void taskNetwork(void* param) {
 
         if (g_wifiConnected && WiFi.status() == WL_CONNECTED) {
             if (!networkServicesInitialized) {
-                Serial.println("[MAIN] WiFi connected after setup; initializing online services.");
+                Serial.println("[MAIN] WiFi connected; initializing online services.");
                 g_timesynced = WifiManager::syncNTP(taskSettings);
                 g_prayerRefreshing = true;
-                g_prayerReady = PrayerManager::init(taskSettings);
+                g_prayerReady = PrayerManager::refresh(taskSettings);
                 g_prayerRefreshing = false;
                 if (g_prayerReady) {
                     PrayerManager::getTodayPrayers(g_todayPrayers);
                     PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, taskSettings);
+                    CalendarManager::getHijriDate(g_hijriDate);
+                    CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
                 }
                 g_weatherRefreshing = true;
                 g_weatherReady = WeatherManager::update(taskSettings, g_weather);
                 g_weatherRefreshing = false;
-                CalendarManager::init(taskSettings);
-                CalendarManager::getHijriDate(g_hijriDate);
-                CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
                 networkServicesInitialized = true;
                 initialCacheCleanupPending = g_timesynced;
                 lastPrayerUpdate = millis();
@@ -540,6 +542,8 @@ void taskNetwork(void* param) {
                 if (g_prayerReady) {
                     PrayerManager::getTodayPrayers(g_todayPrayers);
                     PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, taskSettings);
+                    CalendarManager::getHijriDate(g_hijriDate);
+                    CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
                 }
                 lastPrayerUpdate = millis();
                 lastPrayerFetch = lastPrayerUpdate;
@@ -553,10 +557,10 @@ void taskNetwork(void* param) {
                 lastWeatherUpdate = millis();
             }
 
-            if (g_timesynced && !g_prayerReady &&
-                (now - lastPrayerUpdate) >= PRAYER_UPDATE_INTERVAL) {
+            if (!g_prayerReady &&
+                (now - lastPrayerUpdate) >= 10000UL) {
                 g_prayerRefreshing = true;
-                g_prayerReady = PrayerManager::init(taskSettings);
+                g_prayerReady = PrayerManager::refresh(taskSettings);
                 g_prayerRefreshing = false;
                 if (g_prayerReady) {
                     PrayerManager::getTodayPrayers(g_todayPrayers);
@@ -568,8 +572,7 @@ void taskNetwork(void* param) {
                 lastPrayerUpdate = now;
             }
 
-            if (g_timesynced &&
-                (now - lastPrayerFetch) >= PRAYER_FETCH_INTERVAL) {
+            if ((now - lastPrayerFetch) >= PRAYER_FETCH_INTERVAL) {
                 g_prayerRefreshing = true;
                 g_prayerReady = PrayerManager::refresh(taskSettings);
                 g_prayerRefreshing = false;
@@ -594,9 +597,10 @@ void taskNetwork(void* param) {
                 lastWeatherUpdate = now;
             }
 
-            // Refresh prayer data (daily / cache refresh)
+            // Refresh prayer & prohibited window status every minute
             if ((now - lastPrayerUpdate) >= PRAYER_UPDATE_INTERVAL || lastPrayerUpdate == 0) {
                 PrayerManager::getTodayPrayers(g_todayPrayers);
+                PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, taskSettings);
                 CalendarManager::getHijriDate(g_hijriDate);
                 CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
                 lastPrayerUpdate = now;

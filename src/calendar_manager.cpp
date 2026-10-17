@@ -48,6 +48,19 @@ void getHijriDate(HijriDate& date) {
     if (!json.isEmpty()) {
         JsonDocument doc;
         if (!deserializeJson(doc, json)) {
+            // Check single day cache format first
+            JsonObject singleHijri = doc["hijri"];
+            if (!singleHijri.isNull()) {
+                date.day       = singleHijri["day"] | 1;
+                date.month     = singleHijri["month"] | 1;
+                date.year      = singleHijri["year"] | 1448;
+                date.monthName = String((const char*)(singleHijri["monthName"] | "Muharram"));
+                date.designation = "AH";
+                date.day += hijriOffset;
+                return;
+            }
+
+            // Check monthly calendar format
             struct tm t;
             if (getLocalTime(&t)) {
                 int dayIndex = t.tm_mday - 1; // 0-indexed day of month
@@ -58,7 +71,7 @@ void getHijriDate(HijriDate& date) {
                     if (!todayHijri.isNull()) {
                         date.day       = todayHijri["day"] | 1;
                         date.month     = todayHijri["month"] | 1;
-                        date.year      = todayHijri["year"] | 1446;
+                        date.year      = todayHijri["year"] | 1448;
                         date.monthName = String((const char*)(todayHijri["monthName"] | "Muharram"));
                         date.designation = "AH";
 
