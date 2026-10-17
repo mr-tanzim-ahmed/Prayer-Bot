@@ -138,7 +138,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   <section id="wifiSetup" class="card wifi" hidden>
     <h2>Connect Prayer-Bot to Wi-Fi</h2>
     <p>Choose your router below, enter its password, and connect. The device confirms a router connection and DHCP address before saving the credentials and restarting.</p>
-    <p class="hint">Use a 2.4 GHz Wi-Fi network. Setup address: <strong>http://192.168.4.1</strong> · Setup hotspot: <strong id="setupApNameLabel">Prayer-Bot</strong></p>
+    <p class="hint">Enable the router's 2.4 GHz Wi-Fi; a 5 GHz-only network cannot be used. For TP-Link compatibility, WPA2-Personal (AES) is a good test setting. Setup address: <strong>http://192.168.4.1</strong> · Setup hotspot: <strong id="setupApNameLabel">Prayer-Bot</strong></p>
     <div class="fields" style="margin-top:16px">
       <div class="field"><label for="wifiNetworks">Nearby Wi-Fi networks</label><select id="wifiNetworks" onchange="if(this.value)byId('wifiSsid').value=this.value"><option value="">Scan to find networks</option></select></div>
       <div class="field"><label>&nbsp;</label><button id="scanWifi" type="button" onclick="scanWifiNetworks()">Scan for networks</button></div>
@@ -351,8 +351,22 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         <div class="field"><label for="sunsetOff">Before Maghrib (0–60 minutes)</label><input id="sunsetOff" type="number" min="0" max="60" required></div>
       </div>
 
-      <h3>Online services</h3>
-      <p class="hint">Weather key: <span id="owmKeyStatus">Loading…</span>. Voice recognition key: <span id="geminiKeyStatus">Loading…</span>. Service keys are not exposed or editable from this dashboard.</p>
+      <h3>Online services &amp; API keys</h3>
+      <div class="fields">
+        <div class="field">
+          <label for="owmKey">OpenWeatherMap API key</label>
+          <input id="owmKey" type="password" maxlength="63" placeholder="Leave blank to keep current">
+          <small class="hint">Status: <span id="owmKeyStatus">Loading…</span></small>
+        </div>
+        <div class="field">
+          <label for="geminiKey">Gemini Flash API key (Al-Quran Voice)</label>
+          <input id="geminiKey" type="password" maxlength="63" placeholder="Leave blank to keep current">
+          <small class="hint">Status: <span id="geminiKeyStatus">Loading…</span></small>
+        </div>
+      </div>
+      <div class="actions" style="margin-top:16px">
+        <button class="primary" type="button" onclick="saveSettings()">Save &amp; apply settings</button>
+      </div>
       </div>
     </details>
   </section>
@@ -629,37 +643,49 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       city:byId('city').value.trim(), lat:Number(byId('lat').value), lon:Number(byId('lon').value),
       timezone:byId('timezone').value.trim(), utcOff:Number(byId('utcOffset').value),
       calcMethod:Number(byId('calcMethod').value), asrSchool:Number(byId('asrSchool').value),
-      hijriOffset:Number(byId('hijriOffset').value), azanOn:byId('azanOn').checked,
+      hijriOffset:Number(byId('hijriOffset').value||0), azanOn:byId('azanOn').checked,
       volume:Number(byId('volume').value), focusMin:Number(byId('focusMin').value),
       shortBrk:Number(byId('shortBrk').value), longBrk:Number(byId('longBrk').value),
       pomCycles:Number(byId('pomCycles').value),
       sunriseOff:Number(byId('sunriseOff').value),zawalOff:Number(byId('zawalOff').value),
       sunsetOff:Number(byId('sunsetOff').value)
     };
+    const owm=byId('owmKey')?.value.trim();
+    if(owm) body.owmKey=owm;
+    const gemini=byId('geminiKey')?.value.trim();
+    if(gemini) body.geminiKey=gemini;
+
     const inputs=[...document.querySelectorAll('#city,#timezone,#lat,#lon,#utcOffset,#hijriOffset,#focusMin,#shortBrk,#longBrk,#pomCycles,#sunriseOff,#zawalOff,#sunsetOff')];
     const invalid=inputs.find(input=>!input.checkValidity());
-    if(invalid){invalid.reportValidity();message(`Check the ${invalid.labels[0]?.textContent||invalid.id} field.`,true);return;}
-    const button=byId('saveButton');
+    if(invalid){
+      byId('settings').open=true;
+      invalid.scrollIntoView({behavior:'smooth',block:'center'});
+      invalid.focus();
+      invalid.reportValidity();
+      message(`Check the ${invalid.labels[0]?.textContent||invalid.id} field.`,true);
+      return;
+    }
+    const buttons=[...document.querySelectorAll('#saveButton, #settings button.primary')];
     const controls=[...byId('settings').querySelectorAll('input,select')];
     const previousDisabled=controls.map(control=>control.disabled);
     controls.forEach(control=>control.disabled=true);
-    button.disabled=true;
-    button.textContent='Saving…';
+    buttons.forEach(b=>{b.disabled=true;b.textContent='Saving…';});
     let saveCompleted=false;
     try {
       await api('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       saveCompleted=true;
+      if(byId('owmKey')) byId('owmKey').value='';
+      if(byId('geminiKey')) byId('geminiKey').value='';
       await loadSettings();
       await loadStatus();
-      message('Settings saved and verified on the device.');
+      message('Settings saved to device storage and applied successfully.');
     } catch(e) {
       message(saveCompleted
         ? `Settings were saved, but could not be reloaded for verification: ${e.message}`
         : e.message,true);
     } finally {
       controls.forEach((control,index)=>control.disabled=previousDisabled[index]);
-      button.disabled=false;
-      button.textContent='Save & apply settings';
+      buttons.forEach(b=>{b.disabled=false;b.textContent='Save & apply settings';});
     }
   }
   async function sendControl(body) {
@@ -940,9 +966,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     try {
       await api('/api/wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,pass:password})});
       wifiSubmitted=true;
-      byId('wifiMessage').textContent='Testing the connection. Credentials will be saved after the router connects…';
+      byId('wifiMessage').textContent='Connection attempt accepted. Waiting for the router and DHCP address; credentials are not saved until this succeeds…';
       byId('wifiMessage').classList.remove('error');
-      await loadStatus();
     } catch(e) {
       byId('wifiMessage').textContent=e.message;
       byId('wifiMessage').classList.add('error');
@@ -1005,7 +1030,10 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   loadWeeklyStats();
   setInterval(()=>loadStatus().catch(e=>message(e.message,true)),5000);
   setInterval(()=>loadWeeklyStats(),30000);
-  setInterval(()=>{if(wifiSubmitted)loadStatus().catch(e=>{byId('wifiMessage').textContent=e.message;});},1500);
+  setInterval(()=>{if(wifiSubmitted)loadStatus().catch(()=>{
+    byId('wifiMessage').textContent='Prayer-Bot is reconnecting or restarting. Stay connected to the Prayer-Bot hotspot; this page will resume checking shortly.';
+    byId('wifiMessage').classList.remove('error');
+  });},2000);
   window.addEventListener('resize',()=>loadWeeklyStats());
 </script>
 </body>

@@ -154,7 +154,10 @@ bool saveCredentials(const String& ssid, const String& password) {
 bool connectToNetwork(const String& ssid, const String& password) {
     if (ssid.isEmpty() || ssid.length() > 32 ||
         (!password.isEmpty() && password.length() < 8) ||
-        password.length() > 63 || connectionPending) {
+        password.length() > 63 || pendingCredentialSave) {
+        if (pendingCredentialSave) {
+            Serial.println("[WiFi] A new credential test is already in progress.");
+        }
         return false;
     }
 
@@ -162,7 +165,12 @@ bool connectToNetwork(const String& ssid, const String& password) {
     WiFi.setSleep(false);
     connectionAttemptFailed = false;
     restartWhenConnected = false;
+    connectionPending = false;
+    pendingCredentialSave = false;
+    pendingSSID = "";
+    pendingPassword = "";
     WiFi.disconnect(false, false);
+    delay(100);
     if (WiFi.begin(ssid.c_str(), password.c_str()) == WL_CONNECT_FAILED) {
         Serial.println("[WiFi] Could not start the configured network connection.");
         connectionAttemptFailed = true;
@@ -196,6 +204,7 @@ bool reconnect() {
     connectionPending = false;
     Serial.println("[WiFi] Reconnecting...");
     WiFi.disconnect();
+    connectionAttemptFailed = false;
     connectionStartedMs = millis();
     connectionPending = true;
     if (WiFi.begin(storedSSID.c_str(), storedPassword.c_str()) == WL_CONNECT_FAILED) {
@@ -273,6 +282,10 @@ bool isConnecting() {
         return false;
     }
     if (millis() - connectionStartedMs >= WIFI_CONNECT_TIMEOUT) {
+        Serial.printf("[WiFi] Connection timed out (status=%d, local=%s, gateway=%s).\n",
+                      static_cast<int>(WiFi.status()),
+                      WiFi.localIP().toString().c_str(),
+                      WiFi.gatewayIP().toString().c_str());
         connectionPending = false;
         pendingCredentialSave = false;
         pendingSSID = "";

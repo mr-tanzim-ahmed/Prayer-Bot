@@ -115,6 +115,12 @@ namespace {
         } else if (doc["azanOn"].isUnbound() == false &&
                    !doc["azanOn"].is<bool>()) {
             error = "Azan enabled must be true or false.";
+        } else if (doc["owmKey"].is<const char*>() &&
+                   strlen(doc["owmKey"].as<const char*>()) >= sizeof(settingsRef->owmApiKey)) {
+            error = "Weather API key must be less than 64 characters.";
+        } else if (doc["geminiKey"].is<const char*>() &&
+                   strlen(doc["geminiKey"].as<const char*>()) >= sizeof(settingsRef->geminiApiKey)) {
+            error = "Gemini API key must be less than 64 characters.";
         }
         return error.isEmpty();
     }
@@ -166,7 +172,7 @@ namespace {
             "city", "timezone", "lat", "lon", "utcOff", "calcMethod",
             "asrSchool", "hijriOffset", "azanOn", "volume", "focusMin",
             "shortBrk", "longBrk", "pomCycles", "sunriseOff", "zawalOff",
-            "sunsetOff"
+            "sunsetOff", "owmKey", "geminiKey"
         };
         if (!hasOnlyKeys(doc.as<JsonObjectConst>(), settingKeys,
                          sizeof(settingKeys) / sizeof(settingKeys[0]))) {
@@ -213,6 +219,18 @@ namespace {
         if (doc["sunriseOff"].is<int>()) candidate.sunriseOffset = doc["sunriseOff"].as<uint8_t>();
         if (doc["zawalOff"].is<int>()) candidate.zawalOffset = doc["zawalOff"].as<uint8_t>();
         if (doc["sunsetOff"].is<int>()) candidate.sunsetOffset = doc["sunsetOff"].as<uint8_t>();
+        if (doc["owmKey"].is<const char*>()) {
+            const char* key = doc["owmKey"].as<const char*>();
+            if (strlen(key) > 0) {
+                strlcpy(candidate.owmApiKey, key, sizeof(candidate.owmApiKey));
+            }
+        }
+        if (doc["geminiKey"].is<const char*>()) {
+            const char* key = doc["geminiKey"].as<const char*>();
+            if (strlen(key) > 0) {
+                strlcpy(candidate.geminiApiKey, key, sizeof(candidate.geminiApiKey));
+            }
+        }
 
         if (!StorageManager::saveSettings(candidate)) {
             xSemaphoreGive(g_settingsMutex);
@@ -848,12 +866,8 @@ void init(Settings& settings) {
             }
             String ssid = doc["ssid"].as<String>();
             String password = doc["pass"].as<String>();
-            if (WifiManager::connectionInProgress()) {
-                request->send(409, "application/json", "{\"error\":\"A Wi-Fi connection attempt is already in progress.\"}");
-                return;
-            }
             if (!WifiManager::connectToNetwork(ssid, password)) {
-                request->send(503, "application/json", "{\"error\":\"Could not start the Wi-Fi connection. Try again shortly.\"}");
+                request->send(409, "application/json", "{\"error\":\"A new Wi-Fi credential test is already in progress, or the connection could not start.\"}");
                 return;
             }
             WifiManager::restartAfterConnection();

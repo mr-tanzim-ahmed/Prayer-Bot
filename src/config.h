@@ -159,8 +159,9 @@
 #define CACHE_CLEANUP_INTERVAL (24UL * 3600UL * 1000UL) // Run cleanup daily
 
 // ------------------------------------------------------------
-//  Surah Count
+//  Surah Count & AI Voice API
 // ------------------------------------------------------------
 #define TOTAL_SURAHS          114
+#define DEFAULT_GEMINI_API_KEY ""
 
 #endif // CONFIG_H

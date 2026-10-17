@@ -86,7 +86,7 @@ void loadDefaults(Settings& settings) {
     settings.sunsetOffset     = DEFAULT_SUNSET_OFFSET;
 
     settings.owmApiKey[0]     = '\0';
-    settings.geminiApiKey[0] = '\0';
+    strlcpy(settings.geminiApiKey, DEFAULT_GEMINI_API_KEY, sizeof(settings.geminiApiKey));
 }
 
 bool loadSettings(Settings& settings) {
@@ -190,7 +190,9 @@ bool loadSettings(Settings& settings) {
         strlcpy(loaded.owmApiKey, doc["owmKey"], sizeof(loaded.owmApiKey));
     if (doc["geminiKey"].is<const char*>())
         strlcpy(loaded.geminiApiKey, doc["geminiKey"], sizeof(loaded.geminiApiKey));
-    if (loaded.geminiApiKey[0] == '\0')
+    if (loaded.geminiApiKey[0] == '\0') {
+        strlcpy(loaded.geminiApiKey, DEFAULT_GEMINI_API_KEY, sizeof(loaded.geminiApiKey));
+    }
     if (loaded.cityName[0] == '\0' || loaded.timezone[0] == '\0') {
         Serial.println("[STORAGE] City and timezone cannot be empty; keeping safe defaults.");
         return false;
@@ -319,8 +321,23 @@ bool writeFile(const char* path, const String& content) {
                    memcmp(buffer, content.c_str() + offset, count) == 0;
         offset += count;
     }
-    if (!verified || !LittleFS.rename(temporaryPath.c_str(), path)) {
-        Serial.print("[STORAGE] Could not verify or replace: ");
+    if (verification) {
+        verification.close();
+    }
+    if (!verified) {
+        Serial.print("[STORAGE] Verification failed: ");
+        Serial.println(path);
+        LittleFS.remove(temporaryPath.c_str());
+        xSemaphoreGive(storageMutex);
+        return false;
+    }
+    bool renamed = LittleFS.rename(temporaryPath.c_str(), path);
+    if (!renamed) {
+        LittleFS.remove(path);
+        renamed = LittleFS.rename(temporaryPath.c_str(), path);
+    }
+    if (!renamed) {
+        Serial.print("[STORAGE] Could not replace: ");
         Serial.println(path);
         LittleFS.remove(temporaryPath.c_str());
         xSemaphoreGive(storageMutex);
