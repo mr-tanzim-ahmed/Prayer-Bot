@@ -8,7 +8,7 @@
 
 Below is the schematic of the hardware connections used in the project.
 
-[![Circuit Diagram](circuit_image.png)](HARDWARE_CONNECTIONS.md)
+[![Circuit Diagram](circuit_image.svg)](HARDWARE_CONNECTIONS.md)
 
 For an interactive view and to edit the circuit, visit the online designer:
 
