@@ -9,6 +9,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#065f46">
   <title>Prayer-Bot | Islamic Companion &amp; Focus Dashboard</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%230f766e'/></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%230f766e'/></svg>">
   <style>
     :root {
       --primary: #0f766e;
@@ -731,6 +733,19 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     
     /* Floating Save Bar */
     .savebar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 90;
+  margin: 12px auto 0;
+  max-width: 560px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(15,118,110,0.15);
+}
       position: sticky;
       bottom: 16px;
       z-index: 90;

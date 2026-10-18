@@ -27,6 +27,13 @@ void draw(const DailyPrayers& prayers, const NextPrayerInfo& next) {
     oled.setFont(u8g2_font_6x10_tf);
     oled.drawStr(2, 9, "ALL PRAYERS");
     oled.drawHLine(0, 12, SCREEN_WIDTH);
+    // Page indicator (top‑right corner)
+    oled.setFont(u8g2_font_5x8_tf);
+    {
+        const char* pageStr = "2/7";
+        int pw = oled.getUTF8Width(pageStr);
+        oled.drawStr(SCREEN_WIDTH - pw - 4, 9, pageStr);
+    }
 
     oled.setFont(u8g2_font_5x8_tf);
 
@@ -60,7 +67,7 @@ void draw(const DailyPrayers& prayers, const NextPrayerInfo& next) {
         y += 8;
     }
 
-    // Page indicator
+    // Page indicator (removed)
     oled.setFont(u8g2_font_5x8_tf);
     oled.drawStr(108, 63, "2/7");
 
