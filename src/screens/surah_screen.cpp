@@ -35,55 +35,41 @@ void draw() {
     const unsigned long now = millis();
 
     if (VoiceManager::isListening()) {
-        ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 32);
+        ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 45);
         const int cx = 64;
-        const int cy = 31;
-        const uint8_t pulse = static_cast<uint8_t>((now / 350) % 3);
-        oled.drawCircle(cx, cy - 1, 12 + pulse);
-        oled.drawRBox(cx - 3, cy - 9, 7, 11, 3);
-        oled.drawCircle(cx, cy - 1, 7,
+        const int cy = 34;
+        const uint8_t pulse = static_cast<uint8_t>((now / 280) % 3);
+        oled.drawCircle(cx, cy, 12 + pulse);
+        oled.drawRBox(cx - 3, cy - 8, 7, 10, 3);
+        oled.drawCircle(cx, cy, 7,
                         U8G2_DRAW_LOWER_LEFT | U8G2_DRAW_LOWER_RIGHT);
-        oled.drawVLine(cx, cy + 6, 4);
-        oled.drawHLine(cx - 5, cy + 10, 11);
-
-        const uint8_t frame = static_cast<uint8_t>((now / 260) % 6);
-        const uint8_t heights[6][9] = {
-            {3, 6, 10, 6, 12, 8, 4, 9, 3},
-            {7, 11, 5, 9, 4, 12, 6, 10, 5},
-            {4, 8, 12, 5, 10, 4, 11, 6, 9},
-            {10, 4, 7, 12, 6, 9, 3, 11, 5},
-            {5, 9, 3, 8, 12, 5, 10, 4, 7},
-            {8, 5, 11, 4, 7, 12, 5, 9, 3}
-        };
-        for (int i = 0; i < 4; ++i) {
-            const int height = heights[frame][i];
-            oled.drawVLine(35 + i * 5, cy - height / 2, height);
-            const int oppositeHeight = heights[frame][8 - i];
-            oled.drawVLine(73 + i * 5, cy - oppositeHeight / 2,
-                           oppositeHeight);
-        }
+        oled.drawVLine(cx, cy + 7, 4);
+        oled.drawHLine(cx - 5, cy + 11, 11);
 
         oled.setFont(u8g2_font_6x12_tf);
-        DisplayManager::drawCenteredText("I'm listening...", 54);
-
+        DisplayManager::drawCenteredText("Listening...", 54);
         oled.setFont(u8g2_font_5x8_tf);
-        DisplayManager::drawCenteredText("English / Bangla", 63);
+        DisplayManager::drawCenteredText("Speak in English / Bangla", 62);
 
     } else if (VoiceManager::isProcessing()) {
-        ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 34);
-        const uint8_t dotCount = (now / 350) % 4;
-        char procText[32];
-        snprintf(procText, sizeof(procText), "Recognizing%.*s", dotCount, "...");
-
+        ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 45);
+        const int cx = 64;
+        const int cy = 34;
+        static const int8_t spinnerX[8] = {0, 8, 12, 8, 0, -8, -12, -8};
+        static const int8_t spinnerY[8] = {-12, -8, 0, 8, 12, 8, 0, -8};
+        const uint8_t activeDot = static_cast<uint8_t>((now / 100) % 8);
+        for (uint8_t i = 0; i < 8; ++i) {
+            const int x = cx + spinnerX[i];
+            const int y = cy + spinnerY[i];
+            if (i == activeDot)
+                oled.drawDisc(x, y, 3);
+            else
+                oled.drawDisc(x, y, 1);
+        }
         oled.setFont(u8g2_font_6x12_tf);
-        DisplayManager::drawCenteredText(procText, 33);
-
-        const int barW = 28 + ((now / 120) % 68);
-        oled.drawRFrame(15, 39, 98, 7, 3);
-        oled.drawRBox(16, 40, barW, 5, 2);
-
+        DisplayManager::drawCenteredText("Recognizing voice", 55);
         oled.setFont(u8g2_font_5x8_tf);
-        DisplayManager::drawCenteredText("Gemini is thinking", 63);
+        DisplayManager::drawCenteredText("Gemini is processing", 62);
 
     } else if (VoiceManager::isPlaying()) {
         const uint8_t surah = VoiceManager::getPlayingSurah();

@@ -100,12 +100,26 @@ void drawHLine(int x, int y, int w) {
 
 void showStartupScreen() {
     if (!oledAvailable) return;
+
     clearBuffer();
-    oled.setFont(u8g2_font_6x10_tf);
-    drawCenteredText("PRAYER-BOT", 16);
+    oled.drawRFrame(2, 2, SCREEN_WIDTH - 4, SCREEN_HEIGHT - 4, 9);
+    oled.setFont(u8g2_font_helvB12_tf);
+    drawCenteredText("Assalamualaikum", 31);
+    oled.drawHLine(24, 38, SCREEN_WIDTH - 48);
     oled.setFont(u8g2_font_5x8_tf);
-    drawCenteredText("Islamic Personal Assistant", 31);
-    drawCenteredText("Starting...", 46);
+    drawCenteredText("Peace be upon you", 51);
+    sendBuffer();
+    delay(2000);
+
+    clearBuffer();
+    oled.drawRFrame(2, 2, SCREEN_WIDTH - 4, SCREEN_HEIGHT - 4, 9);
+    oled.setFont(u8g2_font_6x10_tf);
+    drawCenteredText("PRAYER-BOT", 20);
+    oled.drawHLine(24, 25, SCREEN_WIDTH - 48);
+    oled.setFont(u8g2_font_5x8_tf);
+    drawCenteredText("Islamic Personal", 39);
+    drawCenteredText("Assistant", 48);
+    drawCenteredText("Starting...", 57);
     sendBuffer();
 }
 

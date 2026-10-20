@@ -7,6 +7,7 @@
 Prayer-Bot brings prayer times, a Hijri calendar, weather, Quran audio, Dhikr, and Pomodoro focus sessions together in a DIY project you can build, understand, and customize.
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32--S3-orange?logo=platformio)](https://platformio.org/)
+[![Version](https://img.shields.io/badge/version-1.0.1-blue)](https://github.com/mr-tanzim-ahmed/Prayer-Bot/releases/tag/v1.0.1)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
 [![Framework: Arduino](https://img.shields.io/badge/Framework-Arduino-00979D?logo=arduino&logoColor=white)](https://docs.platformio.org/en/latest/frameworks/arduino.html)
 [![Flash: 16 MB](https://img.shields.io/badge/Flash-16%20MB-5965e0)](platformio.ini)

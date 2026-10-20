@@ -113,6 +113,7 @@ void setup() {
     Serial.println();
     Serial.println("========================================");
     Serial.println("   PRAYER-BOT");
+    Serial.println("   Version " PROJECT_VERSION);
     Serial.println("   Islamic Personal Assistant");
     Serial.println("========================================");
 

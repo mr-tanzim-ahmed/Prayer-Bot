@@ -109,8 +109,9 @@ namespace {
     constexpr uint32_t BEEP_GAP_MS = 200;
     constexpr uint32_t POMODORO_BEEP_LENGTH_MS = 250;
     constexpr int16_t BEEP_AMPLITUDE = 9000;
-    constexpr uint32_t SCREEN_CHANGE_BEEP_LENGTH_MS = 90;
-    constexpr int16_t SCREEN_CHANGE_BEEP_AMPLITUDE = 1800;
+    constexpr uint32_t SCREEN_CHANGE_BEEP_LENGTH_MS = 130;
+    constexpr int16_t SCREEN_CHANGE_BEEP_AMPLITUDE = 6000;
+    constexpr float SCREEN_CHANGE_BEEP_GAIN = 0.20f;
     constexpr size_t AUDIO_SAMPLES_PER_UPDATE = 256;
 
     volatile bool playing = false;
@@ -118,6 +119,7 @@ namespace {
     volatile bool screenChangeBeepPending = false;
     bool pomodoroBeepActive = false;
     bool screenChangeBeepActive = false;
+    bool screenChangeGainReduced = false;
     bool audioReady = false;
     bool outputStarted = false;
     bool quranActive = false;
@@ -448,6 +450,11 @@ void update() {
         now - screenChangeBeepStartedMs >= SCREEN_CHANGE_BEEP_LENGTH_MS) {
         screenChangeBeepActive = false;
     }
+    if (screenChangeGainReduced && !screenChangeBeepActive &&
+        !screenChangeBeepPending) {
+        out->SetGain(static_cast<float>(currentVolume) / 100.0f);
+        screenChangeGainReduced = false;
+    }
     const bool beepOn = playing
         ? isBeepOn(now - alarmStartedMs)
         : (pomodoroBeepActive || screenChangeBeepActive);
@@ -509,6 +516,8 @@ void playScreenChangeBeep() {
             return;
         }
     }
+    out->SetGain(SCREEN_CHANGE_BEEP_GAIN);
+    screenChangeGainReduced = true;
     screenChangeBeepPending = true;
 }
 

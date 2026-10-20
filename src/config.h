@@ -10,6 +10,8 @@
 // Central configuration for hardware, timing, APIs and defaults.
 // ============================================================
 
+#define PROJECT_VERSION "1.0.1"
+
 // ------------------------------------------------------------
 // Hardware Pin Assignments
 // ------------------------------------------------------------

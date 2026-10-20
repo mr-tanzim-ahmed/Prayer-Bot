@@ -703,6 +703,12 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       border-color: var(--primary);
       animation: voice-pulse 1s ease-in-out infinite;
     }
+    #browserVoiceButton { touch-action: none; user-select: none; }
+    #browserVoiceButton.holding {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
     .voice-bars {
       display: flex;
       align-items: center;
@@ -1145,14 +1151,14 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"></path></svg>
           </div>
           <div>
-            <div class="assistant-greeting">Assalamu alaikum! What would you like to hear?</div>
+            <div class="assistant-greeting">Press and hold to speak. Release to recognize and play.</div>
             <div class="voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
           </div>
         </div>
         <div id="browserVoiceStatus" class="assistant-result" role="status" aria-live="polite">Ready. Ask for a Surah or the Prayer-Bot Azan alarm.</div>
         <div class="actions">
           <select id="voiceLanguage" data-requires-wifi aria-label="Voice language" style="max-width:150px;min-height:44px"><option value="en-US">English</option><option value="bn-BD">বাংলা (Bangla)</option></select>
-          <button id="browserVoiceButton" type="button" data-requires-wifi onclick="listenForSurah()" style="min-height:44px">🎙 Speak</button>
+          <button id="browserVoiceButton" type="button" data-requires-wifi style="min-height:44px">🎙 Hold to speak</button>
           <button id="browserVoiceCancel" type="button" onclick="cancelBrowserVoice()" style="min-height:44px" hidden>Cancel</button>
         </div>
         <div class="assistant-search">
@@ -1165,7 +1171,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <div class="field" style="margin-top:16px">
         <label for="quranOutput">Audio Playback Destination</label>
         <select id="quranOutput" data-requires-wifi>
-          <option value="device">🔊 Prayer-Bot Device Speaker</option>
+          <option value="device" selected>🔊 Prayer-Bot Device Speaker (default)</option>
           <option value="phone">📱 This Phone / Browser</option>
         </select>
       </div>
@@ -1987,9 +1993,15 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   let browserRecognition = null;
   let voiceAttemptGeneration = 0;
+  let voiceButtonHeld = false;
+  let voiceProcessingSpokenResult = false;
+  let voiceSessionTranscript = '';
+  let voiceCapturedTranscript = '';
+  let voiceCaptureError = '';
   function setBrowserVoiceState(listening, text, error = false) {
     byId('voiceOrb')?.classList.toggle('listening', listening);
-    byId('browserVoiceButton').disabled = listening || !routerWifiConnected;
+    byId('browserVoiceButton').disabled =
+      (!voiceButtonHeld && listening) || !routerWifiConnected;
     byId('assistantAskButton').disabled = listening || !routerWifiConnected;
     byId('browserVoiceCancel').hidden = !listening;
     put('browserVoiceStatus', text);
@@ -2177,71 +2189,188 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     }
   }
 
-  let processingSpokenResult = false;
-  async function listenForSurah() {
-    const attempt = ++voiceAttemptGeneration;
-    setBrowserVoiceState(true, 'Checking router connection…');
-    try {
-      await ensureRouterConnection();
-    } catch(e) {
+  function startBrowserRecognition(attempt) {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition || attempt !== voiceAttemptGeneration || !voiceButtonHeld) return;
+
+    const recognition = new Recognition();
+    browserRecognition = recognition;
+    voiceSessionTranscript = '';
+    recognition.lang = byId('voiceLanguage').value;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onstart = () => {
+      if (attempt === voiceAttemptGeneration) {
+        setBrowserVoiceState(true, 'Listening — release to recognize your request…');
+      }
+    };
+    recognition.onresult = event => {
       if (attempt !== voiceAttemptGeneration) return;
-      setBrowserVoiceState(false, e.message, true);
+      const finalParts = [];
+      const interimParts = [];
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        const phrase = result[0]?.transcript?.trim();
+        if (!phrase) continue;
+        if (result.isFinal) finalParts.push(phrase);
+        else interimParts.push(phrase);
+      }
+      voiceSessionTranscript = finalParts.join(' ').trim();
+      const spokenSoFar = [voiceCapturedTranscript, voiceSessionTranscript]
+        .filter(Boolean).join(' ').trim();
+      const preview = [spokenSoFar, interimParts.join(' ')]
+        .filter(Boolean).join(' ').trim();
+      if (preview) setBrowserVoiceState(true, `I heard: “${preview}” — release to finish.`);
+    };
+    recognition.onerror = event => {
+      if (attempt !== voiceAttemptGeneration) return;
+      voiceCaptureError = event.error === 'not-allowed'
+        ? 'Allow microphone permission and try again.'
+        : `Speech error (${event.error}).`;
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        voiceButtonHeld = false;
+        voiceProcessingSpokenResult = false;
+        byId('browserVoiceButton').classList.remove('holding');
+        setBrowserVoiceState(false, voiceCaptureError, true);
+      } else if (event.error === 'no-speech') {
+        voiceCaptureError = '';
+      }
+    };
+    recognition.onend = () => {
+      if (attempt !== voiceAttemptGeneration) return;
+      if (browserRecognition === recognition) browserRecognition = null;
+      if (voiceSessionTranscript) {
+        voiceCapturedTranscript = [voiceCapturedTranscript, voiceSessionTranscript]
+          .filter(Boolean).join(' ').trim();
+      }
+      voiceSessionTranscript = '';
+
+      if (voiceCaptureError) {
+        voiceButtonHeld = false;
+        voiceProcessingSpokenResult = false;
+        setBrowserVoiceState(false, voiceCaptureError, true);
+        return;
+      }
+      if (voiceButtonHeld) {
+        setBrowserVoiceState(true, 'Listening — release to recognize your request…');
+        window.setTimeout(() => {
+          if (attempt === voiceAttemptGeneration && voiceButtonHeld) {
+            startBrowserRecognition(attempt);
+          }
+        }, 150);
+        return;
+      }
+      if (voiceProcessingSpokenResult) return;
+      processCapturedVoice(attempt);
+    };
+    try {
+      recognition.start();
+    } catch(e) {
+      if (attempt === voiceAttemptGeneration) {
+        voiceButtonHeld = false;
+        byId('browserVoiceButton').classList.remove('holding');
+        setBrowserVoiceState(false, 'Could not start microphone.', true);
+      }
+    }
+  }
+
+  function processCapturedVoice(attempt) {
+    if (attempt !== voiceAttemptGeneration || voiceButtonHeld ||
+        voiceProcessingSpokenResult) return;
+    const transcript = voiceCapturedTranscript;
+    voiceCapturedTranscript = '';
+    if (!transcript) {
+      setBrowserVoiceState(false, 'No speech detected. Press and hold, then speak.', true);
       return;
     }
+    voiceProcessingSpokenResult = true;
+    byId('assistantQuery').value = transcript;
+    setBrowserVoiceState(true, 'Recognizing your request…');
+    ensureRouterConnection()
+      .then(() => handleAssistantQuery(transcript, attempt))
+      .catch(error => {
+        if (attempt === voiceAttemptGeneration) {
+          setBrowserVoiceState(false, error.message, true);
+        }
+      })
+      .finally(() => {
+        if (attempt === voiceAttemptGeneration) voiceProcessingSpokenResult = false;
+      });
+  }
+
+  function beginVoiceCapture() {
+    if (voiceButtonHeld || voiceProcessingSpokenResult || !routerWifiConnected) return;
+    const attempt = ++voiceAttemptGeneration;
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) {
-      if (attempt !== voiceAttemptGeneration) return;
       setBrowserVoiceState(false, 'Speech recognition not supported in this browser.', true);
-      return;
+      return false;
     }
     if (browserRecognition) browserRecognition.abort();
-    browserRecognition = new Recognition();
-    browserRecognition.lang = byId('voiceLanguage').value;
-    browserRecognition.continuous = false;
-    browserRecognition.interimResults = true;
-    browserRecognition.onstart = () => {
-      if (attempt === voiceAttemptGeneration) setBrowserVoiceState(true, 'Listening — ask for a Surah or Azan alarm…');
-    };
-    browserRecognition.onresult = async event => {
-      if (attempt !== voiceAttemptGeneration) return;
-      const result = event.results[event.results.length - 1];
-      const transcript = result[0].transcript;
-      setBrowserVoiceState(true, `I heard: “${transcript}”`);
-      if (!result.isFinal) return;
-      processingSpokenResult = true;
+    voiceButtonHeld = true;
+    voiceProcessingSpokenResult = false;
+    voiceCapturedTranscript = '';
+    voiceSessionTranscript = '';
+    voiceCaptureError = '';
+    byId('browserVoiceButton').classList.add('holding');
+    setBrowserVoiceState(true, 'Starting microphone… keep holding to speak.');
+    startBrowserRecognition(attempt);
+    return true;
+  }
+
+  function finishVoiceCapture() {
+    if (!voiceButtonHeld) return;
+    voiceButtonHeld = false;
+    byId('browserVoiceButton').classList.remove('holding');
+    if (browserRecognition) {
+      setBrowserVoiceState(true, 'Finishing speech recognition…');
       try {
-        await handleAssistantQuery(transcript, attempt);
+        browserRecognition.stop();
       } catch(e) {
-        if (attempt === voiceAttemptGeneration) setBrowserVoiceState(false, e.message, true);
-      } finally {
-        if (attempt === voiceAttemptGeneration) processingSpokenResult = false;
+        browserRecognition.abort();
       }
-    };
-    browserRecognition.onerror = event => {
-      if (attempt !== voiceAttemptGeneration) return;
-      processingSpokenResult = false;
-      const reason = event.error === 'not-allowed' ? 'Allow microphone permission and try again.' : `Speech error (${event.error}).`;
-      setBrowserVoiceState(false, reason, true);
-    };
-    browserRecognition.onend = () => {
-      if (attempt === voiceAttemptGeneration && !processingSpokenResult && byId('voiceOrb').classList.contains('listening')) {
-        setBrowserVoiceState(false, 'No Surah name detected. Try again.', true);
-      }
-    };
-    try {
-      browserRecognition.start();
-    } catch(e) {
-      setBrowserVoiceState(false, 'Could not start microphone.', true);
+    } else if (!voiceCaptureError) {
+      processCapturedVoice(voiceAttemptGeneration);
     }
   }
 
   function cancelBrowserVoice() {
     ++voiceAttemptGeneration;
-    processingSpokenResult = false;
+    voiceButtonHeld = false;
+    voiceProcessingSpokenResult = false;
+    voiceSessionTranscript = '';
+    voiceCapturedTranscript = '';
+    voiceCaptureError = '';
+    byId('browserVoiceButton').classList.remove('holding');
     if (browserRecognition) browserRecognition.abort();
     browserRecognition = null;
     setBrowserVoiceState(false, 'Voice input cancelled.');
   }
+  const browserVoiceButton = byId('browserVoiceButton');
+  browserVoiceButton.addEventListener('pointerdown', event => {
+    if (event.button !== undefined && event.button !== 0) return;
+    event.preventDefault();
+    if (browserVoiceButton.setPointerCapture) {
+      browserVoiceButton.setPointerCapture(event.pointerId);
+    }
+    beginVoiceCapture();
+  });
+  browserVoiceButton.addEventListener('pointerup', finishVoiceCapture);
+  browserVoiceButton.addEventListener('pointercancel', finishVoiceCapture);
+  browserVoiceButton.addEventListener('lostpointercapture', finishVoiceCapture);
+  browserVoiceButton.addEventListener('keydown', event => {
+    if (event.repeat || (event.key !== ' ' && event.key !== 'Enter')) return;
+    event.preventDefault();
+    beginVoiceCapture();
+  });
+  browserVoiceButton.addEventListener('keyup', event => {
+    if (event.key === ' ' || event.key === 'Enter') {
+      event.preventDefault();
+      finishVoiceCapture();
+    }
+  });
+  window.addEventListener('pointerup', finishVoiceCapture);
+  window.addEventListener('blur', finishVoiceCapture);
   byId('assistantQuery').addEventListener('keydown', event => {
     if (event.key === 'Enter') {
       event.preventDefault();
