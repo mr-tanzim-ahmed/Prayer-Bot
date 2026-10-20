@@ -1,227 +1,273 @@
-# Prayer-Bot: Smart Islamic Personal Assistant (ESP32‑S3)
+<div align="center">
 
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+# Prayer-Bot
 
-[📄 **README**](README.md) | [🔧 **Hardware Connections**](HARDWARE_CONNECTIONS.md) | [📐 **Circuit Diagram**](CIRCUIT.md) | [📜 **License**](LICENSE)
+### An open-source ESP32-S3 Islamic prayer clock with a Quran assistant and focus dashboard.
 
-**Prayer‑Bot** is an open-source ESP32‑S3 prayer clock and personal dashboard for daily prayer times, Hijri dates, Quran listening, focus sessions, and local weather. Its OLED screens and web dashboard bring those everyday tools together in one DIY project.
+Prayer-Bot brings prayer times, a Hijri calendar, weather, Quran audio, Dhikr, and Pomodoro focus sessions together in a DIY project you can build, understand, and customize.
 
----
+[![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32--S3-orange?logo=platformio)](https://platformio.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
+[![Framework: Arduino](https://img.shields.io/badge/Framework-Arduino-00979D?logo=arduino&logoColor=white)](https://docs.platformio.org/en/latest/frameworks/arduino.html)
+[![Flash: 16 MB](https://img.shields.io/badge/Flash-16%20MB-5965e0)](platformio.ini)
+[![PSRAM: 8 MB](https://img.shields.io/badge/PSRAM-8%20MB-5965e0)](platformio.ini)
 
-## 🌟 Key Features
+[Get started](#-get-started) · [Explore features](#-what-it-can-do) · [Hardware guide](HARDWARE_CONNECTIONS.md) · [Circuit diagram](CIRCUIT.md)
 
-- **🕌 Automated Prayer Times & Azan alert** – Monthly schedules from Aladhan refresh when the Prayer Focus screen opens and every 30 minutes while online, with an OLED sync indicator. A repeating I2S beep alert stops on the touch sensor or a shake. Recorded Adhan audio is not included in this build.
-- **🌙 Hijri Calendar & Event Tracker** – Current Hijri date alongside the local Gregorian date, Ramadan countdown, major holidays, and custom offset handling.
-- **⏱️ Pomodoro Focus Timer** – On the Pomodoro screen, hold the touch sensor for 3 seconds or shake the device to start an idle timer or pause/resume an active timer. A short tap while paused resumes the timer and advances to the next screen; after focus, a short tap starts the break and advances screens. The OLED shows a phase indicator, remaining time, animated status, and session progress.
-- **📈 Weekly Pomodoro History** – Dashboard graph of daily sessions started and completed focus minutes for the last seven days. Daily totals are persisted in LittleFS; only completed focus sessions count toward focus minutes.
-- **🌤️ Live Weather & AQI** – The 1.3-inch OLED rotates through OpenWeatherMap air temperature, condition and humidity (3 seconds), its own 1–5 air-quality index and PM2.5 (2 seconds), then pressure and wind speed (3 seconds). Readings use the configured coordinates and refresh every 30 minutes; phone apps may differ because of their provider, location, update time, or use of feels-like temperature.
-- **🎧 Quran Voice Assistant** – Ask by voice or text for a Surah in English or Bangla, or request the Prayer-Bot Azan notification tone. Gemini interprets dashboard requests through the ESP32; the saved key never enters the browser. Choose phone or device-speaker playback. Phone playback can use MP3Quran's timed recitations and show the current ayah; recorded Adhan audio is not included.
-- **📱 Local Web Dashboard** – Configure location, prayer calculation, prohibited-time offsets, azan volume, and Pomodoro timings; view device/prayer/weather status and control screens, Pomodoro, zikir counting, Surah playback, and the active alarm from a phone or computer.
-- **📳 Shake Controls** – The MPU6050 dismisses an active Azan alert; on the Pomodoro screen it starts or pauses/resumes the timer, and on the Surah screen it stops active playback.
-- **🕋 Dhikr Screen** – Five English transliterations with their English meanings rotate every 5 seconds; touch increments the counter. The screen returns to the main screen after 100 seconds.
-- **👆 Single Touch Navigation** – The GPIO4 touch sensor advances to the next screen on each touch with a quiet speaker beep.
-- **🖥️ Seven OLED screens** – Prayer Focus, all prayer times, clock/calendar, weather, Pomodoro, Dhikr, and Quran use a consistent, compact 1.3-inch layout with clear spacing and no screen-number badges.
-- **🧩 Modular Firmware** – Features are separated into managers and display screens, with shared configuration and data types.
+<br>
 
----
+<a href="CIRCUIT.md"><img src="circuit_image.svg" width="420" alt="Prayer-Bot circuit overview"></a>
 
-## 🗂️ Project structure
+<sub>ESP32-S3 prayer clock with OLED display, touch controls, motion sensing, and audio · <a href="CIRCUIT.md">Explore the circuit and wiring</a></sub>
 
-Firmware code lives in `src/`. Managers keep feature logic separate from the entry point, and each manager currently uses a matching `.h` interface and `.cpp` implementation. Screen rendering is grouped in `src/screens/`.
-
-```text
-Prayer-Bot/
-├── platformio.ini              # PlatformIO board, framework, and dependencies
-├── README.md                    # Project overview and setup
-├── HARDWARE_CONNECTIONS.md    # Wiring guide
-├── CIRCUIT.md                   # Circuit overview and wiring reference
-├── circuit_image.svg            # Circuit diagram illustration
-├── data/                        # LittleFS image input (runtime files are generated)
-└── src/
-    ├── main.cpp                 # Startup, FreeRTOS tasks, and module coordination
-    ├── config.h                 # Hardware pins, limits, endpoints, and defaults
-    ├── secrets.h                # Local-only API keys and optional router defaults (ignored by Git)
-    ├── types.h                  # Shared settings, state, and data models
-    ├── *_manager.h/.cpp         # Feature services with narrow module interfaces
-    ├── dashboard_html.h         # Embedded dashboard markup, styles, and browser logic
-    └── screens/                 # OLED views and shared rendering helpers
-```
-
-**Where to make changes**
-
-| Feature or concern | Main files |
-|---|---|
-| Prayer schedules and prohibited-time windows | `src/prayer_manager.h`, `src/prayer_manager.cpp` |
-| Azan and Pomodoro notification sounds | `src/azan_manager.h`, `src/azan_manager.cpp` |
-| Pomodoro state and durations | `src/pomodoro_manager.h`, `src/pomodoro_manager.cpp` |
-| Pomodoro weekly totals | `src/pomodoro_stats.h`, `src/pomodoro_stats.cpp` |
-| Dashboard UI and its JSON API | `src/dashboard_html.h`, `src/web_server_manager.h`, `src/web_server_manager.cpp` |
-| Persistent settings and cache | `src/storage_manager.h`, `src/storage_manager.cpp`, `src/cache_manager.h`, `src/cache_manager.cpp` |
-| Voice recognition & Al-Quran assistant | `src/voice_manager.h`, `src/voice_manager.cpp`, `src/screens/surah_screen.h/.cpp` |
-| Private API-key defaults and online service configuration | `src/config.h`, `src/secrets.h`, `src/storage_manager.cpp` |
-| OLED screen presentation | `src/screens/` and `src/screen_router.h`, `src/screen_router.cpp` |
-| Shared settings, screen IDs, and defaults | `src/types.h`, `src/config.h` |
-| Startup, task scheduling, and integration | `src/main.cpp` |
-
-Keep feature behavior in its manager or screen module where practical; use `main.cpp` to initialize services and coordinate their FreeRTOS tasks. Keep interfaces in the corresponding headers and update this map when files or responsibilities move.
+</div>
 
 ---
 
-## 🛠️ Hardware Parts
+## ✨ Features
 
-| Component | Description |
-|-----------|-------------|
-| **ESP32‑S3 Development Board** (N16R8) | 240 MHz dual‑core MCU with 8 MB PSRAM and 16 MB flash – handles Wi‑Fi, audio, and graphics. PlatformIO uses the DevKitC-1 base profile with explicit N16R8 memory and flash overrides.
-| **1.3" OLED Display (I2C, SSD1306/SH1106)** | Crisp monochrome UI for time, prayer list, weather, and Dhikr screen.
-| **MAX98357A I2S Audio Amplifier** + small speaker | Plays repeating prayer/Pomodoro beeps and streamed MP3 Quran recitation over I2S.
-| **MPU6050 / GY‑521 IMU (I2C)** | 6‑axis accelerometer & gyroscope for shake detection; shares the I2C bus with the OLED. |
-| **TTP223B Capacitive Touch Sensor** | GPIO 4 advances to the next screen; it also counts Dhikr, starts a waiting Pomodoro break, and dismisses Azan. |
-| **INMP441 I2S Microphone (optional)** | Captures a three-second Surah voice-selection clip for Gemini recognition when configured. |
-| **Micro‑USB Power / 5 V Power Supply** | Powers the board and peripherals.
-| **Optional: SD Card (Micro‑SD slot)** | Can be added for large log storage; the core uses LittleFS on internal flash.
+Prayer-Bot is a DIY **ESP32-S3 prayer clock and Islamic personal assistant**. Use its OLED and touch sensor on your desk, or open its local web dashboard from a phone or computer on the same network.
 
----
+| On the device | In the web dashboard | Built for developers |
+|---|---|---|
+| 🕌 Prayer focus and daily prayer schedule | 📱 Local dashboard and device controls | ⚙️ Modular C++ managers and screens |
+| 🗓️ Clock, Gregorian/Hijri calendar, and events | 📍 Location, calculation, and device settings | 🧵 FreeRTOS tasks for display, network, and audio |
+| 🌤️ Weather and air quality | 📈 Seven-day Pomodoro history | 💾 LittleFS settings and cached data |
+| ⏱️ Pomodoro focus timer and Dhikr counter | 🎧 Quran Surah requests by voice or text | 🔌 Aladhan, OpenWeatherMap, Gemini, and MP3Quran |
+| 🔊 Azan notification tone and Quran audio | 🕹️ Screen, timer, Dhikr, and audio controls | 🔐 API keys stay on the device |
 
-## 🔑 ESP32-S3 API Key Setup
+**Seven OLED screens:** Prayer Focus · All Prayers · Clock & Calendar · Weather · Pomodoro · Dhikr · Quran.
 
-Gemini powers Surah-name recognition in the Quran assistant, while OpenWeatherMap provides weather and air-quality readings. Add those credentials to a private `src/secrets.h` file before building the firmware. Prayer times and Quran audio metadata do not need keys from you.
+> **Audio note:** The Azan alert is a repeating notification tone. Recorded Adhan audio is not included. The Quran assistant identifies Surah requests; it does not provide Quran translation, tafsir, or free-form Quran-text search.
 
-### Summary of APIs Used
+## 🚀 Build your Prayer-Bot
 
-| Service / Feature | Provider | Purpose | Where to Configure |
-|---|---|---|---|
-| **Quran Assistant** | [Google Gemini](https://aistudio.google.com/) | Identifies spoken or typed Surah requests and Azan-notification commands | Private `src/secrets.h` |
-| **Live Weather & Air Quality** | [OpenWeatherMap](https://openweathermap.org/api) | Current temperature, humidity, condition, AQI (1–5), and pollutant concentrations | Private `src/secrets.h` |
-| **Prayer Times & Timetable** | [Aladhan API](https://aladhan.com/prayer-times-api) | Monthly accurate calculation for Fajr, Dhuhr, Asr, Maghrib, Isha | Automatic (Free, no key needed) |
-| **Air Quality Index (AQI)** | [OpenWeatherMap Air Pollution API](https://openweathermap.org/api/air-pollution) | AQI (1–5), PM2.5, PM10, and pollutant concentrations | Uses the OpenWeatherMap API key |
-| **Device Quran Audio** | [MP3Quran v3 API](https://www.mp3quran.net/eng/api) and CDN | Reciter metadata selects the device's recitation; an alternate audio source is tried if needed | API metadata fetched automatically |
-| **Phone Quran Audio & Ayah Timing** | [MP3Quran Timing API](https://www.mp3quran.net/eng/timing-api) | Select a timed reciter and sync the phone player's progress to the current ayah | Loaded automatically when the device is online |
+Follow these steps to build and run the ESP32-S3 firmware. The [hardware guide](HARDWARE_CONNECTIONS.md) has the full wiring table; check it before connecting modules.
 
-The firmware uses the Timing API's `GET /ayat_timing/reads`, `GET /ayat_timing/soar?read=<id>`, and `GET /ayat_timing?surah=<number>&read=<id>` endpoints. Live validation confirmed the reads and chapter lists and returned millisecond ayah start/end ranges; the selected reciter's Surah MP3 URL was also checked. Timed ayah progress is for phone/browser playback only.
+### What you’ll need
 
-The dashboard assistant resolves a Surah name to its number and Arabic/API chapter entry, shows the matched Surah and playback state in the web UI, and starts the chosen phone or device-speaker output. It identifies Surahs; it does not provide Quran translation, tafsir, or free-form Quran-text search.
+- ESP32-S3 DevKitC-1 **N16R8** (16 MB flash, 8 MB PSRAM)
+- PlatformIO IDE in VS Code, or the PlatformIO CLI
+- USB data cable and the peripherals in the [hardware guide](HARDWARE_CONNECTIONS.md)
+- API keys for weather and Gemini-powered Surah recognition (see [private key setup](#-configure-api-keys))
 
----
+### 1. Open the project and add your private keys
 
-### 🔒 Configure private keys in `src/secrets.h`
-
-`src/config.h` includes `src/secrets.h`, and the firmware reads the default Gemini and OpenWeatherMap keys from it during startup. The repository includes [`src/secrets.h.example`](src/secrets.h.example) as a safe template. Copy it to **`src/secrets.h`** on your computer, then edit that private copy with your own keys. The real `secrets.h` file is excluded by `.gitignore`; the `.example` template is tracked so it can be shared safely with the project.
-
-#### Create your local secrets file
-
-From the repository root, run:
+Clone or download this repository, open its folder in VS Code, and create a local secrets file from the example:
 
 ```powershell
 Copy-Item src\secrets.h.example src\secrets.h
 ```
 
-Then open `src/secrets.h` and replace `"Your_gemini_key"` and `"Your_openweathermap_key"` with the keys issued by [Google AI Studio](https://aistudio.google.com/) and [OpenWeatherMap](https://openweathermap.org/api). Keep the quotation marks. These placeholder values are examples, not working credentials. Leave the router SSID and password empty if you plan to set up Wi-Fi from the device dashboard.
+Edit `src/secrets.h` and add your own API keys. **If the file already exists, do not overwrite it**—keep your current credentials. The [API key guide](#-configure-api-keys) explains which services need keys and how to protect them.
 
-**If `src/secrets.h` already exists, do not run the copy command:** it would replace your local file. Keep your existing keys and edit only the values you intend to change. Do not paste a key into this README, `config.h`, dashboard code, screenshots, or public logs.
+### 2. Build, upload, and view serial logs
 
-#### Setup checklist
+Open a terminal at the project root and run these commands with the PlatformIO CLI:
 
-1. Get a Gemini API key from [Google AI Studio](https://aistudio.google.com/) and an OpenWeatherMap API key from [OpenWeatherMap](https://openweathermap.org/api). Use the provider's current account and usage terms.
-2. If `src/secrets.h` is missing, copy `src/secrets.h.example` to `src/secrets.h`. If it already exists, **do not overwrite it**—preserve its existing keys and change only the values you intend to update.
-3. Replace the example API key strings with your own. Leave the router macros empty to join Wi-Fi using the setup dashboard, or fill them with local router credentials for first-boot auto-connect.
-4. Build and upload the firmware using PlatformIO. The key defaults are compiled into the device; the dashboard does not display or edit them. See [Development Setup](#development-setup-vs-code-platformio) for the build and upload steps.
-5. Check that Git is ignoring your local file before committing: run `git check-ignore src/secrets.h`. Do not force-add it or place credentials in any tracked file.
+```sh
+pio run
+pio run --target upload
+pio device monitor -b 115200
+```
 
-If a real key is accidentally committed or shared publicly, revoke it with its provider and create a replacement. The device's web dashboard and `/api/settings` endpoint do not expose or accept API keys.
+Connect the ESP32-S3 to your computer with a USB data cable before uploading. The serial monitor runs at **115200 baud** and shows startup and connection messages. Close the monitor before you upload again.
 
-> [!CAUTION]
-> Treat API keys like passwords. Do not share them in chat, issue comments, commits, or screenshots. Rotate any key that may have been exposed.
+<details>
+<summary><strong>Prefer VS Code buttons?</strong></summary>
 
----
+Prefer a graphical workflow? Install the **PlatformIO IDE** extension in VS Code, open this repository folder, then use the **Build**, **Upload**, and **Serial Monitor** actions. The monitor baud rate is **115200**.
 
+PlatformIO is the canonical build system and installs the pinned dependencies from [`platformio.ini`](platformio.ini). The root `Prayer-Bot.ino` is an Arduino IDE entry point for the modular sources under `src/`, not a standalone single-file build.
 
+</details>
 
-### First-time setup
+### 3. Connect the device to Wi-Fi and open the dashboard
 
-1. Flash and power on the ESP32.
-2. On your phone or computer, open Wi-Fi settings and connect to the ESP32's **Prayer-Bot** setup hotspot (password **12345678**).
-3. Accept the **Sign in to network / Captive portal** notification; the setup dashboard should open automatically. The firmware redirects common phone and computer connectivity checks to the setup page. If your device does not show a portal notification, open **http://192.168.4.1** while still connected to the Prayer-Bot hotspot.
-4. Enter the Wi-Fi name (SSID) and password for the separate router network the ESP32 should join:
-   - your **2.4 GHz home Wi-Fi router**, or
-   - your **mobile phone's 2.4 GHz hotspot**.
-5. Select **Connect to Wi-Fi**. The ESP32 waits up to 35 seconds for association and a valid DHCP address/gateway, verifies saved credentials by reading them back, and saves them only after the router lease is valid. It then automatically restarts and reconnects. Internet access is not required to save valid router credentials; online services will need working internet separately. The **Prayer-Bot** setup hotspot remains active. Selecting a scanned network fills its SSID; enter the router password manually because scans cannot read passwords.
-6. Set the location (Dhaka is the default) and other device settings from the dashboard. Selecting a preset fills its coordinates and timezone; entering a custom city and leaving the city field looks it up automatically. Save the settings to refresh prayer times and weather and sync the selected city's clock offset. When the dashboard opens, it initializes the ESP32 clock from the connected phone/computer's current time, so the clock can be set even without internet. Once the ESP32 is online, NTP updates it to the current time and retries periodically if synchronization is unavailable. The displayed time is not derived from the firmware compile timestamp.
+1. Power on the ESP32-S3. On your phone or computer, join the device’s **Prayer-Bot** setup Wi-Fi (default password: `12345678`).
+2. Tap the captive-portal notification to open setup. If it does not appear, visit **http://192.168.4.1** while connected to the setup Wi-Fi.
+3. Enter the name (SSID) and password for a **2.4 GHz Wi-Fi router or phone hotspot**, then select **Connect to Wi-Fi**.
+4. Once connected, find the ESP32’s home-network IP on the dashboard or in your router’s connected-device list.
+5. Connect your browser device to the same network, open the ESP32’s IP address, then set your location and preferences. **Dhaka is the default location.**
 
-Internet-backed features initialize after the ESP32 connects to the router. The station is considered connected only when Wi-Fi reports association and both a DHCP local address and gateway are present. New credentials are saved to LittleFS only after this check and a read-back verification; failed attempts retain the previous credentials. The connection timeout is 35 seconds. Router connectivity does not guarantee internet access: prayer/weather services, speech recognition, and Quran streaming separately require internet. If Wi-Fi disconnects, the firmware attempts to reconnect automatically. The dashboard displays offline status and disables Quran voice/audio controls; Pomodoro and Dhikr remain available locally. Browser voice recognition offers English and Bangla (বাংলা); allow microphone access in the browser. Dashboard transcripts are sent to Gemini through the ESP32. The Gemini key is provisioned privately on the device and is never sent to the browser.
+The ESP32’s home-network IP is assigned by DHCP and can change. Your phone or computer must be on the same network as the ESP32 to open its local dashboard. Some phones cannot reach devices connected to their own hotspot; if that happens, try another phone or computer connected to the hotspot.
 
-For dashboard voice playback, select the speech language, press **Speak**, allow microphone access, and ask for a Surah. You can also type a request. Browser speech recognition produces the voice transcript; Gemini on the ESP32 identifies the Surah or Azan notification request. For Surahs, choose **This Phone / Browser** to select an MP3Quran timed reciter and sync playback to the current ayah, or choose the device speaker. The Azan request plays the device's notification tone; recorded Adhan audio is not included. The ESP32 screen shows a microphone animation while listening, a recognition animation while Gemini is working, and the selected Surah name during playback. Never place the API key in dashboard JavaScript or commit it to the repository; rotate keys pasted into chat or logs.
+<details>
+<summary><strong>First boot, dashboard, and offline behavior</strong></summary>
 
-### Open the dashboard later through your router or hotspot
+- The setup hotspot remains active while the device connects to your router. Wi-Fi scans can fill in the SSID, but you must enter the password yourself.
+- The device checks for router association, a DHCP address, and a gateway before saving new credentials. It verifies the saved values and restarts after a successful setup. The connection attempt can take up to 35 seconds.
+- Router connection does not guarantee internet access. Prayer schedules, weather, speech recognition, and streaming Quran audio require internet.
+- The dashboard provides device status, prayer times, prohibited-time windows, Hijri date, weather/AQI, screen selection, Pomodoro controls/history, Dhikr controls, Quran playback, Wi-Fi setup, and device settings.
+- Browser voice input requires microphone permission and browser speech-recognition support; English and Bangla are available. The browser sends the transcript to the ESP32, which uses Gemini to identify the request. The API key is not sent to browser code.
+- Pomodoro and Dhikr work locally when offline; internet-backed voice and audio controls are unavailable.
+- The dashboard can initialize device time from the connected phone or computer. NTP synchronizes the clock when internet is available.
 
-After the ESP32 joins your router or phone hotspot, it receives a **local IP address from that network using DHCP**. This address is not fixed and may change. Find the **Home network IP** in the dashboard, or check the router/hotspot's connected-device list or the ESP32 serial log. Then connect your phone/computer to the **same router or hotspot** and open **http://<ESP32-home-IP>** in its browser (for example, `http://192.168.1.42`).
+</details>
 
-If you use a mobile hotspot, its owner phone provides the Wi-Fi connection to the ESP32. Some phones do not allow the hotspot-owner phone to reach connected clients; if the dashboard will not open on that phone, connect a second phone or computer to the hotspot and use the ESP32's displayed Home network IP there.
+## 🧭 Where to start in the code
 
-The header's **Modules** menu links to the overview, setup guide, prayer schedule, prohibited-time windows, clock/calendar screen controls, Pomodoro history, weather, Dhikr, Quran audio, Wi-Fi setup, and device settings. The setup guide gives the basic Wi-Fi, location, and touch steps. The dashboard exposes device status, today's prayer times, all three calculated prohibited-time windows, Hijri date, weather/AQI and OpenWeather pollutant readings, screen selection, Pomodoro controls, Dhikr count controls, Quran voice/player controls, and the active azan stop control. Wi-Fi scanning shows a progress dialog and returns selectable nearby networks. Router credentials are kept in RAM during connection testing and written to LittleFS only after association, a valid DHCP lease, and read-back verification; the password field is cleared after a successful connection and the dashboard does not store it in browser storage. Settings are range-validated, saved to LittleFS, and reloaded by the dashboard after saving; storage failures are reported without applying unsaved values. Service keys are not displayed or editable in the dashboard.
+The firmware uses focused C++ managers for feature logic and separate modules for the OLED screens. If you are new to the codebase, start with `src/main.cpp` to see how the device starts up and coordinates its FreeRTOS tasks. For a feature change, begin in the matching manager or screen module:
 
-The Prayer-Bot setup network uses its default hotspot name, password, and fixed address `192.168.4.1`; these are not configurable in the dashboard. Its captive portal opens the setup page automatically on most phones and computers; if it does not, use the device's **Sign in to network** notification or the fallback address above. Router credentials are saved only after association, a valid DHCP address and gateway, and storage read-back verification; then the device restarts. Wi-Fi scanning can populate the router SSID but cannot reveal its password; enter the password manually. Browser voice input uses the browser's speech-recognition support and requires microphone permission. Revoke any API key pasted into chat or public logs and provision replacements privately; API keys are not hardcoded in tracked source.
+| If you want to change… | Start here |
+|---|---|
+| Startup, task scheduling, or module coordination | [`src/main.cpp`](src/main.cpp) |
+| Pins, defaults, timing, or API endpoints | [`src/config.h`](src/config.h) |
+| Prayer schedules and prohibited-time windows | [`src/prayer_manager.h`](src/prayer_manager.h), [`src/prayer_manager.cpp`](src/prayer_manager.cpp) |
+| Dashboard UI or its JSON API | [`src/dashboard_html.h`](src/dashboard_html.h), [`src/web_server_manager.cpp`](src/web_server_manager.cpp) |
+| Voice recognition and Quran playback | [`src/voice_manager.cpp`](src/voice_manager.cpp), [`src/screens/`](src/screens/) |
+| Pomodoro state and weekly statistics | [`src/pomodoro_manager.cpp`](src/pomodoro_manager.cpp), [`src/pomodoro_stats.cpp`](src/pomodoro_stats.cpp) |
+| Settings, LittleFS, or caches | [`src/storage_manager.cpp`](src/storage_manager.cpp), [`src/cache_manager.cpp`](src/cache_manager.cpp) |
+| OLED presentation | [`src/screens/`](src/screens/), [`src/screen_router.cpp`](src/screen_router.cpp) |
 
-Prayer schedules are fetched as a monthly calendar from Aladhan after the device has internet and valid local time, using the configured location and calculation method. The default is Dhaka, Bangladesh (23.8103, 90.4125), Asia/Dhaka (UTC+6); the downloaded month is cached on the device. This is not a preloaded/offline Bangladesh timetable or CSV, so the first schedule fetch and later month refreshes require network access. The dashboard's prohibited-time panel and the Prayer Focus OLED screen use the device's configured offsets: after sunrise, before Dhuhr (Zawal), and before Maghrib. Confirm calculation settings and local guidance for your area.
+Shared state and screen IDs live in [`src/types.h`](src/types.h). Most managers have a matching `.h` interface and `.cpp` implementation. Keep feature behavior close to the module that owns it; use `main.cpp` to initialize services and connect them. If responsibilities or filenames change, update this map so the next contributor can find their way.
 
-## 🕋 Dhikr phrases
+## 🧰 Hardware components and wiring
 
-The Dhikr screen cycles through these phrases (transliterations and short meanings are included for reference):
+These are the main parts used by the ESP32-S3 prayer clock. The INMP441 microphone is optional; it is needed only for voice selection on the device itself. Browser voice input uses the phone or computer microphone.
 
-| English phrase | Meaning |
+| Part | Role | Required? |
+|---|---|---|
+| ESP32-S3 DevKitC-1 N16R8 | Main controller, Wi-Fi, and storage | Yes |
+| 1.3-inch I²C OLED (SSD1306/SH1106) | Device screens | Yes |
+| TTP223B capacitive touch sensor | Screen navigation and quick actions | Yes |
+| MPU6050 / GY-521 | Shake controls | Yes |
+| MAX98357A I²S amplifier + speaker | Alerts and Quran audio | Yes for device audio |
+| INMP441 I²S microphone | On-device Surah voice selection | Optional |
+
+<details>
+<summary><strong>GPIO pin map</strong></summary>
+
+| Signal | ESP32-S3 GPIO |
+|---|---:|
+| OLED + MPU6050 I²C SDA | 11 |
+| OLED + MPU6050 I²C SCL | 12 |
+| Capacitive touch output | 4 |
+| MAX98357A BCLK / LRC (WS) / DIN | 5 / 6 / 7 |
+| INMP441 SCK / WS / SD | 16 / 17 / 18 |
+
+The OLED and MPU6050 share an I²C bus; the MAX98357A amplifier and INMP441 microphone use separate I²S connections. Use 3.3 V-compatible logic and connect the modules to a common ground. **Do not connect either speaker output terminal to ground.** Check the voltage requirements printed on your specific breakout boards before applying power.
+
+See [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) for full wiring notes and [CIRCUIT.md](CIRCUIT.md) for the illustrated connection reference. Pin assignments are defined in [`src/config.h`](src/config.h).
+
+</details>
+
+## 🔐 Set up API keys safely
+
+The firmware uses your OpenWeatherMap key for weather and air-quality data, and your Gemini key to recognize Quran Surah requests. Add both keys to the untracked local file `src/secrets.h`. Prayer times and Quran reciter metadata do not require keys from you.
+
+1. If you do not already have the file, copy [`src/secrets.h.example`](src/secrets.h.example) to `src/secrets.h`.
+2. Replace the Gemini and OpenWeatherMap placeholder strings with your own keys. Keep the quotation marks.
+3. Build and upload the firmware. The keys are compiled into the device; they are not shown or editable in the dashboard.
+4. Before committing your changes, confirm Git ignores the secrets file:
+
+   ```sh
+   git check-ignore src/secrets.h
+   ```
+
+**Never commit, screenshot, or share API keys.** If you accidentally expose a key, revoke it with its provider and create a replacement. When updating the project, keep your existing `src/secrets.h` rather than copying over it.
+
+<details>
+<summary><strong>Services and what they do</strong></summary>
+
+| Service | Purpose | Key required? |
+|---|---|---|
+| [Aladhan](https://aladhan.com/prayer-times-api) | Monthly prayer timetable for the configured location and calculation method | No |
+| [OpenWeatherMap](https://openweathermap.org/api) | Weather and air-pollution readings | Yes |
+| [Google Gemini](https://aistudio.google.com/) | Recognizes typed or spoken Surah and Azan-notification requests | Yes |
+| [MP3Quran v3](https://www.mp3quran.net/eng/api) | Reciter metadata and Quran audio sources | No |
+| [MP3Quran Timing API](https://www.mp3quran.net/eng/timing-api) | Timed reciters and ayah progress for phone/browser playback | No |
+
+Prayer schedules are fetched as a monthly calendar and cached on-device. A network connection is needed for the first fetch and later month refreshes; this is not a preloaded offline timetable. Weather and prayer data refresh when online. Default location: Dhaka, Bangladesh (23.8103, 90.4125), `Asia/Dhaka` (UTC+6).
+
+</details>
+
+## 🎛️ Touch, shake, and dashboard controls
+
+Use the touch sensor for everyday controls, or use the dashboard when your phone or computer is on the same network as the device.
+
+| What you do | What happens |
+|---|---|
+| Tap touch sensor | Advance OLED screen; on Dhikr, increment the count |
+| Shake device | Dismiss an active Azan alert; control playback/timer on the relevant screen |
+| Hold touch for 3 seconds on Pomodoro | Start or pause/resume the timer |
+| Tap during a Pomodoro break-ready prompt | Start the break |
+| Dashboard controls | Select screens, control timer and Dhikr, and manage Quran playback |
+
+<details>
+<summary><strong>Pomodoro behavior and settings</strong></summary>
+
+- Defaults: **25-minute focus**, **5-minute short break**, **15-minute long break** after **4** focus cycles.
+- The touch-started break delay is configurable from **2 to 5 minutes**.
+- At focus completion, the device beeps and waits for a touch or dashboard action before starting the break. Focus resumes automatically after the break.
+- A shake starts an idle timer or pauses/resumes an active timer while the Pomodoro screen is open. A shake does not start a break that is waiting for touch.
+- The dashboard’s seven-day history tracks sessions started, completed focus sessions, and completed focus minutes. Partial or interrupted focus sessions do not count as completed.
+
+</details>
+
+<details>
+<summary><strong>Dhikr phrases</strong></summary>
+
+| Phrase | Meaning |
 |---|---|
 | Subhan Allah | Glory be to Allah |
 | Alhamdulillah | Praise be to Allah |
 | La ilaha illallah | There is no deity except Allah |
 | Allahu Akbar | Allah is the Greatest |
-| Astaghfirullah | I seek Allah's forgiveness |
+| Astaghfirullah | I seek Allah’s forgiveness |
 
-The Dhikr OLED screen uses English text only; it does not require an Arabic font or Arabic image assets.
+The OLED cycles through English transliterations and meanings; no Arabic font or image assets are required.
 
-## ⏱️ Pomodoro flow
+</details>
 
-- Default focus is **25 minutes**; the touch-started break delay defaults to **5 minutes** and can be set from **2 to 5 minutes**.
-- On the Pomodoro OLED screen, hold the touch sensor for 3 seconds to start or pause/resume. While paused, a short tap resumes the timer and goes to the next screen; a short tap while a break is ready starts the break and goes to the next screen. The OLED's animated status and progress bar reflect the current phase.
-- A shake also starts the timer from idle or pauses/resumes an active focus/break timer while the Pomodoro screen is open. A shake while a focus session is waiting for its break does not start the break.
-- At the end of a focus session, the speaker plays one beep and the timer waits for the touch sensor (or the dashboard's Start/Pause control) before starting the break countdown.
-- The next focus session starts automatically after the break. A configured long break is still used after the selected number of focus sessions.
-- The dashboard's seven-day chart reports sessions started, completed focus sessions, and completed focus minutes. Statistics need valid device local time; partial or interrupted focus sessions are not included in completed-focus totals.
+## 🧱 Firmware architecture and development notes
+
+- **Board:** PlatformIO uses the ESP32-S3 DevKitC-1 profile with N16R8 settings: 16 MB flash and 8 MB PSRAM. Check your module before flashing; an N8 board may need a different configuration.
+- **Framework and dependencies:** Arduino framework with dependency versions pinned in [`platformio.ini`](platformio.ini).
+- **Concurrency:** FreeRTOS tasks coordinate display rendering, networking, scheduling, audio, and voice features.
+- **Persistent data:** Settings, cached responses, and Pomodoro history are stored in LittleFS. Back up device settings before replacing or erasing the filesystem.
+- **JSON and web requests:** ArduinoJson handles service responses. Dashboard request bodies are size-limited and validated before settings are applied.
+
+## ❓ Common setup questions
+
+<details>
+<summary><strong>The setup page did not open. What should I try?</strong></summary>
+
+While your phone or computer is connected to the **Prayer-Bot** setup Wi-Fi, open **http://192.168.4.1** in a browser. If the browser reports no internet, stay connected anyway; this network is only for configuring the device.
+
+</details>
+
+<details>
+<summary><strong>I connected the ESP32 to Wi-Fi, but cannot find the dashboard.</strong></summary>
+
+Check the dashboard, router, or serial monitor for the ESP32’s current home-network IP. Make sure your browser device is on the same router or hotspot. The IP may change after reconnecting. Some phone hotspots block access to connected devices from the hotspot owner; try a second device on that hotspot.
+
+</details>
+
+<details>
+<summary><strong>Do prayer times and Quran audio work without internet?</strong></summary>
+
+Prayer data already fetched by the device may be available from its cache, but the monthly timetable requires internet to fetch initially and refresh. Weather, Surah recognition, and Quran streaming also need internet. Dhikr and Pomodoro are available locally.
+
+</details>
+
+<details>
+<summary><strong>Can I use a different ESP32-S3 board?</strong></summary>
+
+The included PlatformIO configuration targets an ESP32-S3 DevKitC-1 with 16 MB flash and 8 MB PSRAM. Verify the flash size, PSRAM, pin availability, and voltage compatibility of your specific board before using it. Boards with different memory sizes may need configuration changes.
+
+</details>
+
+## 🤝 Contributing
+
+Have an idea, found a bug, or want to improve the ESP32-S3 prayer clock? Issues and pull requests are welcome. Before submitting a change, keep feature logic in the responsible manager or screen, follow the existing pin and configuration conventions, and update the README or wiring documentation when behavior changes.
 
 ---
 
-## 📚 Under the Hood (Software & APIs)
+<div align="center">
 
-- **FreeRTOS** – Separate tasks for networking, UI rendering, sensor reading, and audio playback.
-- **JSON handling** – Large API responses are parsed from network streams with ArduinoJson filters; web request bodies are size-limited and validated before settings are applied. JSON documents and Arduino `String` values use dynamic memory, so this is bounded in key paths rather than allocation-free.
-- **Persistent storage and caching** – Settings, prayer/weather cache data, and Pomodoro daily history are stored in LittleFS. Writes use a verified temporary file and rename to avoid exposing partially written JSON; filesystem access is serialized across web and background tasks. Once the filesystem is marked initialized, a mount failure no longer triggers an automatic format that could erase saved data. Cache metadata tracks expiry for supported cached data.
-- **Online APIs** – Aladhan provides prayer times; OpenWeatherMap supplies weather and air-quality data; Gemini identifies dashboard Surah and Azan requests; MP3Quran v3 supplies reciter and ayah-timing metadata. Keys stay in private device configuration and are not exposed by the dashboard API.
+**Ready to build your ESP32-S3 prayer clock?** Start with [Build your Prayer-Bot](#-build-your-prayer-bot), then follow the [hardware and wiring guide](HARDWARE_CONNECTIONS.md).
 
-Feel free to fork, modify, and extend the bot (e.g., add voice commands or additional sensors). Happy building!
+Made to be built, understood, and extended. · [MIT License](LICENSE)
 
-## 🛠️ Development Setup (VS Code + PlatformIO)
-
-1. **Install VS Code** – download from https://code.visualstudio.com/ and run the installer.
-2. **Add the PlatformIO extension** – open VS Code, go to Extensions (Ctrl+Shift+X), search for **PlatformIO IDE** and install it.
-3. **Open the project** – choose **File → Open Folder…** and select the `e:\Prayer-Bot` directory.
-4. **Build the firmware** – press the **PlatformIO: Build** button (or run `pio run` in the integrated terminal).
-5. **Upload to the ESP32‑S3** – press **PlatformIO: Upload** (or `pio run --target upload`). Ensure the board is connected via USB.
-6. **Serial monitor** – open **PlatformIO: Serial Monitor** (or `pio device monitor -b 115200`) to view boot logs and interact with the device.
-
-> PlatformIO is the canonical, tested build system and installs pinned dependencies from `platformio.ini`. The root `Prayer-Bot.ino` is an Arduino IDE entry point for the modular sources under `src/`, not a standalone single-file build. The default configuration targets N16R8 (16 MB flash, 8 MB PSRAM); verify these match your board before flashing, especially if using an N8 variant. Create the ignored `src/secrets.h` before building. Keep the environment and dependency versions pinned unless firmware and hardware are retested.
-
----
-
-## 📌 Pin Diagram
-
-| Function | Pin (label) | GPIO |
-|----------|-------------|------|
-| OLED SDA / MPU6050 SDA (I²C data) | **SDA** | 11 |
-| OLED SCL / MPU6050 SCL (I²C clock) | **SCL** | 12 |
-| Capacitive Touch Sensor (screen advance) | **SIG** | 4 |
-| I²S Amplifier – Bit Clock (BCLK) | **BCLK** | 5 |
-| I²S Amplifier – Word Select / LRCK | **LRC/WS** | 6 |
-| I²S Amplifier – Data In (DIN) | **DIN** | 7 |
-| I²S Microphone – Serial Clock (SCK) | **MIC_SCK** | 16 |
-| I²S Microphone – Word Select (WS) | **MIC_WS** | 17 |
-| I²S Microphone – Data (SD) | **MIC_SD** | 18 |
-
-These pins are defined in `src/config.h` and match the wiring shown in **HARDWARE_CONNECTIONS.md**.
+</div>
