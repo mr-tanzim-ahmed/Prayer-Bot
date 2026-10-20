@@ -44,12 +44,38 @@ Prayer-Bot is a DIY **ESP32-S3 prayer clock and Islamic personal assistant**. Us
 
 Follow these steps to build and run the ESP32-S3 firmware. The [hardware guide](HARDWARE_CONNECTIONS.md) has the full wiring table; check it before connecting modules.
 
-### What you’ll need
+### Tools and parts you’ll need
 
-- ESP32-S3 DevKitC-1 **N16R8** (16 MB flash, 8 MB PSRAM)
-- PlatformIO IDE in VS Code, or the PlatformIO CLI
-- USB data cable and the peripherals in the [hardware guide](HARDWARE_CONNECTIONS.md)
-- API keys for weather and Gemini-powered Surah recognition (see [private key setup](#-configure-api-keys))
+**Required software**
+
+- A computer running Windows, macOS, or Linux
+- [Visual Studio Code](https://code.visualstudio.com/) with the [PlatformIO IDE extension](https://marketplace.visualstudio.com/items?itemName=platformio.platformio-ide), **or** [PlatformIO Core CLI](https://docs.platformio.org/en/latest/core/installation/index.html)
+- A USB data cable for your ESP32-S3 (some cables provide power only)
+
+**Required board and hardware**
+
+- ESP32-S3 DevKitC-1 **N16R8** board (16 MB flash, 8 MB PSRAM)
+- The display, touch sensor, motion sensor, amplifier, and speaker listed in the [hardware guide](HARDWARE_CONNECTIONS.md)
+- An INMP441 microphone only if you want voice selection on the device; dashboard voice input uses your phone or computer microphone
+
+**Optional credentials:** OpenWeatherMap enables weather and air-quality readings; Google Gemini enables Surah recognition. The firmware can be built without working keys, but those online features will not work until you configure them. See [API key setup](#-set-up-api-keys-safely).
+
+### Software tools and libraries
+
+PlatformIO is the project’s build and dependency manager. When you first build, it reads [`platformio.ini`](platformio.ini) and automatically downloads the ESP32 platform, Arduino framework, compiler/upload tools, and pinned libraries below. **You do not need to install these libraries separately** or use Arduino Library Manager.
+
+| Library | Version | Used for |
+|---|---:|---|
+| [ESPAsyncWebServer](https://registry.platformio.org/libraries/mathieucarbou/ESPAsyncWebServer) | 3.6.0 | Local web dashboard and asynchronous HTTP server |
+| [AsyncTCP](https://registry.platformio.org/libraries/mathieucarbou/AsyncTCP) | 3.3.2 | Asynchronous networking used by the web server |
+| [U8g2](https://registry.platformio.org/libraries/olikraus/U8g2) | 2.36.18 | OLED display rendering |
+| [Adafruit MPU6050](https://registry.platformio.org/libraries/adafruit/Adafruit%20MPU6050) | 2.2.9 | MPU6050 accelerometer/gyroscope |
+| [Adafruit Unified Sensor](https://registry.platformio.org/libraries/adafruit/Adafruit%20Unified%20Sensor) | 1.1.15 | Common sensor interface required by the MPU6050 library |
+| [Adafruit BusIO](https://registry.platformio.org/libraries/adafruit/Adafruit%20BusIO) | 1.17.4 | Bus support required by Adafruit sensor drivers |
+| [ESP8266Audio](https://registry.platformio.org/libraries/earlephilhower/ESP8266Audio) | 2.2.0 | Quran audio decoding and I²S playback |
+| [ArduinoJson](https://registry.platformio.org/libraries/bblanchon/ArduinoJson) | 7.4.3 | Parsing and generating JSON for APIs and settings |
+
+Wi-Fi, HTTP client, LittleFS, FreeRTOS, I²S, and other core functions are provided by the ESP32 Arduino framework or ESP32 platform; they are not separate PlatformIO libraries in this project.
 
 ### 1. Open the project and add your private keys
 
@@ -63,7 +89,7 @@ Edit `src/secrets.h` and add your own API keys. **If the file already exists, do
 
 ### 2. Build, upload, and view serial logs
 
-Open a terminal at the project root and run these commands with the PlatformIO CLI:
+Open a terminal in the repository root. With PlatformIO IDE installed, use the VS Code integrated terminal; with PlatformIO Core installed, use your normal terminal. Run:
 
 ```sh
 pio run
@@ -71,12 +97,12 @@ pio run --target upload
 pio device monitor -b 115200
 ```
 
-Connect the ESP32-S3 to your computer with a USB data cable before uploading. The serial monitor runs at **115200 baud** and shows startup and connection messages. Close the monitor before you upload again.
+The first `pio run` may take a few minutes while PlatformIO downloads the platform, toolchain, framework, and libraries. Subsequent builds reuse those downloads. Connect the ESP32-S3 with a USB data cable before uploading; if more than one board is connected, specify its port with `--upload-port`, for example `pio run --target upload --upload-port COM5` on Windows. The serial monitor runs at **115200 baud** and shows startup and connection messages. Close it before uploading again.
 
 <details>
 <summary><strong>Prefer VS Code buttons?</strong></summary>
 
-Prefer a graphical workflow? Install the **PlatformIO IDE** extension in VS Code, open this repository folder, then use the **Build**, **Upload**, and **Serial Monitor** actions. The monitor baud rate is **115200**.
+Prefer a graphical workflow? Install the **PlatformIO IDE** extension in VS Code, open this repository folder, then use the PlatformIO **Build**, **Upload**, and **Monitor** actions. PlatformIO installs project dependencies automatically on the first build. The monitor baud rate is **115200**.
 
 PlatformIO is the canonical build system and installs the pinned dependencies from [`platformio.ini`](platformio.ini). The root `Prayer-Bot.ino` is an Arduino IDE entry point for the modular sources under `src/`, not a standalone single-file build.
 
