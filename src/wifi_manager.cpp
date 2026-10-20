@@ -2,6 +2,7 @@
 #include "config.h"
 #include "storage_manager.h"
 #include <ArduinoJson.h>
+#include <DNSServer.h>
 #include <WiFi.h>
 
 // ============================================================
@@ -12,6 +13,8 @@ namespace {
     constexpr char WIFI_CREDENTIALS_PATH[] = "/wifi_credentials.json";
     constexpr char LEGACY_WIFI_SSID_PATH[] = "/wifi_ssid.txt";
     constexpr char LEGACY_WIFI_PASSWORD_PATH[] = "/wifi_pass.txt";
+    constexpr uint16_t DNS_PORT = 53;
+    DNSServer captiveDnsServer;
     bool apMode = false;
     bool connectionPending = false;
     unsigned long connectionStartedMs = 0;
@@ -118,6 +121,15 @@ void startAP() {
     Serial.println(AP_SSID);
     Serial.print("[WiFi] AP IP: ");
     Serial.println(WiFi.softAPIP());
+    if (!captiveDnsServer.start(DNS_PORT, "*", WiFi.softAPIP())) {
+        Serial.println("[WiFi] Could not start captive-portal DNS.");
+    } else {
+        Serial.println("[WiFi] Captive-portal DNS started.");
+    }
+}
+
+void processCaptivePortal() {
+    if (apMode) captiveDnsServer.processNextRequest();
 }
 
 String getSetupAPSSID() {

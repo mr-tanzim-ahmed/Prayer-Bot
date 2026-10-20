@@ -45,6 +45,7 @@ SystemScreen    g_currentScreen = SYS_SCREEN_PRAYER_FOCUS;
 unsigned long   g_screenStartMs = 0;
 volatile AzanState g_azanState  = AZAN_IDLE;
 volatile bool   g_azanStopRequested = false;
+volatile bool   g_webAzanStartRequested = false;
 volatile bool   g_locationRefreshRequested = false;
 volatile bool   g_prayerRefreshing = false;
 volatile bool   g_weatherRefreshRequested = false;
@@ -79,8 +80,10 @@ void taskVoice(void* param);
 namespace {
     void changeScreen(SystemScreen screen) {
         if (screen == g_currentScreen) return;
+        ScreenRouter::transitionOut();
         if (g_currentScreen == SYS_SCREEN_QURAN)
             VoiceManager::leaveSurahScreen();
+        AzanManager::playScreenChangeBeep();
         g_currentScreen = screen;
         g_screenStartMs = millis();
         if (screen == SYS_SCREEN_QURAN)
@@ -258,6 +261,7 @@ void taskDisplay(void* param) {
 
         // Handle button presses
         ButtonHandler::update();
+        WifiManager::processCaptivePortal();
         int8_t webScreenRequest = g_webScreenRequest;
         g_webScreenRequest = -1;
         if (webScreenRequest >= 0 && webScreenRequest < SYS_SCREEN_COUNT) {
@@ -343,9 +347,7 @@ void taskDisplay(void* param) {
         if (g_currentScreen == SYS_SCREEN_DHIKR &&
             g_azanState != AZAN_PLAYING &&
             (millis() - g_screenStartMs >= 100000)) {
-            g_currentScreen = SYS_SCREEN_PRAYER_FOCUS; // Return to main screen
-            g_screenStartMs = millis();
-            ScreenRouter::draw(g_currentScreen);
+            changeScreen(SYS_SCREEN_PRAYER_FOCUS);
         }
 
         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(100));
@@ -373,18 +375,23 @@ void taskScheduler(void* param) {
         // Update shake detector
         ShakeDetector::update();
 
-        // Check if azan should play
-        if (g_prayerReady && g_azanState == AZAN_IDLE && taskSettings.azanEnabled) {
-            if (PrayerManager::isAzanTime(g_todayPrayers)) {
-                if (AzanManager::play(PrayerManager::getCurrentPrayerName())) {
-                    g_azanState = AZAN_PLAYING;
+        const bool manualAzanRequest = g_webAzanStartRequested;
+        g_webAzanStartRequested = false;
+        const bool scheduledAzanRequest = g_prayerReady &&
+            taskSettings.azanEnabled &&
+            PrayerManager::isAzanTime(g_todayPrayers);
+        if (g_azanState == AZAN_IDLE &&
+            (scheduledAzanRequest || manualAzanRequest)) {
+            const PrayerName prayer = g_prayerReady
+                ? PrayerManager::getCurrentPrayerName()
+                : PRAYER_FAJR;
+            if (AzanManager::play(prayer)) {
+                g_azanState = AZAN_PLAYING;
 
-                    // Pause Pomodoro during azan
-                    if (g_pomodoro.phase == POMODORO_FOCUS ||
-                        g_pomodoro.phase == POMODORO_SHORT_BREAK ||
-                        g_pomodoro.phase == POMODORO_LONG_BREAK) {
-                        PomodoroManager::pauseForAzan(g_pomodoro);
-                    }
+                if (g_pomodoro.phase == POMODORO_FOCUS ||
+                    g_pomodoro.phase == POMODORO_SHORT_BREAK ||
+                    g_pomodoro.phase == POMODORO_LONG_BREAK) {
+                    PomodoroManager::pauseForAzan(g_pomodoro);
                 }
             }
         }

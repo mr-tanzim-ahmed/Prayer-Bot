@@ -23,6 +23,16 @@ inline void drawSun(U8G2& oled, int x, int y) {
     oled.drawLine(x + 10, y + 22, x + 7,  y + 25);
 }
 
+inline void drawMoon(U8G2& oled, int x, int y) {
+    oled.drawDisc(x + 18, y + 15, 10);
+    oled.setDrawColor(0);
+    oled.drawDisc(x + 23, y + 10, 9);
+    oled.setDrawColor(1);
+    oled.drawVLine(x + 5, y + 3, 5);
+    oled.drawHLine(x + 3, y + 5, 5);
+    oled.drawPixel(x + 31, y + 25);
+}
+
 inline void drawCloud(U8G2& oled, int x, int y) {
     oled.drawCircle(x + 12, y + 17, 7);
     oled.drawCircle(x + 22, y + 14, 9);
@@ -68,7 +78,66 @@ inline void draw(U8G2& oled, int x, int y, WeatherIconType type) {
         case ICON_STORM: drawStorm(oled, x, y); break;
         case ICON_SNOW:  drawSnow(oled, x, y);  break;
         case ICON_FOG:   drawFog(oled, x, y);   break;
+        case ICON_MOON:  drawMoon(oled, x, y);  break;
         default:         drawSun(oled, x, y);   break;
+    }
+}
+
+inline void drawCompact(U8G2& oled, int x, int y, WeatherIconType type) {
+    const auto drawCloud = [&]() {
+        oled.drawCircle(x + 7, y + 11, 4);
+        oled.drawCircle(x + 12, y + 8, 5);
+        oled.drawCircle(x + 17, y + 11, 4);
+        oled.drawBox(x + 5, y + 11, 14, 5);
+    };
+
+    switch (type) {
+        case ICON_SUN:
+            oled.drawCircle(x + 12, y + 10, 5);
+            oled.drawVLine(x + 12, y, 3);
+            oled.drawVLine(x + 12, y + 17, 3);
+            oled.drawHLine(x + 2, y + 10, 3);
+            oled.drawHLine(x + 19, y + 10, 3);
+            oled.drawLine(x + 5, y + 3, x + 7, y + 5);
+            oled.drawLine(x + 17, y + 15, x + 19, y + 17);
+            oled.drawLine(x + 19, y + 3, x + 17, y + 5);
+            oled.drawLine(x + 7, y + 15, x + 5, y + 17);
+            break;
+        case ICON_MOON:
+            oled.drawDisc(x + 12, y + 10, 8);
+            oled.setDrawColor(0);
+            oled.drawDisc(x + 16, y + 6, 7);
+            oled.setDrawColor(1);
+            break;
+        case ICON_CLOUD:
+            drawCloud();
+            break;
+        case ICON_RAIN:
+            drawCloud();
+            oled.drawLine(x + 7, y + 18, x + 5, y + 21);
+            oled.drawLine(x + 13, y + 18, x + 11, y + 21);
+            oled.drawLine(x + 19, y + 18, x + 17, y + 21);
+            break;
+        case ICON_STORM:
+            drawCloud();
+            oled.drawLine(x + 13, y + 16, x + 10, y + 20);
+            oled.drawLine(x + 10, y + 20, x + 13, y + 20);
+            oled.drawLine(x + 13, y + 20, x + 11, y + 23);
+            break;
+        case ICON_SNOW:
+            drawCloud();
+            oled.drawPixel(x + 7, y + 20);
+            oled.drawPixel(x + 13, y + 20);
+            oled.drawPixel(x + 19, y + 20);
+            break;
+        case ICON_FOG:
+            oled.drawHLine(x + 3, y + 6, 17);
+            oled.drawHLine(x, y + 11, 21);
+            oled.drawHLine(x + 3, y + 16, 17);
+            break;
+        default:
+            drawCloud();
+            break;
     }
 }
 

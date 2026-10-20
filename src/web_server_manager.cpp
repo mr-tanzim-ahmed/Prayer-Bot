@@ -13,7 +13,9 @@
 #include "azan_manager.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <time.h>
 #include <sys/time.h>
 #include <math.h>
@@ -117,12 +119,6 @@ namespace {
         } else if (doc["azanOn"].isUnbound() == false &&
                    !doc["azanOn"].is<bool>()) {
             error = "Azan enabled must be true or false.";
-        } else if (doc["owmKey"].is<const char*>() &&
-                   strlen(doc["owmKey"].as<const char*>()) >= sizeof(settingsRef->owmApiKey)) {
-            error = "Weather API key must be less than 64 characters.";
-        } else if (doc["geminiKey"].is<const char*>() &&
-                   strlen(doc["geminiKey"].as<const char*>()) >= sizeof(settingsRef->geminiApiKey)) {
-            error = "Gemini API key must be less than 64 characters.";
         }
         return error.isEmpty();
     }
@@ -174,7 +170,7 @@ namespace {
             "city", "timezone", "lat", "lon", "utcOff", "calcMethod",
             "asrSchool", "hijriOffset", "azanOn", "volume", "focusMin",
             "shortBrk", "longBrk", "pomCycles", "sunriseOff", "zawalOff",
-            "sunsetOff", "owmKey", "geminiKey"
+            "sunsetOff"
         };
         if (!hasOnlyKeys(doc.as<JsonObjectConst>(), settingKeys,
                          sizeof(settingKeys) / sizeof(settingKeys[0]))) {
@@ -221,19 +217,6 @@ namespace {
         if (doc["sunriseOff"].is<int>()) candidate.sunriseOffset = doc["sunriseOff"].as<uint8_t>();
         if (doc["zawalOff"].is<int>()) candidate.zawalOffset = doc["zawalOff"].as<uint8_t>();
         if (doc["sunsetOff"].is<int>()) candidate.sunsetOffset = doc["sunsetOff"].as<uint8_t>();
-        if (doc["owmKey"].is<const char*>()) {
-            const char* key = doc["owmKey"].as<const char*>();
-            if (strlen(key) > 0) {
-                strlcpy(candidate.owmApiKey, key, sizeof(candidate.owmApiKey));
-            }
-        }
-        if (doc["geminiKey"].is<const char*>()) {
-            const char* key = doc["geminiKey"].as<const char*>();
-            if (strlen(key) > 0) {
-                strlcpy(candidate.geminiApiKey, key, sizeof(candidate.geminiApiKey));
-            }
-        }
-
         if (!StorageManager::saveSettings(candidate)) {
             xSemaphoreGive(g_settingsMutex);
             request->send(500, "application/json", "{\"error\":\"Could not save settings to device storage.\"}");
@@ -299,6 +282,192 @@ namespace {
         request->_tempObject = nullptr;
         return body;
     }
+
+    bool fetchTimingApi(const String& path, String& payload) {
+        if (WiFi.status() != WL_CONNECTED) {
+            Serial.println("[QURAN] Timing API unavailable: router Wi-Fi is disconnected.");
+            return false;
+        }
+
+        WiFiClientSecure client;
+        client.setInsecure();
+        HTTPClient http;
+        http.setTimeout(10000);
+        if (!http.begin(client, String(MP3QURAN_API_BASE) + path)) {
+            Serial.println("[QURAN] Could not initialize MP3Quran timing request.");
+            return false;
+        }
+
+        const int status = http.GET();
+        if (status != HTTP_CODE_OK) {
+            Serial.printf("[QURAN] MP3Quran timing API returned HTTP %d.\n", status);
+            http.end();
+            return false;
+        }
+        payload = http.getString();
+        http.end();
+        return !payload.isEmpty();
+    }
+
+    bool isTrustedAudioFolder(const char* url) {
+        if (!url || strncmp(url, "https://", 8) != 0) return false;
+        const char* hostStart = url + 8;
+        const char* pathStart = strchr(hostStart, '/');
+        if (!pathStart || pathStart == hostStart || pathStart[-1] == '.') return false;
+        const String host(hostStart, pathStart - hostStart);
+        return host == "mp3quran.net" || host.endsWith(".mp3quran.net");
+    }
+
+    bool readPositiveQueryInt(AsyncWebServerRequest* request,
+                              const char* name, int maximum, int& value) {
+        if (!request->hasParam(name)) return false;
+        const String text = request->getParam(name)->value();
+        if (text.isEmpty()) return false;
+        for (size_t i = 0; i < text.length(); ++i) {
+            if (text[i] < '0' || text[i] > '9') return false;
+        }
+        char* end = nullptr;
+        const long parsed = strtol(text.c_str(), &end, 10);
+        if (!end || *end != '\0' || parsed < 1 || parsed > maximum) return false;
+        value = static_cast<int>(parsed);
+        return true;
+    }
+
+    void handleTimingReads(AsyncWebServerRequest* request) {
+        String payload;
+        if (!fetchTimingApi("/ayat_timing/reads", payload)) {
+            request->send(502, "application/json",
+                          "{\"error\":\"MP3Quran timing reads are unavailable.\"}");
+            return;
+        }
+        JsonDocument source;
+        if (deserializeJson(source, payload) || !source.is<JsonArray>() ||
+            source.as<JsonArrayConst>().size() > 256) {
+            request->send(502, "application/json",
+                          "{\"error\":\"MP3Quran returned invalid timing-read data.\"}");
+            return;
+        }
+
+        JsonDocument result;
+        JsonArray reads = result["reads"].to<JsonArray>();
+        for (JsonObjectConst item : source.as<JsonArrayConst>()) {
+            const int id = item["id"] | 0;
+            const char* name = item["name"] | "";
+            const char* folder = item["folder_url"] | "";
+            const int surahCount = item["soar_count"] | 0;
+            if (id < 1 || id > 65535 || !name[0] ||
+                !isTrustedAudioFolder(folder) ||
+                surahCount < 1 || surahCount > TOTAL_SURAHS) {
+                continue;
+            }
+            JsonObject read = reads.add<JsonObject>();
+            read["id"] = id;
+            read["name"] = name;
+            read["rewaya"] = item["rewaya"] | "";
+            read["folderUrl"] = folder;
+            read["surahCount"] = surahCount;
+        }
+        if (reads.size() == 0) {
+            request->send(502, "application/json",
+                          "{\"error\":\"MP3Quran returned no usable timing reads.\"}");
+            return;
+        }
+        String response;
+        serializeJson(result, response);
+        request->send(200, "application/json", response);
+    }
+
+    void handleTimingChapters(AsyncWebServerRequest* request) {
+        int readId = 0;
+        if (!readPositiveQueryInt(request, "read", 65535, readId)) {
+            request->send(400, "application/json",
+                          "{\"error\":\"A valid timing read ID is required.\"}");
+            return;
+        }
+        String payload;
+        if (!fetchTimingApi("/ayat_timing/soar?read=" + String(readId), payload)) {
+            request->send(502, "application/json",
+                          "{\"error\":\"MP3Quran timing chapters are unavailable.\"}");
+            return;
+        }
+        JsonDocument source;
+        if (deserializeJson(source, payload) || !source.is<JsonArray>() ||
+            source.as<JsonArrayConst>().size() > TOTAL_SURAHS) {
+            request->send(502, "application/json",
+                          "{\"error\":\"MP3Quran returned invalid chapter data.\"}");
+            return;
+        }
+
+        JsonDocument result;
+        JsonArray chapters = result["chapters"].to<JsonArray>();
+        for (JsonObjectConst item : source.as<JsonArrayConst>()) {
+            const int id = item["id"] | 0;
+            const char* name = item["name"] | "";
+            if (id < 1 || id > TOTAL_SURAHS || !name[0]) continue;
+            JsonObject chapter = chapters.add<JsonObject>();
+            chapter["id"] = id;
+            chapter["name"] = name;
+        }
+        if (chapters.size() == 0) {
+            request->send(404, "application/json",
+                          "{\"error\":\"No timed Surahs are available for this read.\"}");
+            return;
+        }
+        String response;
+        serializeJson(result, response);
+        request->send(200, "application/json", response);
+    }
+
+    void handleAyatTiming(AsyncWebServerRequest* request) {
+        int readId = 0;
+        int surah = 0;
+        if (!readPositiveQueryInt(request, "read", 65535, readId) ||
+            !readPositiveQueryInt(request, "surah", TOTAL_SURAHS, surah)) {
+            request->send(400, "application/json",
+                          "{\"error\":\"Valid timing read and Surah IDs are required.\"}");
+            return;
+        }
+        String payload;
+        const String path = "/ayat_timing?surah=" + String(surah) +
+                            "&read=" + String(readId);
+        if (!fetchTimingApi(path, payload)) {
+            request->send(502, "application/json",
+                          "{\"error\":\"Ayah timing is unavailable for this read and Surah.\"}");
+            return;
+        }
+        JsonDocument source;
+        if (deserializeJson(source, payload) || !source.is<JsonArray>() ||
+            source.as<JsonArrayConst>().size() > 300) {
+            request->send(502, "application/json",
+                          "{\"error\":\"MP3Quran returned invalid ayah timings.\"}");
+            return;
+        }
+
+        JsonDocument result;
+        JsonArray timings = result["timings"].to<JsonArray>();
+        for (JsonObjectConst item : source.as<JsonArrayConst>()) {
+            const int ayah = item["ayah"] | -1;
+            const int start = item["start_time"] | -1;
+            const int end = item["end_time"] | -1;
+            if (ayah < 0 || ayah > 286 || start < 0 || end <= start) {
+                request->send(502, "application/json",
+                              "{\"error\":\"MP3Quran returned an invalid ayah timing range.\"}");
+                return;
+            }
+            JsonObject timing = timings.add<JsonObject>();
+            timing["ayah"] = ayah;
+            timing["startMs"] = start;
+            timing["endMs"] = end;
+        }
+        if (timings.size() == 0) {
+            request->send(502, "application/json",
+                          "{\"error\":\"MP3Quran returned no ayah timings.\"}");
+            return;
+        }
+        String response;
+        serializeJson(result, response);
+        request->send(200, "application/json", response);
+    }
 }
 
 extern WeatherData g_weather;
@@ -316,6 +485,7 @@ extern volatile int8_t g_webScreenRequest;
 extern volatile uint8_t g_webPomodoroRequest;
 extern volatile uint8_t g_webDhikrRequest;
 extern volatile bool g_azanStopRequested;
+extern volatile bool g_webAzanStartRequested;
 
 namespace WebServerManager {
 
@@ -331,6 +501,17 @@ void init(Settings& settings) {
     server->on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
         request->send(200, "text/html", DASHBOARD_HTML);
     });
+    static const char* const captivePortalPaths[] = {
+        "/generate_204", "/gen_204", "/hotspot-detect.html",
+        "/library/test/success.html", "/connecttest.txt",
+        "/ncsi.txt", "/redirect", "/canonical.html", "/success.txt",
+        "/fwlink"
+    };
+    for (const char* path : captivePortalPaths) {
+        server->on(path, HTTP_GET, [](AsyncWebServerRequest* request) {
+            request->send(200, "text/html", DASHBOARD_HTML);
+        });
+    }
 
     server->on("/api/settings", HTTP_GET, [](AsyncWebServerRequest* request) {
         if (!g_settingsMutex ||
@@ -359,8 +540,6 @@ void init(Settings& settings) {
         doc["sunriseOff"] = snapshot.sunriseOffset;
         doc["zawalOff"] = snapshot.zawalOffset;
         doc["sunsetOff"] = snapshot.sunsetOffset;
-        doc["owmKeyConfigured"] = snapshot.owmApiKey[0] != '\0';
-        doc["geminiKeyConfigured"] = snapshot.geminiApiKey[0] != '\0';
         doc["setupApSsid"] = WifiManager::getSetupAPSSID();
         String json;
         serializeJson(doc, json);
@@ -376,6 +555,10 @@ void init(Settings& settings) {
             handleSettings(request, *body);
             delete body;
         });
+
+    server->on("/api/quran/timing-reads", HTTP_GET, handleTimingReads);
+    server->on("/api/quran/timing-chapters", HTTP_GET, handleTimingChapters);
+    server->on("/api/quran/timing", HTTP_GET, handleAyatTiming);
 
     server->on("/api/time", HTTP_POST,
         [](AsyncWebServerRequest*) {},
@@ -555,11 +738,20 @@ void init(Settings& settings) {
 
         JsonObject weather = doc["weather"].to<JsonObject>();
         weather["valid"] = g_weatherReady && g_weather.valid;
+        weather["airQualityValid"] = g_weatherReady && g_weather.airQualityValid;
         weather["city"] = g_weather.cityName;
         weather["temperatureC"] = g_weather.temperatureC;
         weather["humidity"] = g_weather.humidity;
         weather["aqi"] = g_weather.airQualityIndex;
         weather["pm25"] = g_weather.pm25;
+        weather["pm10"] = g_weather.pm10;
+        weather["co"] = g_weather.carbonMonoxide;
+        weather["no"] = g_weather.nitrogenMonoxide;
+        weather["no2"] = g_weather.nitrogenDioxide;
+        weather["o3"] = g_weather.ozone;
+        weather["so2"] = g_weather.sulphurDioxide;
+        weather["nh3"] = g_weather.ammonia;
+        weather["condition"] = g_weather.weatherDescription;
 
         JsonObject pomodoro = doc["pomodoro"].to<JsonObject>();
         pomodoro["phase"] = pomodoroPhaseName(g_pomodoro.phase);
@@ -610,7 +802,8 @@ void init(Settings& settings) {
                 return;
             }
             static const char* const controlKeys[] = {
-                "screen", "pomodoro", "dhikr", "stopAzan", "quranAction", "quranSurah"
+                "screen", "pomodoro", "dhikr", "stopAzan", "playAzan",
+                "quranAction", "quranSurah"
             };
             if (!hasOnlyKeys(doc.as<JsonObjectConst>(), controlKeys,
                              sizeof(controlKeys) / sizeof(controlKeys[0]))) {
@@ -622,12 +815,14 @@ void init(Settings& settings) {
             JsonVariant pomodoroValue = doc["pomodoro"];
             JsonVariant dhikrValue = doc["dhikr"];
             JsonVariant stopAzanValue = doc["stopAzan"];
+            JsonVariant playAzanValue = doc["playAzan"];
             JsonVariant quranActionValue = doc["quranAction"];
             JsonVariant quranSurahValue = doc["quranSurah"];
             if ((!screenValue.isUnbound() && !screenValue.is<int>()) ||
                 (!pomodoroValue.isUnbound() && !pomodoroValue.is<const char*>()) ||
                 (!dhikrValue.isUnbound() && !dhikrValue.is<const char*>()) ||
                 (!stopAzanValue.isUnbound() && !stopAzanValue.is<bool>()) ||
+                (!playAzanValue.isUnbound() && !playAzanValue.is<bool>()) ||
                 (!quranActionValue.isUnbound() && !quranActionValue.is<const char*>()) ||
                 (!quranSurahValue.isUnbound() && !quranSurahValue.is<int>())) {
                 request->send(400, "application/json", "{\"error\":\"Control fields have invalid types.\"}");
@@ -664,9 +859,11 @@ void init(Settings& settings) {
             }
 
             const bool stopAzan = !stopAzanValue.isUnbound() && stopAzanValue.as<bool>();
+            const bool playAzan = !playAzanValue.isUnbound() && playAzanValue.as<bool>();
             const bool hasQuranAction = !quranActionValue.isUnbound();
             const bool hasCommand = screen >= 0 || pomodoroCommand != 0 ||
-                                    countDhikr || stopAzan || hasQuranAction;
+                                    countDhikr || stopAzan || playAzan ||
+                                    hasQuranAction;
             if (!hasCommand) {
                 request->send(400, "application/json", "{\"error\":\"No supported device command was provided.\"}");
                 return;
@@ -676,6 +873,7 @@ void init(Settings& settings) {
             if (pomodoroCommand != 0) g_webPomodoroRequest = pomodoroCommand;
             if (countDhikr) g_webDhikrRequest = 1;
             if (stopAzan) g_azanStopRequested = true;
+            if (playAzan) g_webAzanStartRequested = true;
             if (hasQuranAction) {
                 const char* qAct = quranActionValue.as<const char*>();
                 if (strcmp(qAct, "play") == 0) {
@@ -748,8 +946,16 @@ void init(Settings& settings) {
         JsonDocument response;
         response["status"] = status;
         if (strcmp(status, "done") == 0) {
-            response["surahNumber"] = surahNumber;
-            response["surah"] = VoiceManager::getSurahName(surahNumber);
+            if (surahNumber == TOTAL_SURAHS + 1) {
+                response["intent"] = "azan";
+            } else if (surahNumber >= 1 && surahNumber <= TOTAL_SURAHS) {
+                response["intent"] = "surah";
+                response["surahNumber"] = surahNumber;
+                response["surah"] = VoiceManager::getSurahName(surahNumber);
+            } else {
+                response["status"] = "error";
+                response["error"] = "Gemini did not recognize a supported command.";
+            }
         } else if (strcmp(status, "error") == 0) {
             response["error"] =
                 strcmp(VoiceManager::getStatusText(), "Gemini key not configured") == 0

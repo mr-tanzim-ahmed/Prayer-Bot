@@ -1,7 +1,7 @@
 #include "clock_calendar_screen.h"
 #include "../display_manager.h"
-#include "weather_icons.h"
 #include "../config.h"
+#include "screen_ui.h"
 #include <time.h>
 
 // ============================================================
@@ -15,24 +15,28 @@ void draw(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers&
     U8G2& oled = DisplayManager::getDisplay();
 
     DisplayManager::clearBuffer();
+    ScreenUI::drawHeader(oled, "CLOCK & DATE", "LOCAL");
 
     struct tm t;
     bool timeValid = getLocalTime(&t);
 
-    // Current time (large)
-    oled.setFont(u8g2_font_logisoso24_tf);
+    ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 24);
     if (timeValid) {
         const int hour12 = (t.tm_hour % 12 == 0) ? 12 : t.tm_hour % 12;
         const char* meridiem = t.tm_hour < 12 ? "AM" : "PM";
-        char timeBuf[12];
-        snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d %s",
-                 hour12, t.tm_min, meridiem);
-        DisplayManager::drawCenteredText(String(timeBuf), 28);
+        char timeBuf[8];
+        snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", hour12, t.tm_min);
+        oled.setFont(u8g2_font_logisoso18_tf);
+        const int timeWidth = oled.getStrWidth(timeBuf);
+        const int startX = (SCREEN_WIDTH - timeWidth - 20) / 2;
+        oled.drawStr(startX, 37, timeBuf);
+        oled.setFont(u8g2_font_5x8_tf);
+        oled.drawStr(startX + timeWidth + 5, 36, meridiem);
     } else {
+        oled.setFont(u8g2_font_logisoso18_tf);
         DisplayManager::drawCenteredText("--:--", 28);
     }
 
-    // Gregorian date
     oled.setFont(u8g2_font_5x8_tf);
     if (timeValid) {
         static const char* const monthNames[] = {
@@ -42,54 +46,37 @@ void draw(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers&
         char dateBuf[24];
         snprintf(dateBuf, sizeof(dateBuf), "Local: %02d %s %04d",
                  t.tm_mday, monthNames[t.tm_mon], t.tm_year + 1900);
-        DisplayManager::drawCenteredText(String(dateBuf), 38);
+        DisplayManager::drawCenteredText(String(dateBuf), 49);
     }
 
-    // Hijri date
     char hijriBuf[40];
-    snprintf(hijriBuf, sizeof(hijriBuf), "%d %s %d AH", hijri.day, hijri.monthName.c_str(), hijri.year);
-    DisplayManager::drawCenteredText(String(hijriBuf), 48);
-
-    oled.drawHLine(0, 52, SCREEN_WIDTH);
-    
-    // Festival banner (if active, overrides sunrise/sunset to save space, or we can just flash them)
-    if (!event.name.isEmpty() && (t.tm_sec % 4 < 2)) {
-        // Flash festival banner every 2 seconds
-        oled.setFont(u8g2_font_5x8_tf);
-        DisplayManager::drawCenteredText(event.name, 62);
-    } else {
-        // Sunrise (Left)
-        // Manual mini sun icon
-        oled.drawCircle(8, 58, 3);
-        oled.drawLine(8, 53, 8, 54);
-        oled.drawLine(8, 62, 8, 63);
-        oled.drawLine(3, 58, 4, 58);
-        oled.drawLine(12, 58, 13, 58);
-        
-        char srBuf[8];
-        snprintf(srBuf, sizeof(srBuf), "%02d:%02d", prayers.sunrise.hour, prayers.sunrise.minute);
-        oled.setFont(u8g2_font_5x8_tf);
-        oled.drawStr(15, 62, srBuf);
-        
-        // Sunset / Maghrib (Right)
-        // Manual half sun (sunset) icon
-        oled.drawCircle(SCREEN_WIDTH - 40, 61, 3, U8G2_DRAW_UPPER_RIGHT | U8G2_DRAW_UPPER_LEFT);
-        oled.drawHLine(SCREEN_WIDTH - 44, 61, 9);
-        
-        char ssBuf[8];
-        snprintf(ssBuf, sizeof(ssBuf), "%02d:%02d", prayers.maghrib.hour, prayers.maghrib.minute);
-        oled.drawStr(SCREEN_WIDTH - 30, 62, ssBuf);
-    }
-
-    // Page indicator
+    snprintf(hijriBuf, sizeof(hijriBuf), "%d %s %d AH", hijri.day,
+             hijri.monthName.c_str(), hijri.year);
     oled.setFont(u8g2_font_5x8_tf);
-    oled.drawStr(108, 63, "3/7");
+    DisplayManager::drawCenteredText(String(hijriBuf), 56);
+
+    if (!event.name.isEmpty()) {
+        oled.setFont(u8g2_font_5x8_tf);
+        String eventText = event.isWeekly ? "JUMUAH · " + event.name : event.name;
+        while (oled.getStrWidth(eventText.c_str()) > SCREEN_WIDTH - 20 &&
+               eventText.length() > 4) {
+            eventText.remove(eventText.length() - 1, 1);
+        }
+        DisplayManager::drawCenteredText(eventText, 63);
+    } else {
+        oled.setFont(u8g2_font_5x8_tf);
+        char sunTimes[24];
+        snprintf(sunTimes, sizeof(sunTimes), "RISE %02u:%02u   SET %02u:%02u",
+                 prayers.sunrise.hour, prayers.sunrise.minute,
+                 prayers.maghrib.hour, prayers.maghrib.minute);
+        DisplayManager::drawCenteredText(String(sunTimes), 63);
+    }
 
     DisplayManager::sendBuffer();
 }
 
 void update(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers& prayers) {
-    // Redraw every second for clock and flashing banner
+    // Redraw every second for the clock.
     draw(hijri, event, prayers);
 }
 

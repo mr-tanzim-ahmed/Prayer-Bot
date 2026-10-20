@@ -31,6 +31,7 @@ namespace AzanManager {
 
     // Play one short notification beep
     void playPomodoroBeep();
+    void playScreenChangeBeep();
 
     // Feed audio samples (call frequently in dedicated task)
     void update();

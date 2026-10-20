@@ -21,6 +21,7 @@ namespace {
     constexpr size_t MAX_GEMINI_RESPONSE_BYTES = 8192;
     constexpr size_t BASE64_INPUT_CHUNK_BYTES = 3072;
     constexpr size_t MAX_SPOKEN_TRANSCRIPT_LENGTH = 120;
+    constexpr uint8_t GEMINI_AZAN_INTENT = TOTAL_SURAHS + 1;
 
     const char* const SURAH_NAMES[] = {
         "Al-Fatiha", "Al-Baqarah", "Aal-E-Imran", "An-Nisa", "Al-Maidah",
@@ -140,7 +141,7 @@ namespace {
             const char digit = answer[i];
             if (digit < '0' || digit > '9') return false;
             number = number * 10 + static_cast<uint8_t>(digit - '0');
-            if (number > TOTAL_SURAHS) return false;
+            if (number > GEMINI_AZAN_INTENT) return false;
         }
         if (number < 1) return false;
         surahNumber = static_cast<uint8_t>(number);
@@ -208,13 +209,15 @@ namespace {
         }
 
         String prompt =
-            "Identify which Quran Surah the speaker asked to play. "
+            "Classify this short voice command for a Quran and prayer device. "
             "The transcript may be English, Bangla/Bengali, or phonetic "
             "transliteration: ";
         prompt += transcript;
         prompt +=
-            ". Return only the Surah number, as one integer from 1 to 114. "
-            "Return 0 if it is not a recognizable Surah name.";
+            ". Return only one integer: 1 through 114 when the user asks to "
+            "find or play that Quran Surah; 115 only when the user explicitly "
+            "asks to play/trigger the device's Azan alarm; otherwise 0. "
+            "Do not infer an Azan request from a Surah request.";
         JsonDocument request;
         request["contents"][0]["parts"][0]["text"] = prompt;
         request["generationConfig"]["temperature"] = 0;
@@ -519,12 +522,17 @@ void processPending(const Settings& settings) {
         }
         portEXIT_CRITICAL(&dashboardRecognitionMux);
         if (recognized) {
-            selectedSurah = recognizedSurah;
-            skipNextAutoListen = true;
-            setStatus("Dashboard voice recognized");
+            if (recognizedSurah <= TOTAL_SURAHS) {
+                selectedSurah = recognizedSurah;
+                skipNextAutoListen = true;
+                setStatus("Dashboard voice recognized");
+                Serial.printf("[VOICE] Dashboard transcript recognized Surah %u (%s).\n",
+                              recognizedSurah, SURAH_NAMES[recognizedSurah - 1]);
+            } else {
+                setStatus("Dashboard Azan alarm request");
+                Serial.println("[VOICE] Dashboard transcript requested the Azan alarm.");
+            }
             ::g_voiceState = VOICE_IDLE;
-            Serial.printf("[VOICE] Dashboard transcript recognized Surah %u (%s).\n",
-                          recognizedSurah, SURAH_NAMES[recognizedSurah - 1]);
         } else {
             setStatus(settings.geminiApiKey[0]
                 ? "Gemini could not identify Surah"

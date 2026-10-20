@@ -67,7 +67,8 @@ void draw(SystemScreen screen) {
 
         case SYS_SCREEN_WEATHER:
             WeatherScreen::draw(g_weather,
-                                g_weatherRefreshing || g_weatherRefreshRequested);
+                                g_weatherRefreshing || g_weatherRefreshRequested,
+                                timeOnScreen);
             break;
 
         case SYS_SCREEN_POMODORO:
@@ -84,6 +85,19 @@ void draw(SystemScreen screen) {
 
         default:
             break;
+    }
+}
+
+void transitionOut() {
+    if (!DisplayManager::isAvailable() || g_azanState == AZAN_PLAYING) return;
+
+    U8G2& oled = DisplayManager::getDisplay();
+    for (uint8_t step = 1; step <= 4; ++step) {
+        oled.setDrawColor(0);
+        oled.drawBox(0, 0, (SCREEN_WIDTH * step) / 4, SCREEN_HEIGHT);
+        oled.setDrawColor(1);
+        DisplayManager::sendBuffer();
+        delay(10);
     }
 }
 
@@ -115,7 +129,8 @@ void update(SystemScreen screen) {
 
         case SYS_SCREEN_WEATHER:
             WeatherScreen::update(
-                g_weather, g_weatherRefreshing || g_weatherRefreshRequested);
+                g_weather, g_weatherRefreshing || g_weatherRefreshRequested,
+                timeOnScreen);
             break;
 
         case SYS_SCREEN_POMODORO:

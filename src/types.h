@@ -86,15 +86,28 @@ struct IslamicEvent {
 struct WeatherData {
     float   temperatureC;
     int     humidity;
+    int     pressureHpa;
+    float   windSpeedKmh;
+    float   latitude;                // Coordinates used for this reading
+    float   longitude;
     int     weatherId;               // OpenWeatherMap weather condition ID
     String  weatherMain;             // "Clear", "Clouds", "Rain", etc.
     String  weatherDescription;      // "light rain", etc.
-    String  iconCode;                // OpenWeather icon code
-    int     airQualityIndex;         // 1-5 (OpenWeather) or US AQI
+    String  iconCode;                // OpenWeather icon code (day/night variant)
+    int     airQualityIndex;         // OpenWeather Air Pollution API index (1-5)
     float   pm25;
+    float   pm10;
+    float   carbonMonoxide;
+    float   nitrogenMonoxide;
+    float   nitrogenDioxide;
+    float   ozone;
+    float   sulphurDioxide;
+    float   ammonia;
     String  cityName;
     unsigned long lastUpdateMs;      // millis() of last successful update
     bool    valid;
+    bool    airQualityValid;
+    bool    windValid;
 };
 
 // Weather icon types for OLED drawing
@@ -104,7 +117,8 @@ enum WeatherIconType : uint8_t {
     ICON_RAIN,
     ICON_STORM,
     ICON_SNOW,
-    ICON_FOG
+    ICON_FOG,
+    ICON_MOON
 };
 
 // ------------------------------------------------------------

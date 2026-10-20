@@ -16,6 +16,7 @@ namespace WifiManager {
 
     // Start AP mode for WiFi provisioning
     void startAP();
+    void processCaptivePortal();
     String getSetupAPSSID();
     bool saveCredentials(const String& ssid, const String& password);
 

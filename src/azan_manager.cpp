@@ -1,10 +1,13 @@
 #include "azan_manager.h"
 #include "config.h"
+#include <ArduinoJson.h>
 #include <AudioFileSource.h>
 #include <AudioGeneratorMP3.h>
 #include <AudioOutputI2S.h>
+#include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <new>
+#include <stdlib.h>
 
 // ============================================================
 //  AZAN MANAGER IMPLEMENTATION
@@ -106,11 +109,15 @@ namespace {
     constexpr uint32_t BEEP_GAP_MS = 200;
     constexpr uint32_t POMODORO_BEEP_LENGTH_MS = 250;
     constexpr int16_t BEEP_AMPLITUDE = 9000;
+    constexpr uint32_t SCREEN_CHANGE_BEEP_LENGTH_MS = 90;
+    constexpr int16_t SCREEN_CHANGE_BEEP_AMPLITUDE = 1800;
     constexpr size_t AUDIO_SAMPLES_PER_UPDATE = 256;
 
     volatile bool playing = false;
     volatile bool pomodoroBeepPending = false;
+    volatile bool screenChangeBeepPending = false;
     bool pomodoroBeepActive = false;
+    bool screenChangeBeepActive = false;
     bool audioReady = false;
     bool outputStarted = false;
     bool quranActive = false;
@@ -122,6 +129,7 @@ namespace {
     uint8_t currentVolume = DEFAULT_VOLUME;
     unsigned long alarmStartedMs = 0;
     unsigned long pomodoroBeepStartedMs = 0;
+    unsigned long screenChangeBeepStartedMs = 0;
     uint32_t samplePhase = 0;
 
     AudioOutputI2S *out = nullptr;
@@ -133,6 +141,88 @@ namespace {
         return cyclePosition < BEEP_LENGTH_MS ||
                (cyclePosition >= BEEP_LENGTH_MS + BEEP_GAP_MS &&
                 cyclePosition < (BEEP_LENGTH_MS * 2) + BEEP_GAP_MS);
+    }
+
+    bool serverHasSurah(const char* surahList, uint8_t surahNumber) {
+        if (!surahList) return false;
+        const char* current = surahList;
+        while (*current) {
+            char* end = nullptr;
+            const long number = strtol(current, &end, 10);
+            if (end == current) return false;
+            if (number == surahNumber) return true;
+            if (*end != ',') return false;
+            current = end + 1;
+        }
+        return false;
+    }
+
+    bool resolveQuranStreamUrl(uint8_t surahNumber, char* url,
+                               size_t urlCapacity) {
+        const String apiUrl = String(MP3QURAN_API_BASE) +
+            "/reciters?language=ar&reciter=102";
+        WiFiClientSecure client;
+        client.setInsecure();
+
+        HTTPClient http;
+        http.setTimeout(10000);
+        if (!http.begin(client, apiUrl)) {
+            Serial.println("[QURAN] Could not initialize MP3Quran API request.");
+            return false;
+        }
+
+        const int status = http.GET();
+        if (status != HTTP_CODE_OK) {
+            Serial.printf("[QURAN] MP3Quran API returned HTTP %d.\n", status);
+            http.end();
+            return false;
+        }
+
+        JsonDocument response;
+        const DeserializationError parseError =
+            deserializeJson(response, http.getStream());
+        http.end();
+        if (parseError) {
+            Serial.printf("[QURAN] Could not parse MP3Quran API response: %s\n",
+                          parseError.c_str());
+            return false;
+        }
+
+        JsonArrayConst reciters = response["reciters"].as<JsonArrayConst>();
+        for (JsonObjectConst reciter : reciters) {
+            if ((reciter["id"] | 0) != 102) continue;
+            JsonArrayConst recordings =
+                reciter["moshaf"].as<JsonArrayConst>();
+            for (JsonObjectConst recording : recordings) {
+                if ((recording["rewaya_id"] | 0) != 1 ||
+                    !serverHasSurah(recording["surah_list"] | "",
+                                    surahNumber)) {
+                    continue;
+                }
+
+                const char* server = recording["server"] | "";
+                constexpr char TRUSTED_SERVER_PREFIX[] =
+                    "https://cdn.mp3quran.net/audio/maher-muaiqly/";
+                if (strncmp(server, TRUSTED_SERVER_PREFIX,
+                            sizeof(TRUSTED_SERVER_PREFIX) - 1) != 0) {
+                    Serial.println("[QURAN] MP3Quran API returned an unsupported audio server.");
+                    return false;
+                }
+
+                const int length = snprintf(url, urlCapacity, "%s%03u.mp3",
+                                            server, surahNumber);
+                if (length < 0 ||
+                    static_cast<size_t>(length) >= urlCapacity) {
+                    Serial.println("[QURAN] MP3Quran stream URL is too long.");
+                    return false;
+                }
+                return true;
+            }
+        }
+
+        Serial.printf("[QURAN] MP3Quran API has no Hafs recording for Surah %u.\n",
+                      surahNumber);
+        return false;
     }
 
     void cleanupQuran() {
@@ -161,10 +251,14 @@ namespace {
         }
 
         quranStarting = true;
-        char url[128];
-        snprintf(url, sizeof(url),
-                 "https://cdn.mp3quran.net/audio/maher-muaiqly/r1/%03u.mp3",
-                 surahNumber);
+        char url[180];
+        if (!resolveQuranStreamUrl(surahNumber, url, sizeof(url))) {
+            snprintf(url, sizeof(url),
+                     "https://cdn.mp3quran.net/audio/maher-muaiqly/r1/%03u.mp3",
+                     surahNumber);
+            Serial.printf("[QURAN] Using validated direct stream fallback for Surah %u.\n",
+                          surahNumber);
+        }
         quranSource = new (std::nothrow) HttpsAudioSource();
         quranDecoder = new (std::nothrow) AudioGeneratorMP3();
         if (!quranSource || !quranDecoder) {
@@ -252,6 +346,8 @@ bool play(PrayerName prayer) {
     alarmStartedMs = millis();
     pomodoroBeepPending = false;
     pomodoroBeepActive = false;
+    screenChangeBeepPending = false;
+    screenChangeBeepActive = false;
     playing = true;
     return true;
 }
@@ -316,7 +412,7 @@ void update() {
 
     if (quranStopRequested && !quranStarting) {
         cleanupQuran();
-        if (playing || pomodoroBeepPending) {
+        if (playing || pomodoroBeepPending || screenChangeBeepPending) {
             outputStarted = out->begin();
         }
     }
@@ -329,29 +425,42 @@ void update() {
         return;
     }
 
-    if (pomodoroBeepPending && !playing) {
+    if (screenChangeBeepPending && !playing && !pomodoroBeepActive &&
+        !screenChangeBeepActive) {
+        screenChangeBeepPending = false;
+        screenChangeBeepActive = true;
+        screenChangeBeepStartedMs = millis();
+        samplePhase = 0;
+    } else if (pomodoroBeepPending && !playing && !screenChangeBeepActive) {
         pomodoroBeepPending = false;
         pomodoroBeepActive = true;
         pomodoroBeepStartedMs = millis();
         samplePhase = 0;
     }
-    if (!playing && !pomodoroBeepActive) return;
+    if (!playing && !pomodoroBeepActive && !screenChangeBeepActive) return;
 
     const unsigned long now = millis();
     if (pomodoroBeepActive &&
         now - pomodoroBeepStartedMs >= POMODORO_BEEP_LENGTH_MS) {
         pomodoroBeepActive = false;
     }
+    if (screenChangeBeepActive &&
+        now - screenChangeBeepStartedMs >= SCREEN_CHANGE_BEEP_LENGTH_MS) {
+        screenChangeBeepActive = false;
+    }
     const bool beepOn = playing
         ? isBeepOn(now - alarmStartedMs)
-        : pomodoroBeepActive;
+        : (pomodoroBeepActive || screenChangeBeepActive);
+    const int16_t amplitude = screenChangeBeepActive
+        ? SCREEN_CHANGE_BEEP_AMPLITUDE
+        : BEEP_AMPLITUDE;
     const uint32_t phaseIncrement =
         (uint32_t)(((uint64_t)BEEP_FREQUENCY_HZ << 32) / AMP_SAMPLE_RATE);
 
     for (size_t i = 0; i < AUDIO_SAMPLES_PER_UPDATE; ++i) {
         int16_t value = 0;
         if (beepOn) {
-            value = (samplePhase & 0x80000000UL) ? BEEP_AMPLITUDE : -BEEP_AMPLITUDE;
+            value = (samplePhase & 0x80000000UL) ? amplitude : -amplitude;
         }
 
         int16_t sample[2] = {value, value};
@@ -368,6 +477,8 @@ void stop() {
     playing = false;
     pomodoroBeepPending = false;
     pomodoroBeepActive = false;
+    screenChangeBeepPending = false;
+    screenChangeBeepActive = false;
     Serial.println("[AZAN] Alarm stopped.");
 }
 
@@ -381,6 +492,24 @@ void playPomodoroBeep() {
         if (!outputStarted) outputStarted = out->begin();
         pomodoroBeepPending = outputStarted;
     }
+}
+
+void playScreenChangeBeep() {
+    if (!audioReady) {
+        Serial.println("[AZAN] Cannot play screen-change beep: I2S audio is unavailable.");
+        return;
+    }
+    if (playing) return;
+
+    stopQuran();
+    if (!outputStarted) {
+        outputStarted = out->begin();
+        if (!outputStarted) {
+            Serial.println("[AZAN] Could not restart I2S output for screen-change beep.");
+            return;
+        }
+    }
+    screenChangeBeepPending = true;
 }
 
 bool isPlaying() {

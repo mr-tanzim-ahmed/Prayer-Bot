@@ -2,6 +2,7 @@
 #include "../display_manager.h"
 #include "../prayer_manager.h"
 #include "../config.h"
+#include "screen_ui.h"
 
 // ============================================================
 //  ALL PRAYERS SCREEN (Screen 2)
@@ -23,19 +24,7 @@ void draw(const DailyPrayers& prayers, const NextPrayerInfo& next) {
 
     DisplayManager::clearBuffer();
 
-    // Header
-    oled.setFont(u8g2_font_6x10_tf);
-    oled.drawStr(2, 9, "ALL PRAYERS");
-    oled.drawHLine(0, 12, SCREEN_WIDTH);
-    // Page indicator (top‑right corner)
-    oled.setFont(u8g2_font_5x8_tf);
-    {
-        const char* pageStr = "2/7";
-        int pw = oled.getUTF8Width(pageStr);
-        oled.drawStr(SCREEN_WIDTH - pw - 4, 9, pageStr);
-    }
-
-    oled.setFont(u8g2_font_5x8_tf);
+    ScreenUI::drawHeader(oled, "TODAY'S PRAYERS", "SALAH");
 
     struct {
         const char* name;
@@ -50,26 +39,28 @@ void draw(const DailyPrayers& prayers, const NextPrayerInfo& next) {
         {"Isha",    prayers.isha,    PRAYER_ISHA}
     };
 
-    int y = 22;
     for (int i = 0; i < 6; i++) {
-        // Highlight next prayer
-        if (rows[i].prayerName == next.name) {
-            oled.drawBox(0, y - 7, SCREEN_WIDTH, 9);
+        const int column = i % 2;
+        const int row = i / 2;
+        const int x = column == 0 ? 2 : 65;
+        const int y = 18 + row * 15;
+        const bool isNext = rows[i].prayerName == next.name;
+        if (isNext) {
+            ScreenUI::drawPill(oled, x, y, 61, 14);
             oled.setDrawColor(0);
+        } else {
+            ScreenUI::drawCard(oled, x, y, 61, 14);
         }
 
-        oled.drawStr(4, y, rows[i].name);
+        oled.setFont(u8g2_font_5x8_tf);
+        oled.drawStr(x + 4, y + 10, rows[i].name);
         String t = formatTime(rows[i].time.hour, rows[i].time.minute);
-        int tw = oled.getUTF8Width(t.c_str());
-        oled.drawStr(SCREEN_WIDTH - tw - 4, y, t.c_str());
+        oled.setFont(u8g2_font_6x10_tf);
+        const int tw = oled.getStrWidth(t.c_str());
+        oled.drawStr(x + 61 - tw - 4, y + 10, t.c_str());
 
         oled.setDrawColor(1);
-        y += 8;
     }
-
-    // Page indicator (removed)
-    oled.setFont(u8g2_font_5x8_tf);
-    oled.drawStr(108, 63, "2/7");
 
     DisplayManager::sendBuffer();
 }

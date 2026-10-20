@@ -1,6 +1,7 @@
 #include "dhikr_screen.h"
 #include "../display_manager.h"
 #include "../config.h"
+#include "screen_ui.h"
 
 namespace DhikrScreen {
 namespace {
@@ -33,38 +34,33 @@ void draw(unsigned long timeOnScreenMs) {
         5 - ((cycleTime % DHIKR_INTERVAL_MS) / 1000);
     const DhikrPhrase& phrase = PHRASES[index];
 
-    oled.setFont(u8g2_font_6x10_tf);
-    oled.drawStr(2, 9, "DHIKR");
     char phrasePosition[8];
     snprintf(phrasePosition, sizeof(phrasePosition), "%u/5",
              static_cast<unsigned>(index + 1));
-    oled.drawStr(78, 9, phrasePosition);
-    oled.drawStr(108, 9, "6/7");
-    oled.drawHLine(0, 12, SCREEN_WIDTH);
+    ScreenUI::drawHeader(oled, "DHIKR", phrasePosition);
 
-    oled.setFont(u8g2_font_helvB12_tf);
-    DisplayManager::drawCenteredText(phrase.transliteration, 29);
+    ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 29);
+    oled.setFont(u8g2_font_helvB10_tf);
+    DisplayManager::drawCenteredText(phrase.transliteration, 33);
 
     oled.setFont(u8g2_font_5x8_tf);
-    DisplayManager::drawCenteredText(phrase.meaningLine1, 43);
+    DisplayManager::drawCenteredText(phrase.meaningLine1, 41);
     if (phrase.meaningLine2[0] != '\0') {
-        DisplayManager::drawCenteredText(phrase.meaningLine2, 52);
+        DisplayManager::drawCenteredText(phrase.meaningLine2, 48);
     }
 
     const int elapsedMs = cycleTime % DHIKR_INTERVAL_MS;
-    const int barWidth = map(elapsedMs, 0, DHIKR_INTERVAL_MS,
-                             0, SCREEN_WIDTH - 4);
-    oled.drawFrame(2, 56, SCREEN_WIDTH - 4, 3);
-    if (barWidth > 0) oled.drawBox(3, 57, barWidth - 1, 1);
+    ScreenUI::drawProgress(oled, 4, 52, SCREEN_WIDTH - 8,
+                           elapsedMs, DHIKR_INTERVAL_MS);
 
     char countText[24];
     snprintf(countText, sizeof(countText), "Count: %lu",
              static_cast<unsigned long>(dhikrCount));
-    oled.drawStr(2, 63, countText);
+    oled.drawStr(4, 63, countText);
     char remainingText[12];
     snprintf(remainingText, sizeof(remainingText), "Next:%02ds",
              remainingSeconds);
-    oled.drawStr(91, 63, remainingText);
+    oled.drawStr(93, 63, remainingText);
 
     DisplayManager::sendBuffer();
 }

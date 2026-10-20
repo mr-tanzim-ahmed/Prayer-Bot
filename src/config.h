@@ -47,15 +47,6 @@
 // ------------------------------------------------------------
 #define SCREEN_WIDTH          128
 #define SCREEN_HEIGHT         64
-#define TOTAL_SCREENS         7
-
-#define SCREEN_PRAYER_FOCUS   0
-#define SCREEN_ALL_PRAYERS    1
-#define SCREEN_CLOCK_CALENDAR 2
-#define SCREEN_WEATHER        3
-#define SCREEN_POMODORO       4
-#define SCREEN_DHIKR          5
-#define SCREEN_QURAN          6
 
 // ------------------------------------------------------------
 // Timing Intervals
@@ -63,9 +54,7 @@
 #define WEATHER_UPDATE_INTERVAL   (30UL * 60UL * 1000UL)
 #define PRAYER_FETCH_INTERVAL     (30UL * 60UL * 1000UL)
 #define PRAYER_UPDATE_INTERVAL    (60UL * 1000UL)
-#define PRAYER_CACHE_FETCH_DAYS   30
 #define NTP_SYNC_INTERVAL         (6UL * 3600UL * 1000UL)
-#define CLOCK_DISPLAY_INTERVAL    1000UL
 #define TOUCH_DEBOUNCE_MS         200UL
 
 // ------------------------------------------------------------
@@ -91,8 +80,8 @@
 #define WIFI_CONNECT_TIMEOUT  35000UL
 #define AP_SSID               "Prayer-Bot"
 #define AP_PASSWORD           "12345678"
-#define DEFAULT_STA_SSID      "Firefly"
-#define DEFAULT_STA_PASSWORD  "QWErty123456"
+
+
 #define WEB_SERVER_PORT       80
 #define NTP_SERVER            "pool.ntp.org"
 
@@ -100,10 +89,7 @@
 // API Endpoints
 // ------------------------------------------------------------
 #define ALADHAN_API_BASE      "https://api.aladhan.com/v1"
-#define OPEN_METEO_WEATHER    "https://api.open-meteo.com/v1/forecast"
-#define OPEN_METEO_AIR        "https://air-quality-api.open-meteo.com/v1/air-quality"
-#define QURAN_AUDIO_BASE      "https://cdn.islamic.network/quran/audio/128/ar.alafasy"
-#define QURAN_CDN_BASE        "http://server8.mp3quran.net/afs/"
+#define MP3QURAN_API_BASE     "https://mp3quran.net/api/v3"
 #define OPENWEATHER_API_BASE  "https://api.openweathermap.org/data/2.5"
 
 // API keys are declared in secrets.h.

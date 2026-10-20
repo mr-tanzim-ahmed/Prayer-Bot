@@ -503,7 +503,6 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     }
     .input-with-button input { flex: 1; }
     /* Wi‑Fi Section Enhancements */
-    #wifiSetup .input-with-button select,
     #wifiSetup .input-with-button input {
       min-height: 56px;
     }
@@ -522,6 +521,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     
     /* Buttons (Min 48px touch target) */
     button {
+      position: relative;
+      overflow: hidden;
       min-height: 48px;
       border: 1.5px solid var(--line);
       border-radius: var(--radius-sm);
@@ -536,27 +537,33 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       align-items: center;
       justify-content: center;
       gap: 8px;
-      transition: background 0.15s, border-color 0.15s, transform 0.1s, box-shadow 0.15s;
+      transition: background 0.18s, border-color 0.18s, transform 0.12s, box-shadow 0.18s;
     }
     button:hover {
       background: var(--panel-subtle);
       border-color: var(--line-hover);
     }
-    button:active { transform: translateY(1px); }
+    button:active { transform: translateY(1px) scale(0.985); }
     button.primary {
-      background: var(--primary);
+      background: linear-gradient(180deg, rgba(255,255,255,0.28), transparent 48%),
+                  linear-gradient(135deg, #0f766e, #064e3b);
       color: #ffffff;
-      border-color: var(--primary);
-      box-shadow: 0 2px 8px rgba(15, 118, 110, 0.25);
+      border-color: rgba(255,255,255,0.28);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.32),
+                  0 5px 14px rgba(15, 118, 110, 0.24);
     }
     button.primary:hover {
-      background: var(--primary-hover);
+      background: linear-gradient(180deg, rgba(255,255,255,0.34), transparent 48%),
+                  linear-gradient(135deg, #15968a, #065f46);
       border-color: var(--primary-hover);
     }
     button.accent {
-      background: var(--accent);
+      background: linear-gradient(180deg, rgba(255,255,255,0.28), transparent 48%),
+                  linear-gradient(135deg, #f59e0b, #b45309);
       color: #fff;
-      border-color: var(--accent);
+      border-color: rgba(255,255,255,0.28);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.32),
+                  0 4px 12px rgba(180,83,9,0.2);
     }
     button.accent:hover {
       background: #b45309;
@@ -601,6 +608,72 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       border-color: #fecaca;
       color: var(--bad);
     }
+
+    .wifi-scan-dialog {
+      width: min(560px, calc(100% - 24px));
+      max-height: min(78vh, 680px);
+      padding: 0;
+      border: 1px solid rgba(255,255,255,0.75);
+      border-radius: 22px;
+      color: var(--text);
+      background: rgba(255,255,255,0.94);
+      box-shadow: 0 24px 80px rgba(15,23,42,0.28);
+      -webkit-backdrop-filter: blur(22px) saturate(1.4);
+      backdrop-filter: blur(22px) saturate(1.4);
+    }
+    .wifi-scan-dialog::backdrop {
+      background: rgba(15,23,42,0.42);
+      -webkit-backdrop-filter: blur(5px);
+      backdrop-filter: blur(5px);
+    }
+    .wifi-dialog-body { padding: 20px; }
+    .wifi-dialog-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .wifi-dialog-header h2 { margin: 0; }
+    .wifi-dialog-header button { min-height: 42px; padding: 6px 12px; }
+    .wifi-scan-status {
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(241,245,249,0.8);
+      color: var(--text-muted);
+      font-weight: 650;
+    }
+    .wifi-scan-spinner {
+      width: 28px;
+      height: 28px;
+      flex: 0 0 28px;
+      border: 3px solid #cbd5e1;
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: wifi-spin 0.8s linear infinite;
+    }
+    .wifi-scan-status[data-loading="false"] .wifi-scan-spinner { display: none; }
+    @keyframes wifi-spin { to { transform: rotate(360deg); } }
+    .wifi-scan-list {
+      display: grid;
+      gap: 8px;
+      max-height: 48vh;
+      overflow: auto;
+      margin-top: 12px;
+    }
+    .wifi-network-choice {
+      display: flex;
+      justify-content: space-between;
+      text-align: left;
+      min-height: 56px;
+      width: 100%;
+    }
+    .wifi-network-choice small { color: var(--text-muted); }
     
     /* Al-Quran Voice Panel & Visualizer */
     .voice-panel {
@@ -655,7 +728,47 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       50% { box-shadow: 0 0 0 10px rgba(15, 118, 110, 0.18); transform: scale(1.05); }
     }
     @keyframes voice-wave { to { height: 28px; } }
+    @media (max-width: 520px) {
+      .assistant-panel { padding: 14px; }
+      .assistant-search { grid-template-columns: 1fr; }
+    }
     .voice-status { min-height: 24px; font-weight: 650; margin: 4px 0; color: var(--text); }
+    .assistant-panel {
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+      border: 1px solid #c7d2fe;
+      border-radius: 20px;
+      background:
+        radial-gradient(circle at 95% 0%, rgba(196, 181, 253, .42), transparent 38%),
+        linear-gradient(135deg, #f5f3ff, #eff6ff 58%, #ecfdf5);
+    }
+    .assistant-heading { display: flex; align-items: center; gap: 14px; }
+    .assistant-heading .voice-orb { flex: 0 0 auto; }
+    .assistant-greeting { font-weight: 800; color: var(--primary-dark); }
+    .assistant-examples { color: var(--text-muted); font-size: .86rem; line-height: 1.55; }
+    .assistant-search { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    .assistant-search input { min-width: 0; }
+    .assistant-result {
+      min-height: 42px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .76);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    .assistant-result.error { color: var(--bad); }
+    .timing-progress {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--surface-soft, #f4f7f6);
+      font-size: .9rem;
+    }
     
     /* Pomodoro & Dhikr Counters */
     .dhikr-button {
@@ -733,30 +846,17 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     
     /* Floating Save Bar */
     .savebar {
-  position: sticky;
-  bottom: 12px;
-  z-index: 90;
-  margin: 12px auto 0;
-  max-width: 560px;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15,118,110,0.15);
-}
       position: sticky;
-      bottom: 16px;
+      bottom: max(12px, env(safe-area-inset-bottom));
       z-index: 90;
-      margin: 24px auto 0;
+      margin: 12px auto 0;
       max-width: 560px;
-      padding: 12px 16px;
-      background: rgba(255, 255, 255, 0.94);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1.5px solid var(--line);
-      border-radius: 18px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.86);
+      backdrop-filter: blur(18px) saturate(1.35);
+      -webkit-backdrop-filter: blur(18px) saturate(1.35);
+      border: 1px solid rgba(255,255,255,0.72);
+      border-radius: 16px;
       box-shadow: var(--shadow-lg);
     }
     .savebar button { width: 100%; min-height: 48px; }
@@ -797,15 +897,31 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       .hero-grid { grid-template-columns: 1fr; gap: 16px; }
     }
     @media (max-width: 580px) {
-      main { padding: 16px 12px 60px; }
+      main { padding: 16px 12px max(60px, calc(60px + env(safe-area-inset-bottom))); }
+      .app-bar-inner { padding: 10px 12px 8px; gap: 10px; flex-wrap: wrap; }
+      .brand { gap: 9px; min-width: 0; }
+      .brand-icon { width: 38px; height: 38px; flex: 0 0 38px; }
+      .brand-title { font-size: 1.15rem; }
+      .brand-subtitle { flex-wrap: wrap; gap: 4px; font-size: 0.72rem; }
+      .app-bar-actions { width: 100%; }
+      .app-bar-actions button { flex: 1; min-height: 44px; }
+      .nav-bar { padding: 4px 12px 9px; gap: 6px; }
+      .nav-pill { min-height: 38px; padding: 7px 11px; }
       .card { padding: 18px 14px; border-radius: 14px; }
       .fields { grid-template-columns: 1fr; }
+      .fields > .field[style*="grid-column"] { grid-column: auto !important; }
       .prayers-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .actions { gap: 8px; }
       .actions button { flex: 1 1 100%; min-height: 48px; }
       .hero-banner { padding: 20px 16px; }
       .chart-wrap { height: 200px; }
+      .settings > summary { padding: 17px 14px; gap: 10px; font-size: 1rem; }
+      .settings > summary .badge { max-width: 46%; text-align: center; }
+      .settings-body { padding: 0 14px 18px; }
+      .input-with-button { align-items: stretch; }
+      #wifiSetup .input-with-button button { min-width: 82px; padding-inline: 12px; }
+      .wifi-dialog-body { padding: 16px; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
@@ -864,21 +980,21 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   </aside>
 
   <!-- Wi-Fi Setup Section -->
-  <section id="wifiSetup" class="card wide" style="margin-bottom:24px" hidden>
+  <section id="wifiSetup" class="card wide" style="margin-bottom:24px">
     <h2><span>📶</span> Wi-Fi Connection Setup</h2>
-    <p>Connect Prayer-Bot to your home router. The device verifies the router connection, obtains a DHCP IP, and securely saves credentials.</p>
+    <p>Connect Prayer-Bot to your home router. Credentials are saved to the device only after the router connection and DHCP address are verified.</p>
     <div class="hint" style="margin-bottom:18px;line-height:1.6">
       <strong>Requirements:</strong> 2.4 GHz Wi-Fi only (5 GHz-only SSIDs cannot be used).<br>
-      Default setup hotspot: <strong id="setupApNameLabel">Prayer-Bot</strong> (password: <strong>12345678</strong>) · Setup IP: <strong>http://192.168.4.1</strong>
+      Join the <strong id="setupApNameLabel">Prayer-Bot</strong> hotspot (password: <strong>12345678</strong>). Your phone should open this setup page automatically; if it does not, tap the Wi-Fi network's <strong>Sign in to network</strong> notification. The dashboard remains here while you enter your router details.
     </div>
 
     <div class="fields">
       <div class="field">
-        <label for="wifiNetworks"><span class="wifi-step-badge">1</span> Nearby Wi-Fi networks</label>
+        <label><span class="wifi-step-badge">1</span> Nearby Wi-Fi networks</label>
         <div class="input-with-button">
-          <select id="wifiNetworks"><option value="">— tap Scan to discover networks —</option></select>
-          <button id="scanWifi" type="button" onclick="scanWifiNetworks()" style="flex:0 0 auto">🔍 Scan</button>
+          <button id="scanWifi" class="primary" type="button" onclick="scanWifiNetworks()">🔍 Scan nearby networks</button>
         </div>
+        <small class="hint">Select a scanned network to fill its name, or enter an SSID manually.</small>
       </div>
       <div class="field">
         <label for="wifiSsid"><span class="wifi-step-badge">2</span> Wi-Fi network name (SSID)</label>
@@ -887,7 +1003,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <div class="field" style="grid-column:span 2">
         <label for="wifiPass"><span class="wifi-step-badge">3</span> Wi-Fi password</label>
         <div class="input-with-button">
-          <input id="wifiPass" type="password" maxlength="63" autocomplete="current-password" placeholder="Enter Wi-Fi password (blank if open)">
+          <input id="wifiPass" type="password" maxlength="63" autocomplete="off" placeholder="Enter Wi-Fi password (blank if open)">
           <button type="button" onclick="togglePasswordVisibility('wifiPass', this)" style="flex:0 0 auto" aria-label="Toggle password view">👁 Show</button>
         </div>
         <small class="hint">WPA2/WPA3 password. For open router networks, leave this blank.</small>
@@ -1020,22 +1136,30 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
     <!-- Al-Quran Audio Player -->
     <article class="card" id="quran-player">
-      <h2><span>📖</span> Al-Quran Recitation Player</h2>
-      <p class="hint">Recitation by Sheikh Maher Al-Muaiqly. Choose playback on Prayer-Bot speaker or this phone. Use voice recognition to name any Surah in English or Bangla.</p>
+      <h2><span>✨</span> Gemini Quran Assistant</h2>
+      <p class="hint">Find a Surah by voice or text, then listen on this phone or Prayer-Bot. Gemini interprets your request through Prayer-Bot; your API key never enters this dashboard.</p>
 
-      <div class="voice-panel">
-        <div id="voiceOrb" class="voice-orb" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"></path></svg>
-        </div>
-        <div>
-          <div class="voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-          <div id="browserVoiceStatus" class="voice-status">Ready to recognize Surah voice command.</div>
-          <div class="actions" style="margin-top:8px">
-            <select id="voiceLanguage" data-requires-wifi style="max-width:140px;min-height:44px"><option value="en-US">English</option><option value="bn-BD">বাংলা (Bangla)</option></select>
-            <button id="browserVoiceButton" type="button" data-requires-wifi onclick="listenForSurah()" style="min-height:44px">🎙 Speak Surah</button>
-            <button id="browserVoiceCancel" type="button" onclick="cancelBrowserVoice()" style="min-height:44px" hidden>Cancel</button>
+      <div class="assistant-panel">
+        <div class="assistant-heading">
+          <div id="voiceOrb" class="voice-orb" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"></path></svg>
+          </div>
+          <div>
+            <div class="assistant-greeting">Assalamu alaikum! What would you like to hear?</div>
+            <div class="voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
           </div>
         </div>
+        <div id="browserVoiceStatus" class="assistant-result" role="status" aria-live="polite">Ready. Ask for a Surah or the Prayer-Bot Azan alarm.</div>
+        <div class="actions">
+          <select id="voiceLanguage" data-requires-wifi aria-label="Voice language" style="max-width:150px;min-height:44px"><option value="en-US">English</option><option value="bn-BD">বাংলা (Bangla)</option></select>
+          <button id="browserVoiceButton" type="button" data-requires-wifi onclick="listenForSurah()" style="min-height:44px">🎙 Speak</button>
+          <button id="browserVoiceCancel" type="button" onclick="cancelBrowserVoice()" style="min-height:44px" hidden>Cancel</button>
+        </div>
+        <div class="assistant-search">
+          <input id="assistantQuery" type="search" maxlength="120" placeholder="Try “Play Surah Al-Kahf”" aria-label="Ask the Quran assistant">
+          <button id="assistantAskButton" type="button" data-requires-wifi onclick="submitAssistantQuery()">Ask Gemini</button>
+        </div>
+        <div class="assistant-examples">Try: “Play Surah Ar-Rahman”, “Find Ya-Sin”, or “Play the Azan alarm”. The Azan action plays the device's notification tone, not a recorded call to prayer.</div>
       </div>
 
       <div class="field" style="margin-top:16px">
@@ -1052,6 +1176,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
           <option value="1">1. Al-Fatiha</option>
         </select>
       </div>
+      <div class="field">
+        <label for="timingReaderSelect">Phone reciter with verse timing</label>
+        <select id="timingReaderSelect" data-requires-wifi>
+          <option value="">Loading MP3Quran timing reads…</option>
+        </select>
+        <small id="timingStatus" class="hint">Verse timing is available for phone playback.</small>
+      </div>
 
       <div class="actions" style="margin-top:12px">
         <button type="button" class="primary" data-requires-wifi onclick="playQuran()">▶ Play Recitation</button>
@@ -1061,6 +1192,10 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       </div>
 
       <audio id="phoneQuranAudio" controls preload="none" data-requires-wifi style="display:none;width:100%;margin-top:14px"></audio>
+      <div class="timing-progress">
+        <span>Verse sync</span>
+        <strong id="quranAyahStatus">Choose a Surah to begin</strong>
+      </div>
 
       <div class="stats" style="margin-top:16px">
         <div class="stat"><span>Now Playing</span><strong id="quranNowPlaying">None</strong></div>
@@ -1126,19 +1261,27 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <h2><span>⛅</span> Local Weather &amp; Air Quality</h2>
       <div class="stats">
         <div class="stat"><span>City</span><strong id="weatherCity">—</strong></div>
-        <div class="stat"><span>Temperature</span><strong id="temperature">—</strong></div>
+        <div class="stat"><span>Condition</span><strong id="weatherCondition">—</strong></div>
+        <div class="stat"><span>Air temperature</span><strong id="temperature">—</strong></div>
         <div class="stat"><span>Relative Humidity</span><strong id="humidity">—</strong></div>
-        <div class="stat"><span>European AQI</span><strong id="aqi">—</strong></div>
-        <div class="stat"><span>PM2.5 Concentration</span><strong id="pm25">—</strong></div>
+        <div class="stat"><span>OpenWeather AQI (1–5)</span><strong id="aqi">—</strong></div>
+        <div class="stat"><span>PM2.5</span><strong id="pm25">—</strong></div>
+        <div class="stat"><span>PM10</span><strong id="pm10">—</strong></div>
+        <div class="stat"><span>Ozone (O₃)</span><strong id="ozone">—</strong></div>
+        <div class="stat"><span>Nitrogen dioxide (NO₂)</span><strong id="no2">—</strong></div>
+        <div class="stat"><span>Carbon monoxide (CO)</span><strong id="co">—</strong></div>
+        <div class="stat"><span>Sulphur dioxide (SO₂)</span><strong id="so2">—</strong></div>
+        <div class="stat"><span>Nitrogen monoxide (NO)</span><strong id="no">—</strong></div>
+        <div class="stat"><span>Ammonia (NH₃)</span><strong id="nh3">—</strong></div>
       </div>
-      <p class="hint" style="margin-top:12px">Real-time weather data from OpenWeatherMap &amp; Open-Meteo European Air Quality APIs.</p>
+      <p class="hint" style="margin-top:12px">Current air temperature and pollution readings come from OpenWeatherMap at the configured coordinates. Phone weather apps may show a different value because they can use another provider, nearby measurement point, update time, or a feels-like temperature. OpenWeatherMap's AQI uses its own 1–5 scale; it is not the US AQI scale. Air-quality data requires an active API key.</p>
     </article>
 
     <!-- Device Settings Accordion -->
     <details class="card wide settings" id="settings">
       <summary>
         <span><span>⚙</span> Device Preferences &amp; Coordinates</span>
-        <span class="badge">Location, Calculation &amp; API Keys</span>
+        <span class="badge">Location &amp; Calculation</span>
       </summary>
       <div class="settings-body">
         
@@ -1222,28 +1365,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
           <div class="field"><label for="sunsetOff">Pre-Sunset Window (0–60 min)</label><input id="sunsetOff" type="number" min="0" max="60" required></div>
         </div>
 
-        <h3>🔑 External API Keys</h3>
-        <div class="fields">
-          <div class="field">
-            <label for="owmKey">OpenWeatherMap API Key</label>
-            <div class="input-with-button">
-              <input id="owmKey" type="password" maxlength="63" placeholder="Leave blank to retain current key">
-              <button type="button" onclick="togglePasswordVisibility('owmKey', this)">👁</button>
-            </div>
-            <small class="hint">Status: <span id="owmKeyStatus">Loading…</span></small>
-          </div>
-          <div class="field">
-            <label for="geminiKey">Gemini Flash API Key (Voice Surah Search)</label>
-            <div class="input-with-button">
-              <input id="geminiKey" type="password" maxlength="63" placeholder="Leave blank to retain current key">
-              <button type="button" onclick="togglePasswordVisibility('geminiKey', this)">👁</button>
-            </div>
-            <small class="hint">Status: <span id="geminiKeyStatus">Loading…</span></small>
-          </div>
-        </div>
-
         <div class="actions" style="margin-top:20px">
-          <button class="primary" type="button" onclick="saveSettings()">💾 Save &amp; Apply All Settings</button>
+          <button class="primary" type="button" onclick="saveSettings()">💾 Save &amp; Apply Settings</button>
         </div>
       </div>
     </details>
@@ -1256,6 +1379,23 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     <div id="message" class="message" role="status" aria-live="polite"></div>
   </div>
 </main>
+
+<dialog id="wifiScanDialog" class="wifi-scan-dialog" aria-labelledby="wifiScanTitle">
+  <div class="wifi-dialog-body">
+    <div class="wifi-dialog-header">
+      <div>
+        <h2 id="wifiScanTitle">Nearby Wi-Fi networks</h2>
+        <p class="hint">Scanning the device's 2.4 GHz Wi-Fi range.</p>
+      </div>
+      <button type="button" onclick="closeWifiScan()" aria-label="Close Wi-Fi scan">Close</button>
+    </div>
+    <div id="wifiScanStatus" class="wifi-scan-status" role="status" aria-live="polite" data-loading="true">
+      <span class="wifi-scan-spinner" aria-hidden="true"></span>
+      <span>Scanning nearby networks…</span>
+    </div>
+    <div id="wifiScanList" class="wifi-scan-list"></div>
+  </div>
+</dialog>
 
 <script>
   const byId = id => document.getElementById(id);
@@ -1278,18 +1418,6 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     if (!el) return;
     el.textContent = text;
     el.classList.toggle('error', error);
-  }
-
-  function togglePasswordVisibility(inputId, btn) {
-    const input = byId(inputId);
-    if (!input) return;
-    if (input.type === 'password') {
-      input.type = 'text';
-      btn.textContent = '🔒 Hide';
-    } else {
-      input.type = 'password';
-      btn.textContent = '👁 Show';
-    }
   }
 
   function showDashboard() {
@@ -1317,6 +1445,12 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     refreshAll();
   }
 
+  function closeWifiScan() {
+    const dialog = byId('wifiScanDialog');
+    if (typeof dialog.close === 'function') dialog.close();
+    else dialog.removeAttribute('open');
+  }
+
   async function api(path, options = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
@@ -1338,6 +1472,11 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   function setOnlineAvailability(connected) {
     routerWifiConnected = Boolean(connected);
+    if (!routerWifiConnected) timingReadsLoadAttempted = false;
+    if (routerWifiConnected && !timingReadsLoadAttempted) {
+      timingReadsLoadAttempted = true;
+      loadTimingReads();
+    }
     const notice = byId('onlineOfflineNotice');
     notice.hidden = routerWifiConnected;
     
@@ -1394,8 +1533,6 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     const preset = Object.keys(locations).find(key => Math.abs(locations[key].lat - s.lat) < 0.01 && Math.abs(locations[key].lon - s.lon) < 0.01);
     byId('locationPreset').value = preset || 'custom';
     put('overviewCity', s.city || 'Dhaka');
-    put('owmKeyStatus', s.owmKeyConfigured ? 'Configured ✅' : 'Not configured');
-    put('geminiKeyStatus', s.geminiKeyConfigured ? 'Configured ✅' : 'Not configured');
   }
 
   async function loadStatus() {
@@ -1419,12 +1556,16 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         byId('wifiMessage').classList.remove('error');
         byId('continueWifi').hidden = true;
         byId('connectWifi').disabled = true;
+        byId('wifiPass').value = '';
+        byId('wifiPass').type = 'password';
       } else if (s.network.connected && !s.network.connecting) {
         wifiSubmitted = false;
         byId('wifiMessage').textContent = 'Router Wi-Fi connected! Select "Next" to open the dashboard.';
         byId('wifiMessage').classList.remove('error');
         byId('continueWifi').hidden = false;
         byId('connectWifi').disabled = false;
+        byId('wifiPass').value = '';
+        byId('wifiPass').type = 'password';
       } else if (s.network.connecting) {
         byId('wifiMessage').textContent = 'Connecting to router Wi-Fi…';
         byId('wifiMessage').classList.remove('error');
@@ -1533,10 +1674,15 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
     // Weather status
     put('weatherCity', s.weather.city || 'Dhaka');
+    put('weatherCondition', s.weather.valid ? s.weather.condition : '—');
     put('temperature', s.weather.valid ? `${s.weather.temperatureC} °C` : 'Unavailable');
     put('humidity', s.weather.valid ? `${s.weather.humidity}%` : '—');
-    put('aqi', s.weather.valid ? String(s.weather.aqi) : '—');
-    put('pm25', s.weather.valid ? `${s.weather.pm25} µg/m³` : '—');
+    put('aqi', s.weather.airQualityValid
+      ? `${s.weather.aqi} · ${['', 'Good', 'Fair', 'Moderate', 'Poor', 'Very poor'][s.weather.aqi] || 'Unknown'}`
+      : 'Unavailable');
+    for (const key of ['pm25', 'pm10', 'ozone', 'no2', 'co', 'so2', 'no', 'nh3']) {
+      put(key, s.weather.airQualityValid ? `${Number(s.weather[key]).toFixed(1)} µg/m³` : '—');
+    }
 
     if (initialStatus) {
       byId('screenSelect').value = s.screen;
@@ -1692,11 +1838,6 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       zawalOff: Number(byId('zawalOff').value),
       sunsetOff: Number(byId('sunsetOff').value)
     };
-    const owm = byId('owmKey')?.value.trim();
-    if (owm) body.owmKey = owm;
-    const gemini = byId('geminiKey')?.value.trim();
-    if (gemini) body.geminiKey = gemini;
-
     const inputs = [...document.querySelectorAll('#city,#timezone,#lat,#lon,#utcOffset,#hijriOffset,#focusMin,#shortBrk,#longBrk,#pomCycles,#sunriseOff,#zawalOff,#sunsetOff')];
     const invalid = inputs.find(i => !i.checkValidity());
     if (invalid) {
@@ -1713,15 +1854,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
     try {
       await api('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      if (byId('owmKey')) byId('owmKey').value = '';
-      if (byId('geminiKey')) byId('geminiKey').value = '';
       await loadSettings();
       await loadStatus();
       message('Settings saved to device storage and applied.');
     } catch(e) {
       message(e.message, true);
     } finally {
-      buttons.forEach(b => { b.disabled = false; b.textContent = '💾 Save & Apply All Settings'; });
+      buttons.forEach(b => { b.disabled = false; b.textContent = '💾 Save & Apply Settings'; });
     }
   }
 
@@ -1760,6 +1899,9 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     "Quraysh","Al-Ma'un","Al-Kawthar","Al-Kafirun","An-Nasr",
     "Al-Masad","Al-Ikhlas","Al-Falaq","An-Nas"
   ];
+  let timingReads = [];
+  let timingReadsLoadAttempted = false;
+  let activeAyahTimings = [];
 
   function initQuranDropdown() {
     const sel = byId('quranSurahSelect');
@@ -1771,14 +1913,87 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     sel.value = 1;
   }
 
+  async function loadTimingReads() {
+    if (!routerWifiConnected) return;
+    const select = byId('timingReaderSelect');
+    try {
+      const response = await api('/api/quran/timing-reads');
+      if (!Array.isArray(response.reads) || response.reads.length === 0) {
+        throw new Error('MP3Quran did not return any timed recitations.');
+      }
+      timingReads = response.reads.filter(read =>
+        Number.isInteger(read.id) && read.id > 0 &&
+        typeof read.name === 'string' && typeof read.folderUrl === 'string' &&
+        read.folderUrl.startsWith('https://') &&
+        Number.isInteger(read.surahCount) && read.surahCount > 0
+      );
+      if (timingReads.length === 0) throw new Error('No usable timed recitations were returned.');
+      select.replaceChildren();
+      timingReads.forEach(read => {
+        const rewaya = typeof read.rewaya === 'string' && read.rewaya
+          ? ` · ${read.rewaya}`
+          : '';
+        select.add(new Option(`${read.name}${rewaya}`, read.id));
+      });
+      select.value = timingReads.some(read => read.id === 5) ? '5' : String(timingReads[0].id);
+      await loadTimingChapters();
+      put('timingStatus', 'MP3Quran timing data ready · ayah sync on phone playback');
+    } catch(e) {
+      timingReads = [];
+      select.replaceChildren(new Option('Timed reciters unavailable', ''));
+      put('timingStatus', `Verse timing unavailable: ${e.message}`);
+    }
+  }
+
+  async function loadTimingChapters() {
+    const readId = Number(byId('timingReaderSelect').value);
+    const read = timingReads.find(item => item.id === readId);
+    if (!read) return;
+    try {
+      const response = await api(`/api/quran/timing-chapters?read=${encodeURIComponent(readId)}`);
+      if (!Array.isArray(response.chapters) || response.chapters.length === 0) {
+        throw new Error('No chapters are available for this reciter.');
+      }
+      const select = byId('quranSurahSelect');
+      const previous = Number(select.value);
+      select.replaceChildren();
+      response.chapters.forEach(chapter => {
+        const id = Number(chapter.id);
+        if (!Number.isInteger(id) || id < 1 || id > surahs.length) return;
+        const arabicName = typeof chapter.name === 'string' ? ` · ${chapter.name}` : '';
+        select.add(new Option(`${id}. ${surahs[id - 1]}${arabicName}`, id));
+      });
+      if (select.options.length === 0) throw new Error('No supported Surahs are available for this reciter.');
+      select.value = [...select.options].some(option => Number(option.value) === previous)
+        ? String(previous)
+        : select.options[0].value;
+      put('timingStatus', `${response.chapters.length} timed Surahs · choose a reciter and listen on phone for verse sync`);
+    } catch(e) {
+      put('timingStatus', `Chapter lookup failed: ${e.message}`);
+    }
+  }
+
+  function updateAyahProgress() {
+    const audio = byId('phoneQuranAudio');
+    const currentMs = audio.currentTime * 1000;
+    const current = activeAyahTimings.find(item =>
+      item.ayah > 0 && currentMs >= item.startMs && currentMs < item.endMs
+    );
+    put('quranAyahStatus', current ? `Ayah ${current.ayah}` : 'Preparing verse sync…');
+  }
+
+  byId('timingReaderSelect').addEventListener('change', loadTimingChapters);
+  byId('phoneQuranAudio').addEventListener('timeupdate', updateAyahProgress);
+
   let browserRecognition = null;
   let voiceAttemptGeneration = 0;
   function setBrowserVoiceState(listening, text, error = false) {
     byId('voiceOrb')?.classList.toggle('listening', listening);
     byId('browserVoiceButton').disabled = listening || !routerWifiConnected;
+    byId('assistantAskButton').disabled = listening || !routerWifiConnected;
     byId('browserVoiceCancel').hidden = !listening;
     put('browserVoiceStatus', text);
-    byId('browserVoiceStatus').style.color = error ? 'var(--bad)' : 'var(--text)';
+    byId('browserVoiceStatus').classList.toggle('error', error);
   }
 
   function normalizeSurahSpeech(value) {
@@ -1826,10 +2041,35 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     if (byId('quranOutput').value === 'phone') {
       await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) });
       const audio = byId('phoneQuranAudio');
+      const read = timingReads.find(item => item.id === Number(byId('timingReaderSelect').value));
+      activeAyahTimings = [];
+      if (read) {
+        try {
+          const response = await api(
+            `/api/quran/timing?read=${encodeURIComponent(read.id)}&surah=${encodeURIComponent(number)}`
+          );
+          if (!Array.isArray(response.timings) || response.timings.length === 0) {
+            throw new Error('No verse timings were returned.');
+          }
+          activeAyahTimings = response.timings.filter(item =>
+            Number.isInteger(item.ayah) && Number.isInteger(item.startMs) &&
+            Number.isInteger(item.endMs) && item.startMs >= 0 && item.endMs > item.startMs
+          ).sort((a, b) => a.startMs - b.startMs);
+          if (activeAyahTimings.length === 0) throw new Error('Verse timing data was invalid.');
+          put('quranAyahStatus', 'Loading verse timing…');
+        } catch(e) {
+          put('quranAyahStatus', 'Timing unavailable');
+          put('timingStatus', `Playing without verse sync: ${e.message}`);
+        }
+      } else {
+        put('quranAyahStatus', 'Timed reciter unavailable');
+      }
       audio.dataset.fallbackUsed = 'false';
       audio.onerror = () => {
         if (audio.dataset.fallbackUsed === 'false') {
           audio.dataset.fallbackUsed = 'true';
+          activeAyahTimings = [];
+          put('quranAyahStatus', 'Verse sync unavailable for backup audio');
           audio.src = `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${number}.mp3`;
           put('quranStreamStatus', 'Primary server busy; trying alternate…');
           audio.play().catch(() => put('quranStreamStatus', 'Tap play on phone controls.'));
@@ -1837,22 +2077,26 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
           put('quranStreamStatus', 'Recitation could not load. Check network.');
         }
       };
-      audio.src = `https://cdn.mp3quran.net/audio/maher-muaiqly/r1/${String(number).padStart(3, '0')}.mp3`;
+      audio.src = read
+        ? `${read.folderUrl}${String(number).padStart(3, '0')}.mp3`
+        : `https://cdn.mp3quran.net/audio/maher-muaiqly/r1/${String(number).padStart(3, '0')}.mp3`;
       audio.style.display = 'block';
       put('quranStreamStatus', 'Loading recitation on this phone…');
       try {
         await audio.play();
-        put('quranStreamStatus', 'Playing on this phone');
+        put('quranStreamStatus', `Playing ${read?.name || 'recitation'} on this phone`);
       } catch(e) {
         put('quranStreamStatus', 'Tap play on audio controls to start.');
+        return { playing: false, destination: 'phone' };
       }
-      return;
+      return { playing: true, destination: 'phone' };
     }
 
     byId('phoneQuranAudio').pause();
     const response = await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'play', surah: number }) });
     put('quranStreamStatus', response.status === 'queued' ? 'Connecting to device speaker…' : 'Starting recitation…');
     await loadStatus();
+    return { playing: false, queued: response.status === 'queued', destination: 'device' };
   }
 
   async function recognizeTranscriptWithGemini(transcript) {
@@ -1867,12 +2111,70 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     for (let attempt = 0; attempt < 60; attempt++) {
       await new Promise(r => setTimeout(r, 750));
       const res = await api(`/api/quran/recognize?id=${encodeURIComponent(queued.requestId)}`);
-      if (res.status === 'done' && Number.isInteger(res.surahNumber)) return res.surahNumber;
-      if (res.status === 'error') throw new Error(res.error || 'Gemini could not identify Surah.');
+      if (res.status === 'done' && res.intent === 'azan') return { intent: 'azan' };
+      if (res.status === 'done' && res.intent === 'surah' &&
+          Number.isInteger(res.surahNumber) && res.surahNumber >= 1 &&
+          res.surahNumber <= surahs.length) {
+        return { intent: 'surah', number: res.surahNumber };
+      }
+      if (res.status === 'error') throw new Error(res.error || 'Gemini could not understand that request.');
       if (res.status === 'unknown') throw new Error('Recognition request expired.');
       if (attempt % 4 === 0) setBrowserVoiceState(true, 'Gemini is identifying the Surah name…');
     }
     throw new Error('Gemini recognition timed out.');
+  }
+
+  async function handleAssistantQuery(transcript, attempt) {
+    if (!transcript.trim()) throw new Error('Please say or type a Surah name or an Azan request.');
+    setBrowserVoiceState(true, 'Gemini is understanding your request…');
+    let command;
+    try {
+      command = await recognizeTranscriptWithGemini(transcript);
+    } catch(geminiError) {
+      const localNumber = findSpokenSurah(transcript);
+      if (!localNumber) throw geminiError;
+      command = { intent: 'surah', number: localNumber };
+    }
+    if (attempt !== voiceAttemptGeneration) return;
+    if (command.intent === 'azan') {
+      await api('/api/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playAzan: true })
+      });
+      setBrowserVoiceState(false, 'Playing the Prayer-Bot Azan notification tone. Touch or shake to stop.');
+      await loadStatus();
+      return;
+    }
+    const number = command.number;
+    if (!Number.isInteger(number) || number < 1 || number > surahs.length) {
+      throw new Error('Gemini did not find a supported Surah. Try its name or number.');
+    }
+    setBrowserVoiceState(true, `Found Surah ${number}, ${surahs[number - 1]}. Starting recitation…`);
+    const playback = await chooseSurah(number);
+    if (attempt === voiceAttemptGeneration) {
+      const result = `Found Surah ${number}, ${surahs[number - 1]}.`;
+      if (playback?.destination === 'phone') {
+        setBrowserVoiceState(false, playback.playing
+          ? `${result} Playing on this phone.`
+          : `${result} Tap play in the audio controls to start.`);
+      } else if (playback?.queued) {
+        setBrowserVoiceState(false, `${result} Playback queued on the Prayer-Bot speaker.`);
+      } else {
+        setBrowserVoiceState(false, `${result} Check the playback status below.`);
+      }
+    }
+  }
+
+  async function submitAssistantQuery() {
+    const attempt = ++voiceAttemptGeneration;
+    const transcript = byId('assistantQuery').value.trim();
+    try {
+      await ensureRouterConnection();
+      await handleAssistantQuery(transcript, attempt);
+    } catch(e) {
+      if (attempt === voiceAttemptGeneration) setBrowserVoiceState(false, e.message, true);
+    }
   }
 
   let processingSpokenResult = false;
@@ -1898,7 +2200,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     browserRecognition.continuous = false;
     browserRecognition.interimResults = true;
     browserRecognition.onstart = () => {
-      if (attempt === voiceAttemptGeneration) setBrowserVoiceState(true, 'Listening — say a Surah name…');
+      if (attempt === voiceAttemptGeneration) setBrowserVoiceState(true, 'Listening — ask for a Surah or Azan alarm…');
     };
     browserRecognition.onresult = async event => {
       if (attempt !== voiceAttemptGeneration) return;
@@ -1907,20 +2209,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       setBrowserVoiceState(true, `I heard: “${transcript}”`);
       if (!result.isFinal) return;
       processingSpokenResult = true;
-      setBrowserVoiceState(true, 'Identifying Surah…');
-      let number = 0, fallbackUsed = false;
       try {
-        try {
-          number = await recognizeTranscriptWithGemini(transcript);
-        } catch(geminiErr) {
-          if (attempt !== voiceAttemptGeneration) return;
-          number = findSpokenSurah(transcript);
-          if (!number) throw geminiErr;
-          fallbackUsed = true;
-        }
-        if (attempt !== voiceAttemptGeneration) return;
-        setBrowserVoiceState(false, `${fallbackUsed ? 'Local match' : 'Gemini recognized'}: Surah ${number}, ${surahs[number - 1]}`);
-        await chooseSurah(number);
+        await handleAssistantQuery(transcript, attempt);
       } catch(e) {
         if (attempt === voiceAttemptGeneration) setBrowserVoiceState(false, e.message, true);
       } finally {
@@ -1952,6 +2242,12 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     browserRecognition = null;
     setBrowserVoiceState(false, 'Voice input cancelled.');
   }
+  byId('assistantQuery').addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submitAssistantQuery();
+    }
+  });
 
   async function playQuran() {
     const sel = byId('quranSurahSelect');
@@ -2029,32 +2325,32 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   }
 
   async function scanWifiNetworks() {
-    const button = byId('scanWifi'), sel = byId('wifiNetworks'), msg = byId('wifiMessage');
+    const button = byId('scanWifi');
+    const dialog = byId('wifiScanDialog');
+    const status = byId('wifiScanStatus');
+    const statusText = status.lastElementChild;
+    const list = byId('wifiScanList');
+    const msg = byId('wifiMessage');
+    const setScanStatus = (text, loading) => {
+      statusText.textContent = text;
+      status.dataset.loading = String(loading);
+    };
     button.disabled = true;
-    sel.disabled = true;
-    sel.replaceChildren(new Option('⏳ Scanning for nearby 2.4 GHz Wi-Fi…', ''));
+    list.replaceChildren();
+    setScanStatus('Scanning nearby networks…', true);
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
     msg.textContent = 'Scanning for nearby networks — please wait…';
     msg.classList.remove('error');
     try {
-      let postOk = false;
-      for (let t = 0; t < 5; t++) {
-        try {
-          await api('/api/wifi/scan', { method: 'POST' });
-          postOk = true;
-          break;
-        } catch(e) {
-          if (t < 4) await new Promise(r => setTimeout(r, 1200));
-          else throw e;
-        }
-      }
-      if (!postOk) throw new Error('Could not start Wi-Fi scan.');
+      await api('/api/wifi/scan', { method: 'POST' });
       let result;
       for (let attempt = 0; attempt < 20; attempt++) {
         await new Promise(r => setTimeout(r, 1000));
         result = await api('/api/wifi/scan');
         if (result.status === 'complete') break;
         const dots = '.'.repeat((attempt % 3) + 1);
-        sel.options[0].text = `⏳ Scanning${dots}`;
+        setScanStatus(`Scanning${dots}`, true);
       }
       if (!result || result.status !== 'complete') throw new Error('Scan timed out.');
       if (!Array.isArray(result.networks)) throw new Error('Invalid scan result.');
@@ -2065,31 +2361,40 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         if (!prev || Number(n.rssi) > Number(prev.rssi)) strongest.set(n.ssid, n);
       }
       const sorted = [...strongest.values()].sort((a, b) => Number(b.rssi) - Number(a.rssi));
-      sel.replaceChildren(new Option('— Select your home Wi-Fi —', ''));
       for (const n of sorted) {
-        const bars = n.rssi >= -60 ? '🟢 ▂▄▆█' : n.rssi >= -75 ? '🟡 ▂▄▆_' : '🟠 ▂▄__';
-        sel.add(new Option(`${bars} ${n.ssid} (${n.rssi} dBm${n.secured ? ' · 🔒' : ''})`, n.ssid));
+        const choice = document.createElement('button');
+        choice.type = 'button';
+        choice.className = 'wifi-network-choice';
+        const name = document.createElement('span');
+        name.textContent = `${n.secured ? '🔒 ' : ''}${n.ssid}`;
+        const signal = document.createElement('small');
+        signal.textContent = `${n.rssi} dBm`;
+        choice.append(name, signal);
+        choice.addEventListener('click', () => {
+          byId('wifiSsid').value = n.ssid;
+          byId('wifiPass').value = '';
+          byId('wifiPass').focus();
+          msg.textContent = 'Network selected. Enter the router password and tap Connect.';
+          msg.classList.remove('error');
+          closeWifiScan();
+        });
+        list.append(choice);
       }
-      msg.textContent = sel.options.length > 1 ? `Found ${sel.options.length - 1} network(s). Select one and enter password.` : 'No networks found. Try scanning again.';
+      if (sorted.length) {
+        setScanStatus(`Found ${sorted.length} network${sorted.length === 1 ? '' : 's'}. Choose your router.`, false);
+        msg.textContent = `Found ${sorted.length} network${sorted.length === 1 ? '' : 's'}.`;
+      } else {
+        setScanStatus('No networks found. Move closer to the router and scan again.', false);
+        msg.textContent = 'No networks found. Try scanning again.';
+      }
     } catch(e) {
-      sel.replaceChildren(new Option('— tap Scan to discover networks —', ''));
-      msg.textContent = e.message;
+      setScanStatus(e.message, false);
+      msg.textContent = `Wi-Fi scan failed: ${e.message}`;
       msg.classList.add('error');
     } finally {
       button.disabled = false;
-      sel.disabled = false;
     }
   }
-
-  byId('wifiNetworks').addEventListener('change', event => {
-    if (event.target.value) {
-      byId('wifiSsid').value = event.target.value;
-      byId('wifiPass').value = '';
-      byId('wifiPass').focus();
-      byId('wifiMessage').textContent = 'Network selected. Enter router password and tap Connect.';
-      byId('wifiMessage').classList.remove('error');
-    }
-  });
 
   initQuranDropdown();
   refreshAll();

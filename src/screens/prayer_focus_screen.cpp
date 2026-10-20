@@ -2,6 +2,7 @@
 #include "../display_manager.h"
 #include "../prayer_manager.h"
 #include "../config.h"
+#include "screen_ui.h"
 
 // ============================================================
 //  PRAYER FOCUS SCREEN (Screen 1 - Default)
@@ -25,24 +26,6 @@ namespace {
         return String(buf);
     }
 
-    void drawSyncIndicator(U8G2& oled, bool syncing) {
-        const int cx = SCREEN_WIDTH - 7;
-        const int cy = 6;
-        const uint8_t frame = syncing
-            ? static_cast<uint8_t>((millis() / 140UL) % 4UL)
-            : 0;
-        static const int8_t directions[4][2] = {
-            {0, -1}, {1, 0}, {0, 1}, {-1, 0}
-        };
-        for (uint8_t i = 0; i < 4; ++i) {
-            const uint8_t direction = (i + frame) % 4;
-            const int8_t dx = directions[direction][0];
-            const int8_t dy = directions[direction][1];
-            const int length = syncing && i == 0 ? 4 : 2;
-            oled.drawLine(cx, cy, cx + dx * length, cy + dy * length);
-        }
-        if (!syncing) oled.drawCircle(cx, cy, 4);
-    }
 }
 
 namespace PrayerFocusScreen {
@@ -54,63 +37,49 @@ void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
     DisplayManager::clearBuffer();
 
     if (azanPlaying) {
-        oled.setFont(u8g2_font_6x10_tf);
-        oled.drawStr(2, 9, "PRAYER TIME");
-        drawSyncIndicator(oled, syncing);
-        oled.drawHLine(0, 12, SCREEN_WIDTH);
-
+        ScreenUI::drawHeader(oled, "AZAN ALERT");
+        ScreenUI::drawCard(oled, 3, 19, SCREEN_WIDTH - 6, 41);
         oled.setFont(u8g2_font_7x14B_tf);
         DisplayManager::drawCenteredText(
-            String(PrayerManager::getPrayerNameStr(activePrayer)), 32);
-
+            String(PrayerManager::getPrayerNameStr(activePrayer)), 36);
         oled.setFont(u8g2_font_6x10_tf);
-        DisplayManager::drawCenteredText("Beep alarm active", 45);
+        DisplayManager::drawCenteredText("Prayer alarm is sounding", 49);
         oled.setFont(u8g2_font_5x8_tf);
-        DisplayManager::drawCenteredText("Touch or shake to stop", 59);
+        DisplayManager::drawCenteredText("Touch or shake to stop", 58);
         DisplayManager::sendBuffer();
         return;
     }
 
-    // Header
-    oled.setFont(u8g2_font_6x10_tf);
-    oled.drawStr(2, 9, "NEXT PRAYER");
-    drawSyncIndicator(oled, syncing);
-    oled.drawHLine(0, 12, SCREEN_WIDTH);
-
-    // Prayer name and time
+    ScreenUI::drawHeader(oled, "NEXT PRAYER", syncing ? "SYNC" : nullptr);
+    ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 30);
+    oled.setFont(u8g2_font_5x8_tf);
+    oled.drawStr(8, 27, "UP NEXT");
     oled.setFont(u8g2_font_7x14B_tf);
     const char* name = PrayerManager::getPrayerNameStr(next.name);
-    oled.drawStr(2, 26, name);
+    oled.drawStr(8, 43, name);
 
     String timeStr = formatTime(next.startTime.hour, next.startTime.minute);
-    int tw = oled.getUTF8Width(timeStr.c_str());
-    oled.drawStr(SCREEN_WIDTH - tw - 2, 26, timeStr.c_str());
+    oled.setFont(u8g2_font_logisoso18_tf);
+    const int tw = oled.getStrWidth(timeStr.c_str());
+    oled.drawStr(SCREEN_WIDTH - tw - 8, 43, timeStr.c_str());
 
-    // Countdown
-    oled.setFont(u8g2_font_6x10_tf);
-    String countdown = "In: " + formatCountdown(next.countdownSeconds);
-    oled.drawStr(2, 38, countdown.c_str());
-
-    // Time left to pray (if window is open)
-    if (next.windowOpen) {
-        String remaining = "Left: " + formatCountdown(next.remainingSeconds);
-        oled.drawStr(2, 48, remaining.c_str());
-    }
-
-    // Next prohibited time
     oled.setFont(u8g2_font_5x8_tf);
+    String countdown = "STARTS IN " + formatCountdown(next.countdownSeconds);
+    DisplayManager::drawCenteredText(countdown, 55);
+
     if (prohibited.nextWindow.active) {
-        oled.drawStr(2, 58, "! PROHIBITED NOW");
+        oled.drawStr(8, 63, "PRAYER PAUSE ACTIVE");
+    } else if (next.windowOpen) {
+        String remaining = "PRAYER WINDOW " +
+                           formatCountdown(next.remainingSeconds);
+        oled.drawStr(8, 63, remaining.c_str());
     } else if (prohibited.nextWindow.startHour > 0 || prohibited.nextWindow.startMinute > 0) {
-        String probStr = "Makruh: " +
+        String probStr = "PRAYER PAUSE " +
             formatTime(prohibited.nextWindow.startHour, prohibited.nextWindow.startMinute) +
             "-" +
             formatTime(prohibited.nextWindow.endHour, prohibited.nextWindow.endMinute);
-        oled.drawStr(2, 58, probStr.c_str());
+        oled.drawStr(8, 63, probStr.c_str());
     }
-
-    // Page indicator
-    oled.drawStr(108, 63, "1/7");
 
     DisplayManager::sendBuffer();
 }

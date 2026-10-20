@@ -4,14 +4,15 @@
 #include "../types.h"
 
 // ============================================================
-//  WEATHER SCREEN (Screen 4)
-//  Shows city name, temperature, humidity, AQI with category,
-//  and the time of last update. Weather icon on left.
+//  WEATHER SCREEN
+//  Rotates through current conditions, AQI, pressure, and wind.
 // ============================================================
 
 namespace WeatherScreen {
-    void draw(const WeatherData& weather, bool syncing);
-    void update(const WeatherData& weather, bool syncing);
+    void draw(const WeatherData& weather, bool syncing,
+              unsigned long timeOnScreenMs);
+    void update(const WeatherData& weather, bool syncing,
+                unsigned long timeOnScreenMs);
 }
 
 #endif // WEATHER_SCREEN_H
