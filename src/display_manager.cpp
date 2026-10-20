@@ -103,7 +103,7 @@ void showStartupScreen() {
 
     clearBuffer();
     oled.drawRFrame(2, 2, SCREEN_WIDTH - 4, SCREEN_HEIGHT - 4, 9);
-    oled.setFont(u8g2_font_helvB12_tf);
+    oled.setFont(u8g2_font_helvB10_tf);
     drawCenteredText("Assalamualaikum", 31);
     oled.drawHLine(24, 38, SCREEN_WIDTH - 48);
     oled.setFont(u8g2_font_5x8_tf);

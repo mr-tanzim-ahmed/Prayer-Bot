@@ -39,6 +39,8 @@ Prayer-Bot is a DIY **ESP32-S3 prayer clock and Islamic personal assistant**. Us
 
 **Seven OLED screens:** Prayer Focus · All Prayers · Clock & Calendar · Weather · Pomodoro · Dhikr · Quran.
 
+The OLED startup screen presents a centered “Assalamualaikum” greeting and its translation, sized to fit within the display frame.
+
 > **Audio note:** The Azan alert is a repeating notification tone. Recorded Adhan audio is not included. The Quran assistant identifies Surah requests; it does not provide Quran translation, tafsir, or free-form Quran-text search.
 
 ## 🚀 Build your Prayer-Bot

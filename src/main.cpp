@@ -114,7 +114,7 @@ void setup() {
     Serial.println("========================================");
     Serial.println("   PRAYER-BOT");
     Serial.println("   Version " PROJECT_VERSION);
-    Serial.println("   Islamic Personal Assistant");
+    Serial.println("   Muslim's Personal Assistant");
     Serial.println("========================================");
 
     // 1. Initialize storage and load settings
