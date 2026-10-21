@@ -24,6 +24,9 @@ namespace VoiceManager {
     void update(VoiceState& state);
     void processPending(const Settings& settings);
     bool queueDashboardRecognition(const char* transcript, uint32_t& requestId);
+    bool queueDashboardAudioRecognition(uint8_t* audio, size_t audioLength,
+                                        const char* mimeType,
+                                        uint32_t& requestId);
     const char* getDashboardRecognition(uint32_t requestId,
                                         uint8_t& surahNumber);
 

@@ -10,8 +10,6 @@
 // Central configuration for hardware, timing, APIs and defaults.
 // ============================================================
 
-#define PROJECT_VERSION "1.0.1"
-
 // ------------------------------------------------------------
 // Hardware Pin Assignments
 // ------------------------------------------------------------
@@ -85,6 +83,7 @@
 
 
 #define WEB_SERVER_PORT       80
+#define WEB_SERVER_HTTPS_PORT  443
 #define NTP_SERVER            "pool.ntp.org"
 
 // ------------------------------------------------------------

@@ -8,7 +8,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#065f46">
-  <title>Prayer-Bot | Islamic Companion &amp; Focus Dashboard</title>
+  <title>Prayer-Bot | Mumins Personal Assistant</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%230f766e'/></svg>">
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%230f766e'/></svg>">
   <style>
@@ -56,11 +56,18 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       position: sticky;
       top: 0;
       z-index: 100;
-      background: rgba(255, 255, 255, 0.94);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(18px) saturate(150%);
+      -webkit-backdrop-filter: blur(18px) saturate(150%);
       border-bottom: 1px solid var(--line);
       box-shadow: var(--shadow-sm);
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+    .app-bar.is-scrolled {
+      background: rgba(255, 255, 255, 0.68);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      backdrop-filter: blur(24px) saturate(180%);
+      box-shadow: 0 8px 26px rgba(15, 23, 42, 0.12);
     }
     .app-bar-inner {
       max-width: 1140px;
@@ -74,7 +81,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
     }
     .brand-icon {
       width: 42px;
@@ -159,14 +166,14 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     .grid {
       display: grid;
       grid-template-columns: repeat(12, minmax(0, 1fr));
-      gap: 20px;
+      gap: 12px;
     }
     .card {
       min-width: 0;
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 22px;
+      padding: 16px;
       box-shadow: var(--shadow);
       position: relative;
     }
@@ -182,7 +189,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       font-size: 1.15rem;
       font-weight: 700;
       letter-spacing: -0.02em;
-      margin: 0 0 16px;
+      margin: 0 0 12px;
       color: var(--text);
     }
     h2 svg, h2 span.icon {
@@ -229,7 +236,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       background: linear-gradient(135deg, #064e3b 0%, #0f766e 65%, #115e59 100%);
       color: #fff;
       border: none;
-      padding: 26px 28px;
+      padding: 18px 20px;
       box-shadow: 0 10px 30px rgba(6, 78, 59, 0.22);
       border-radius: var(--radius-lg);
       position: relative;
@@ -287,7 +294,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     .hero-stats {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
+      gap: 8px;
       background: rgba(0, 0, 0, 0.15);
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 14px;
@@ -307,7 +314,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       background: var(--panel-subtle);
       border: 1.5px solid var(--line);
       border-radius: 14px;
-      padding: 16px 10px;
+      padding: 12px 8px;
       text-align: center;
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       position: relative;
@@ -363,7 +370,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     .prohibited-banner {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 8px;
       padding: 14px 18px;
       border-radius: 12px;
       background: var(--good-soft);
@@ -384,13 +391,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     .prohibited-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 14px;
+      gap: 10px;
     }
     .prohibited-card {
       background: var(--panel-subtle);
       border: 1.5px solid var(--line);
       border-radius: 14px;
-      padding: 16px;
+      padding: 12px;
       position: relative;
     }
     .prohibited-card.active-window {
@@ -428,10 +435,10 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     .stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-      gap: 12px;
+      gap: 10px;
     }
     .stat {
-      padding: 14px;
+      padding: 12px;
       border-radius: 12px;
       background: var(--panel-subtle);
       border: 1px solid var(--line);
@@ -575,6 +582,28 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       flex-wrap: wrap;
     }
     .actions button { flex: 1; }
+    .quran-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .quran-actions .quran-play { grid-column: 1 / -1; }
+    .quran-actions button {
+      min-width: 0;
+      min-height: 44px;
+      padding: 8px 6px;
+      white-space: nowrap;
+    }
+    .section-reveal {
+      opacity: 0;
+      transform: translateY(12px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+      transition-delay: var(--reveal-delay, 0ms);
+    }
+    .section-reveal.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
     
     /* Wi-Fi Card Experience */
     .wifi-step-badge {
@@ -764,17 +793,6 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       line-height: 1.45;
     }
     .assistant-result.error { color: var(--bad); }
-    .timing-progress {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin-top: 10px;
-      padding: 10px 12px;
-      border-radius: 12px;
-      background: var(--surface-soft, #f4f7f6);
-      font-size: .9rem;
-    }
     
     /* Pomodoro & Dhikr Counters */
     .dhikr-button {
@@ -913,13 +931,15 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       .app-bar-actions button { flex: 1; min-height: 44px; }
       .nav-bar { padding: 4px 12px 9px; gap: 6px; }
       .nav-pill { min-height: 38px; padding: 7px 11px; }
-      .card { padding: 18px 14px; border-radius: 14px; }
+      .card { padding: 15px 12px; border-radius: 14px; }
       .fields { grid-template-columns: 1fr; }
       .fields > .field[style*="grid-column"] { grid-column: auto !important; }
       .prayers-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .actions { gap: 8px; }
       .actions button { flex: 1 1 100%; min-height: 48px; }
+      .quran-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+      .quran-actions button { min-height: 44px; padding: 7px 3px; font-size: 0.78rem; }
       .hero-banner { padding: 20px 16px; }
       .chart-wrap { height: 200px; }
       .settings > summary { padding: 17px 14px; gap: 10px; font-size: 1rem; }
@@ -935,6 +955,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         transition: none !important;
         scroll-behavior: auto !important;
       }
+      .section-reveal { opacity: 1; transform: none; }
     }
   </style>
 </head>
@@ -950,7 +971,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <div>
         <h1 class="brand-title">Prayer-Bot</h1>
         <div class="brand-subtitle">
-          <span>Islamic Companion &amp; Focus</span>
+          <span>Mumins Personal Assistant</span>
           <span id="headerStatusBadge" class="badge badge-online"><span class="badge-dot"></span><span id="networkShort">Checking…</span></span>
         </div>
       </div>
@@ -1151,14 +1172,14 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"></path></svg>
           </div>
           <div>
-            <div class="assistant-greeting">Press and hold to speak. Release to recognize and play.</div>
+            <div class="assistant-greeting">Tap the microphone and speak. Prayer-Bot sends your request to Gemini.</div>
             <div class="voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
           </div>
         </div>
         <div id="browserVoiceStatus" class="assistant-result" role="status" aria-live="polite">Ready. Ask for a Surah or the Prayer-Bot Azan alarm.</div>
         <div class="actions">
           <select id="voiceLanguage" data-requires-wifi aria-label="Voice language" style="max-width:150px;min-height:44px"><option value="en-US">English</option><option value="bn-BD">বাংলা (Bangla)</option></select>
-          <button id="browserVoiceButton" type="button" data-requires-wifi style="min-height:44px">🎙 Hold to speak</button>
+          <button id="browserVoiceButton" type="button" data-requires-wifi style="min-height:44px">🎙 Start recording</button>
           <button id="browserVoiceCancel" type="button" onclick="cancelBrowserVoice()" style="min-height:44px" hidden>Cancel</button>
         </div>
         <div class="assistant-search">
@@ -1182,26 +1203,14 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
           <option value="1">1. Al-Fatiha</option>
         </select>
       </div>
-      <div class="field">
-        <label for="timingReaderSelect">Phone reciter with verse timing</label>
-        <select id="timingReaderSelect" data-requires-wifi>
-          <option value="">Loading MP3Quran timing reads…</option>
-        </select>
-        <small id="timingStatus" class="hint">Verse timing is available for phone playback.</small>
-      </div>
-
-      <div class="actions" style="margin-top:12px">
-        <button type="button" class="primary" data-requires-wifi onclick="playQuran()">▶ Play Recitation</button>
+      <div class="actions quran-actions" style="margin-top:12px">
+        <button type="button" class="primary quran-play" data-requires-wifi onclick="playQuran()">▶ Play Recitation</button>
         <button type="button" onclick="stopQuran()">⏹ Stop</button>
         <button type="button" data-requires-wifi onclick="prevQuran()">⏮ Prev</button>
         <button type="button" data-requires-wifi onclick="nextQuran()">⏭ Next</button>
       </div>
 
-      <audio id="phoneQuranAudio" controls preload="none" data-requires-wifi style="display:none;width:100%;margin-top:14px"></audio>
-      <div class="timing-progress">
-        <span>Verse sync</span>
-        <strong id="quranAyahStatus">Choose a Surah to begin</strong>
-      </div>
+      <audio id="phoneQuranAudio" controls playsinline preload="none" data-requires-wifi style="display:none;width:100%;margin-top:14px"></audio>
 
       <div class="stats" style="margin-top:16px">
         <div class="stat"><span>Now Playing</span><strong id="quranNowPlaying">None</strong></div>
@@ -1478,11 +1487,6 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   function setOnlineAvailability(connected) {
     routerWifiConnected = Boolean(connected);
-    if (!routerWifiConnected) timingReadsLoadAttempted = false;
-    if (routerWifiConnected && !timingReadsLoadAttempted) {
-      timingReadsLoadAttempted = true;
-      loadTimingReads();
-    }
     const notice = byId('onlineOfflineNotice');
     notice.hidden = routerWifiConnected;
     
@@ -1546,7 +1550,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     setOnlineAvailability(s.network?.connected);
     put('network', s.network.connected ? 'Connected to Router' : 'Device Hotspot Mode');
     put('ip', s.network.ip);
-    byId('ipLink').href = `http://${s.network.ip}/`;
+    byId('ipLink').href = `${window.location.protocol}//${s.network.ip}/`;
     put('homeIp', s.network.homeIp || 'Not connected to home network');
 
     if (!dashboardReady && wifiSubmitted) {
@@ -1905,10 +1909,6 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     "Quraysh","Al-Ma'un","Al-Kawthar","Al-Kafirun","An-Nasr",
     "Al-Masad","Al-Ikhlas","Al-Falaq","An-Nas"
   ];
-  let timingReads = [];
-  let timingReadsLoadAttempted = false;
-  let activeAyahTimings = [];
-
   function initQuranDropdown() {
     const sel = byId('quranSurahSelect');
     if (!sel) return;
@@ -1919,93 +1919,63 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     sel.value = 1;
   }
 
-  async function loadTimingReads() {
-    if (!routerWifiConnected) return;
-    const select = byId('timingReaderSelect');
-    try {
-      const response = await api('/api/quran/timing-reads');
-      if (!Array.isArray(response.reads) || response.reads.length === 0) {
-        throw new Error('MP3Quran did not return any timed recitations.');
-      }
-      timingReads = response.reads.filter(read =>
-        Number.isInteger(read.id) && read.id > 0 &&
-        typeof read.name === 'string' && typeof read.folderUrl === 'string' &&
-        read.folderUrl.startsWith('https://') &&
-        Number.isInteger(read.surahCount) && read.surahCount > 0
-      );
-      if (timingReads.length === 0) throw new Error('No usable timed recitations were returned.');
-      select.replaceChildren();
-      timingReads.forEach(read => {
-        const rewaya = typeof read.rewaya === 'string' && read.rewaya
-          ? ` · ${read.rewaya}`
-          : '';
-        select.add(new Option(`${read.name}${rewaya}`, read.id));
-      });
-      select.value = timingReads.some(read => read.id === 5) ? '5' : String(timingReads[0].id);
-      await loadTimingChapters();
-      put('timingStatus', 'MP3Quran timing data ready · ayah sync on phone playback');
-    } catch(e) {
-      timingReads = [];
-      select.replaceChildren(new Option('Timed reciters unavailable', ''));
-      put('timingStatus', `Verse timing unavailable: ${e.message}`);
-    }
-  }
-
-  async function loadTimingChapters() {
-    const readId = Number(byId('timingReaderSelect').value);
-    const read = timingReads.find(item => item.id === readId);
-    if (!read) return;
-    try {
-      const response = await api(`/api/quran/timing-chapters?read=${encodeURIComponent(readId)}`);
-      if (!Array.isArray(response.chapters) || response.chapters.length === 0) {
-        throw new Error('No chapters are available for this reciter.');
-      }
-      const select = byId('quranSurahSelect');
-      const previous = Number(select.value);
-      select.replaceChildren();
-      response.chapters.forEach(chapter => {
-        const id = Number(chapter.id);
-        if (!Number.isInteger(id) || id < 1 || id > surahs.length) return;
-        const arabicName = typeof chapter.name === 'string' ? ` · ${chapter.name}` : '';
-        select.add(new Option(`${id}. ${surahs[id - 1]}${arabicName}`, id));
-      });
-      if (select.options.length === 0) throw new Error('No supported Surahs are available for this reciter.');
-      select.value = [...select.options].some(option => Number(option.value) === previous)
-        ? String(previous)
-        : select.options[0].value;
-      put('timingStatus', `${response.chapters.length} timed Surahs · choose a reciter and listen on phone for verse sync`);
-    } catch(e) {
-      put('timingStatus', `Chapter lookup failed: ${e.message}`);
-    }
-  }
-
-  function updateAyahProgress() {
-    const audio = byId('phoneQuranAudio');
-    const currentMs = audio.currentTime * 1000;
-    const current = activeAyahTimings.find(item =>
-      item.ayah > 0 && currentMs >= item.startMs && currentMs < item.endMs
-    );
-    put('quranAyahStatus', current ? `Ayah ${current.ayah}` : 'Preparing verse sync…');
-  }
-
-  byId('timingReaderSelect').addEventListener('change', loadTimingChapters);
-  byId('phoneQuranAudio').addEventListener('timeupdate', updateAyahProgress);
-
   let browserRecognition = null;
   let voiceAttemptGeneration = 0;
-  let voiceButtonHeld = false;
+  let voiceCapturing = false;
   let voiceProcessingSpokenResult = false;
-  let voiceSessionTranscript = '';
   let voiceCapturedTranscript = '';
   let voiceCaptureError = '';
+  let voicePermissionPending = false;
+  let browserMediaRecorder = null;
+  let browserAudioStream = null;
+  let browserAudioChunks = [];
   function setBrowserVoiceState(listening, text, error = false) {
     byId('voiceOrb')?.classList.toggle('listening', listening);
     byId('browserVoiceButton').disabled =
-      (!voiceButtonHeld && listening) || !routerWifiConnected;
+      (listening && !voiceCapturing) || !routerWifiConnected;
+    byId('browserVoiceButton').textContent = voiceCapturing
+      ? '⏹ Stop and send'
+      : '🎙 Start recording';
     byId('assistantAskButton').disabled = listening || !routerWifiConnected;
     byId('browserVoiceCancel').hidden = !listening;
     put('browserVoiceStatus', text);
     byId('browserVoiceStatus').classList.toggle('error', error);
+  }
+
+  function initializeSectionReveals() {
+    const sections = document.querySelectorAll('#wifiSetup, #dashboardContent > .card');
+    if (!('IntersectionObserver' in window)) {
+      sections.forEach(section => section.classList.add('is-visible'));
+      return;
+    }
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('is-visible');
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: 0.08, rootMargin: '0px 0px -20px 0px' });
+
+    sections.forEach((section, index) => {
+      section.classList.add('section-reveal');
+      section.style.setProperty('--reveal-delay', `${Math.min(index * 35, 175)}ms`);
+      observer.observe(section);
+    });
+  }
+
+  function initializeScrollHeader() {
+    const header = document.querySelector('.app-bar');
+    let updatePending = false;
+    header.classList.toggle('is-scrolled', window.scrollY > 8);
+    window.addEventListener('scroll', () => {
+      if (updatePending) return;
+      updatePending = true;
+      window.requestAnimationFrame(() => {
+        header.classList.toggle('is-scrolled', window.scrollY > 8);
+        updatePending = false;
+      });
+    }, { passive: true });
   }
 
   function normalizeSurahSpeech(value) {
@@ -2041,74 +2011,68 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   }
 
   async function chooseSurah(number) {
-    await ensureRouterConnection();
     if (!Number.isInteger(number) || number < 1 || number > surahs.length) {
       throw new Error('Could not identify a Surah. Try again or pick from the list.');
     }
     byId('quranSurahSelect').value = number;
     const name = surahs[number - 1];
-    await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'select', surah: number }) });
     put('quranNowPlaying', `${number}. ${name}`);
 
     if (byId('quranOutput').value === 'phone') {
-      await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) });
       const audio = byId('phoneQuranAudio');
-      const read = timingReads.find(item => item.id === Number(byId('timingReaderSelect').value));
-      activeAyahTimings = [];
-      if (read) {
-        try {
-          const response = await api(
-            `/api/quran/timing?read=${encodeURIComponent(read.id)}&surah=${encodeURIComponent(number)}`
-          );
-          if (!Array.isArray(response.timings) || response.timings.length === 0) {
-            throw new Error('No verse timings were returned.');
-          }
-          activeAyahTimings = response.timings.filter(item =>
-            Number.isInteger(item.ayah) && Number.isInteger(item.startMs) &&
-            Number.isInteger(item.endMs) && item.startMs >= 0 && item.endMs > item.startMs
-          ).sort((a, b) => a.startMs - b.startMs);
-          if (activeAyahTimings.length === 0) throw new Error('Verse timing data was invalid.');
-          put('quranAyahStatus', 'Loading verse timing…');
-        } catch(e) {
-          put('quranAyahStatus', 'Timing unavailable');
-          put('timingStatus', `Playing without verse sync: ${e.message}`);
-        }
-      } else {
-        put('quranAyahStatus', 'Timed reciter unavailable');
-      }
+      const primary = `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${number}.mp3`;
+      const backup = `https://cdn.mp3quran.net/audio/maher-muaiqly/r1/${String(number).padStart(3, '0')}.mp3`;
       audio.dataset.fallbackUsed = 'false';
       audio.onerror = () => {
         if (audio.dataset.fallbackUsed === 'false') {
           audio.dataset.fallbackUsed = 'true';
-          activeAyahTimings = [];
-          put('quranAyahStatus', 'Verse sync unavailable for backup audio');
-          audio.src = `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${number}.mp3`;
-          put('quranStreamStatus', 'Primary server busy; trying alternate…');
-          audio.play().catch(() => put('quranStreamStatus', 'Tap play on phone controls.'));
+          audio.src = backup;
+          put('quranStreamStatus', 'Trying alternate recitation source… Tap play if it does not start.');
         } else {
           put('quranStreamStatus', 'Recitation could not load. Check network.');
         }
       };
-      audio.src = read
-        ? `${read.folderUrl}${String(number).padStart(3, '0')}.mp3`
-        : `https://cdn.mp3quran.net/audio/maher-muaiqly/r1/${String(number).padStart(3, '0')}.mp3`;
+      audio.pause();
+      audio.src = primary;
+      audio.load();
       audio.style.display = 'block';
-      put('quranStreamStatus', 'Loading recitation on this phone…');
-      try {
-        await audio.play();
-        put('quranStreamStatus', `Playing ${read?.name || 'recitation'} on this phone`);
-      } catch(e) {
-        put('quranStreamStatus', 'Tap play on audio controls to start.');
+      put('quranStreamStatus', 'Starting recitation on this phone…');
+      return audio.play().then(() => {
+        put('quranStreamStatus', 'Playing recitation on this phone');
+        return { playing: true, destination: 'phone' };
+      }).catch(() => {
+        put('quranStreamStatus', 'Tap play on the audio controls to start.');
         return { playing: false, destination: 'phone' };
-      }
-      return { playing: true, destination: 'phone' };
+      });
     }
 
+    await ensureRouterConnection();
+    await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'select', surah: number }) });
     byId('phoneQuranAudio').pause();
     const response = await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'play', surah: number }) });
     put('quranStreamStatus', response.status === 'queued' ? 'Connecting to device speaker…' : 'Starting recitation…');
     await loadStatus();
     return { playing: false, queued: response.status === 'queued', destination: 'device' };
+  }
+
+  async function waitForGeminiRecognition(requestId) {
+    if (!Number.isInteger(requestId) || requestId < 1) {
+      throw new Error('Device did not return a valid Gemini recognition ID.');
+    }
+    for (let attempt = 0; attempt < 60; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 750));
+      const result = await api(`/api/quran/recognize?id=${encodeURIComponent(requestId)}`);
+      if (result.status === 'done' && result.intent === 'azan') return { intent: 'azan' };
+      if (result.status === 'done' && result.intent === 'surah' &&
+          Number.isInteger(result.surahNumber) && result.surahNumber >= 1 &&
+          result.surahNumber <= surahs.length) {
+        return { intent: 'surah', number: result.surahNumber };
+      }
+      if (result.status === 'error') throw new Error(result.error || 'Gemini could not understand that request.');
+      if (result.status === 'unknown') throw new Error('Recognition request expired.');
+      if (attempt % 4 === 0) setBrowserVoiceState(true, 'Gemini is identifying your request…');
+    }
+    throw new Error('Gemini recognition timed out.');
   }
 
   async function recognizeTranscriptWithGemini(transcript) {
@@ -2117,36 +2081,23 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transcript })
     });
-    if (!Number.isInteger(queued.requestId) || queued.requestId < 1) {
-      throw new Error('Device did not return a valid Gemini recognition ID.');
-    }
-    for (let attempt = 0; attempt < 60; attempt++) {
-      await new Promise(r => setTimeout(r, 750));
-      const res = await api(`/api/quran/recognize?id=${encodeURIComponent(queued.requestId)}`);
-      if (res.status === 'done' && res.intent === 'azan') return { intent: 'azan' };
-      if (res.status === 'done' && res.intent === 'surah' &&
-          Number.isInteger(res.surahNumber) && res.surahNumber >= 1 &&
-          res.surahNumber <= surahs.length) {
-        return { intent: 'surah', number: res.surahNumber };
-      }
-      if (res.status === 'error') throw new Error(res.error || 'Gemini could not understand that request.');
-      if (res.status === 'unknown') throw new Error('Recognition request expired.');
-      if (attempt % 4 === 0) setBrowserVoiceState(true, 'Gemini is identifying the Surah name…');
-    }
-    throw new Error('Gemini recognition timed out.');
+    return waitForGeminiRecognition(queued.requestId);
   }
 
-  async function handleAssistantQuery(transcript, attempt) {
-    if (!transcript.trim()) throw new Error('Please say or type a Surah name or an Azan request.');
-    setBrowserVoiceState(true, 'Gemini is understanding your request…');
-    let command;
-    try {
-      command = await recognizeTranscriptWithGemini(transcript);
-    } catch(geminiError) {
-      const localNumber = findSpokenSurah(transcript);
-      if (!localNumber) throw geminiError;
-      command = { intent: 'surah', number: localNumber };
+  async function recognizeAudioWithGemini(blob) {
+    const mimeType = (blob.type || '').split(';')[0].toLowerCase();
+    if (!['audio/mp4', 'audio/webm', 'audio/wav', 'audio/aac'].includes(mimeType)) {
+      throw new Error('This browser recorded an unsupported audio format. Try typing the Surah name instead.');
     }
+    const queued = await api('/api/quran/recognize-audio', {
+      method: 'POST',
+      headers: { 'Content-Type': mimeType },
+      body: blob
+    });
+    return waitForGeminiRecognition(queued.requestId);
+  }
+
+  async function runAssistantCommand(command, attempt) {
     if (attempt !== voiceAttemptGeneration) return;
     if (command.intent === 'azan') {
       await api('/api/control', {
@@ -2178,6 +2129,28 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     }
   }
 
+  async function handleCapturedAudio(blob, attempt) {
+    if (!blob || blob.size === 0) throw new Error('No audio was captured. Tap the microphone and try again.');
+    if (blob.size > 256 * 1024) throw new Error('Recording is too large. Keep it under 6 seconds and try again.');
+    setBrowserVoiceState(true, 'Sending your recording to Gemini…');
+    const command = await recognizeAudioWithGemini(blob);
+    await runAssistantCommand(command, attempt);
+  }
+
+  async function handleAssistantQuery(transcript, attempt) {
+    if (!transcript.trim()) throw new Error('Please say or type a Surah name or an Azan request.');
+    setBrowserVoiceState(true, 'Gemini is understanding your request…');
+    let command;
+    try {
+      command = await recognizeTranscriptWithGemini(transcript);
+    } catch(geminiError) {
+      const localNumber = findSpokenSurah(transcript);
+      if (!localNumber) throw geminiError;
+      command = { intent: 'surah', number: localNumber };
+    }
+    await runAssistantCommand(command, attempt);
+  }
+
   async function submitAssistantQuery() {
     const attempt = ++voiceAttemptGeneration;
     const transcript = byId('assistantQuery').value.trim();
@@ -2191,96 +2164,55 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   function startBrowserRecognition(attempt) {
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition || attempt !== voiceAttemptGeneration || !voiceButtonHeld) return;
+    if (!Recognition || attempt !== voiceAttemptGeneration) return;
 
     const recognition = new Recognition();
     browserRecognition = recognition;
-    voiceSessionTranscript = '';
     recognition.lang = byId('voiceLanguage').value;
-    recognition.continuous = true;
-    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.interimResults = false;
     recognition.onstart = () => {
       if (attempt === voiceAttemptGeneration) {
-        setBrowserVoiceState(true, 'Listening — release to recognize your request…');
+        voiceCapturing = true;
+        setBrowserVoiceState(true, 'Listening… tap stop when you finish speaking.');
       }
     };
     recognition.onresult = event => {
       if (attempt !== voiceAttemptGeneration) return;
-      const finalParts = [];
-      const interimParts = [];
-      for (let i = 0; i < event.results.length; i++) {
-        const result = event.results[i];
-        const phrase = result[0]?.transcript?.trim();
-        if (!phrase) continue;
-        if (result.isFinal) finalParts.push(phrase);
-        else interimParts.push(phrase);
-      }
-      voiceSessionTranscript = finalParts.join(' ').trim();
-      const spokenSoFar = [voiceCapturedTranscript, voiceSessionTranscript]
-        .filter(Boolean).join(' ').trim();
-      const preview = [spokenSoFar, interimParts.join(' ')]
-        .filter(Boolean).join(' ').trim();
-      if (preview) setBrowserVoiceState(true, `I heard: “${preview}” — release to finish.`);
+      voiceCapturedTranscript = event.results?.[0]?.[0]?.transcript?.trim() || '';
     };
     recognition.onerror = event => {
       if (attempt !== voiceAttemptGeneration) return;
       voiceCaptureError = event.error === 'not-allowed'
-        ? 'Allow microphone permission and try again.'
+        ? 'Allow microphone access in Safari settings and try again.'
         : `Speech error (${event.error}).`;
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        voiceButtonHeld = false;
-        voiceProcessingSpokenResult = false;
-        byId('browserVoiceButton').classList.remove('holding');
-        setBrowserVoiceState(false, voiceCaptureError, true);
-      } else if (event.error === 'no-speech') {
-        voiceCaptureError = '';
-      }
     };
     recognition.onend = () => {
       if (attempt !== voiceAttemptGeneration) return;
       if (browserRecognition === recognition) browserRecognition = null;
-      if (voiceSessionTranscript) {
-        voiceCapturedTranscript = [voiceCapturedTranscript, voiceSessionTranscript]
-          .filter(Boolean).join(' ').trim();
-      }
-      voiceSessionTranscript = '';
-
+      voiceCapturing = false;
       if (voiceCaptureError) {
-        voiceButtonHeld = false;
-        voiceProcessingSpokenResult = false;
         setBrowserVoiceState(false, voiceCaptureError, true);
         return;
       }
-      if (voiceButtonHeld) {
-        setBrowserVoiceState(true, 'Listening — release to recognize your request…');
-        window.setTimeout(() => {
-          if (attempt === voiceAttemptGeneration && voiceButtonHeld) {
-            startBrowserRecognition(attempt);
-          }
-        }, 150);
-        return;
-      }
-      if (voiceProcessingSpokenResult) return;
       processCapturedVoice(attempt);
     };
     try {
       recognition.start();
     } catch(e) {
       if (attempt === voiceAttemptGeneration) {
-        voiceButtonHeld = false;
-        byId('browserVoiceButton').classList.remove('holding');
-        setBrowserVoiceState(false, 'Could not start microphone.', true);
+        voiceCapturing = false;
+        setBrowserVoiceState(false, 'Could not start speech recognition.', true);
       }
     }
   }
 
   function processCapturedVoice(attempt) {
-    if (attempt !== voiceAttemptGeneration || voiceButtonHeld ||
-        voiceProcessingSpokenResult) return;
+    if (attempt !== voiceAttemptGeneration || voiceProcessingSpokenResult) return;
     const transcript = voiceCapturedTranscript;
     voiceCapturedTranscript = '';
     if (!transcript) {
-      setBrowserVoiceState(false, 'No speech detected. Press and hold, then speak.', true);
+      setBrowserVoiceState(false, 'No speech detected. Tap the microphone and try again.', true);
       return;
     }
     voiceProcessingSpokenResult = true;
@@ -2298,30 +2230,116 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       });
   }
 
-  function beginVoiceCapture() {
-    if (voiceButtonHeld || voiceProcessingSpokenResult || !routerWifiConnected) return;
-    const attempt = ++voiceAttemptGeneration;
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition) {
-      setBrowserVoiceState(false, 'Speech recognition not supported in this browser.', true);
-      return false;
+  function releaseBrowserAudioStream() {
+    if (browserAudioStream) {
+      browserAudioStream.getTracks().forEach(track => track.stop());
+      browserAudioStream = null;
     }
-    if (browserRecognition) browserRecognition.abort();
-    voiceButtonHeld = true;
-    voiceProcessingSpokenResult = false;
-    voiceCapturedTranscript = '';
-    voiceSessionTranscript = '';
-    voiceCaptureError = '';
-    byId('browserVoiceButton').classList.add('holding');
-    setBrowserVoiceState(true, 'Starting microphone… keep holding to speak.');
-    startBrowserRecognition(attempt);
-    return true;
   }
 
-  function finishVoiceCapture() {
-    if (!voiceButtonHeld) return;
-    voiceButtonHeld = false;
+  async function beginVoiceCapture() {
+    if (voiceCapturing || voicePermissionPending || voiceProcessingSpokenResult ||
+        !routerWifiConnected) return;
+    const attempt = ++voiceAttemptGeneration;
+    voiceCaptureError = '';
+    voiceCapturedTranscript = '';
+
+    if (!window.isSecureContext) {
+      if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+        setBrowserVoiceState(true, 'Starting browser speech recognition… Gemini will interpret the transcript.');
+        startBrowserRecognition(attempt);
+        return;
+      }
+      setBrowserVoiceState(false, 'This browser blocks microphone access on HTTP. Type your request here, or open the HTTPS address for audio recording.', true);
+      return;
+    }
+
+    if (window.MediaRecorder && navigator.mediaDevices?.getUserMedia) {
+      try {
+        voicePermissionPending = true;
+        setBrowserVoiceState(true, 'Waiting for microphone permission…');
+        browserAudioStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
+        voicePermissionPending = false;
+        if (attempt !== voiceAttemptGeneration) {
+          releaseBrowserAudioStream();
+          return;
+        }
+        const supportedTypes = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/aac'];
+        const mimeType = supportedTypes.find(type =>
+          !MediaRecorder.isTypeSupported || MediaRecorder.isTypeSupported(type)
+        );
+        browserMediaRecorder = mimeType
+          ? new MediaRecorder(browserAudioStream, { mimeType })
+          : new MediaRecorder(browserAudioStream);
+        browserAudioChunks = [];
+        browserMediaRecorder.ondataavailable = event => {
+          if (event.data && event.data.size > 0) browserAudioChunks.push(event.data);
+        };
+        browserMediaRecorder.onerror = () => {
+          voiceCapturing = false;
+          releaseBrowserAudioStream();
+          setBrowserVoiceState(false, 'Audio recording failed. Check microphone permission and try again.', true);
+        };
+        const recorder = browserMediaRecorder;
+        recorder.onstop = () => {
+          const recordedType = (recorder.mimeType || browserAudioChunks[0]?.type || '')
+            .split(';')[0].toLowerCase();
+          const recording = new Blob(browserAudioChunks, { type: recordedType });
+          browserAudioChunks = [];
+          if (browserMediaRecorder === recorder) browserMediaRecorder = null;
+          releaseBrowserAudioStream();
+          if (attempt !== voiceAttemptGeneration) return;
+          voiceCapturing = false;
+          voiceProcessingSpokenResult = true;
+          handleCapturedAudio(recording, attempt)
+            .catch(error => {
+              if (attempt === voiceAttemptGeneration) setBrowserVoiceState(false, error.message, true);
+            })
+            .finally(() => {
+              if (attempt === voiceAttemptGeneration) voiceProcessingSpokenResult = false;
+            });
+        };
+        browserMediaRecorder.start(250);
+        voiceCapturing = true;
+        byId('browserVoiceButton').classList.add('holding');
+        setBrowserVoiceState(true, 'Recording… tap “Stop and send” when finished.');
+        window.setTimeout(() => {
+          if (attempt === voiceAttemptGeneration && browserMediaRecorder?.state === 'recording') {
+            stopVoiceCapture();
+          }
+        }, 6000);
+        return;
+      } catch(error) {
+        voicePermissionPending = false;
+        releaseBrowserAudioStream();
+        if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+          setBrowserVoiceState(false, 'Allow microphone access in Safari, then try again over HTTPS.', true);
+          return;
+        }
+        if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) {
+          setBrowserVoiceState(false, 'Could not open the microphone. Check browser permission and try again.', true);
+          return;
+        }
+      }
+    }
+
+    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+      setBrowserVoiceState(true, 'Starting browser speech recognition…');
+      startBrowserRecognition(attempt);
+      return;
+    }
+    setBrowserVoiceState(false, 'Voice input is not supported by this browser. Type your request instead.', true);
+  }
+
+  function stopVoiceCapture() {
     byId('browserVoiceButton').classList.remove('holding');
+    if (browserMediaRecorder?.state === 'recording') {
+      setBrowserVoiceState(true, 'Finishing recording…');
+      browserMediaRecorder.stop();
+      return;
+    }
     if (browserRecognition) {
       setBrowserVoiceState(true, 'Finishing speech recognition…');
       try {
@@ -2329,48 +2347,30 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       } catch(e) {
         browserRecognition.abort();
       }
-    } else if (!voiceCaptureError) {
-      processCapturedVoice(voiceAttemptGeneration);
     }
   }
 
   function cancelBrowserVoice() {
     ++voiceAttemptGeneration;
-    voiceButtonHeld = false;
+    voicePermissionPending = false;
+    voiceCapturing = false;
     voiceProcessingSpokenResult = false;
-    voiceSessionTranscript = '';
     voiceCapturedTranscript = '';
     voiceCaptureError = '';
     byId('browserVoiceButton').classList.remove('holding');
     if (browserRecognition) browserRecognition.abort();
     browserRecognition = null;
+    if (browserMediaRecorder?.state === 'recording') browserMediaRecorder.stop();
+    browserMediaRecorder = null;
+    browserAudioChunks = [];
+    releaseBrowserAudioStream();
     setBrowserVoiceState(false, 'Voice input cancelled.');
   }
   const browserVoiceButton = byId('browserVoiceButton');
-  browserVoiceButton.addEventListener('pointerdown', event => {
-    if (event.button !== undefined && event.button !== 0) return;
-    event.preventDefault();
-    if (browserVoiceButton.setPointerCapture) {
-      browserVoiceButton.setPointerCapture(event.pointerId);
-    }
-    beginVoiceCapture();
+  browserVoiceButton.addEventListener('click', () => {
+    if (voiceCapturing) stopVoiceCapture();
+    else beginVoiceCapture();
   });
-  browserVoiceButton.addEventListener('pointerup', finishVoiceCapture);
-  browserVoiceButton.addEventListener('pointercancel', finishVoiceCapture);
-  browserVoiceButton.addEventListener('lostpointercapture', finishVoiceCapture);
-  browserVoiceButton.addEventListener('keydown', event => {
-    if (event.repeat || (event.key !== ' ' && event.key !== 'Enter')) return;
-    event.preventDefault();
-    beginVoiceCapture();
-  });
-  browserVoiceButton.addEventListener('keyup', event => {
-    if (event.key === ' ' || event.key === 'Enter') {
-      event.preventDefault();
-      finishVoiceCapture();
-    }
-  });
-  window.addEventListener('pointerup', finishVoiceCapture);
-  window.addEventListener('blur', finishVoiceCapture);
   byId('assistantQuery').addEventListener('keydown', event => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -2525,6 +2525,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     }
   }
 
+  initializeSectionReveals();
+  initializeScrollHeader();
   initQuranDropdown();
   refreshAll();
   loadWeeklyStats();

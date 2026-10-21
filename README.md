@@ -2,7 +2,7 @@
 
 # Prayer-Bot
 
-### An open-source ESP32-S3 Islamic prayer clock with a Quran assistant and focus dashboard.
+### An open-source ESP32-S3 prayer clock and Mumins Personal Assistant.
 
 Prayer-Bot brings prayer times, a Hijri calendar, weather, Quran audio, Dhikr, and Pomodoro focus sessions together in a DIY project you can build, understand, and customize.
 
@@ -27,7 +27,7 @@ Prayer-Bot brings prayer times, a Hijri calendar, weather, Quran audio, Dhikr, a
 
 ## ✨ Features
 
-Prayer-Bot is a DIY **ESP32-S3 prayer clock and Islamic personal assistant**. Use its OLED and touch sensor on your desk, or open its local web dashboard from a phone or computer on the same network.
+Prayer-Bot is a DIY **ESP32-S3 prayer clock and Mumins Personal Assistant**. Use its OLED and touch sensor on your desk, or open its local web dashboard from a phone or computer on the same network.
 
 | On the device | In the web dashboard | Built for developers |
 |---|---|---|
@@ -102,6 +102,18 @@ pio device monitor -b 115200
 
 The first `pio run` may take a few minutes while PlatformIO downloads the platform, toolchain, framework, and libraries. Subsequent builds reuse those downloads. Connect the ESP32-S3 with a USB data cable before uploading; if more than one board is connected, specify its port with `--upload-port`, for example `pio run --target upload --upload-port COM5` on Windows. The serial monitor runs at **115200 baud** and shows startup and connection messages. Close it before uploading again.
 
+HTTPS uses `data/https_certificate.pem` and `data/https_private_key.pem`, which are uploaded to LittleFS separately from the firmware. The private key is local-only and must not be committed or shared. If these files are missing, create a self-signed pair (requires OpenSSL):
+
+```sh
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout data/https_private_key.pem \
+  -out data/https_certificate.pem \
+  -days 3650 -subj "/CN=Prayer-Bot" \
+  -addext "subjectAltName=DNS:Prayer-Bot,DNS:prayer-bot.local,IP:192.168.4.1"
+```
+
+After uploading the firmware, upload the certificate files with `pio run --target uploadfs`. Repeat this whenever you replace the certificate pair.
+
 <details>
 <summary><strong>Prefer VS Code buttons?</strong></summary>
 
@@ -120,6 +132,10 @@ PlatformIO is the canonical build system and installs the pinned dependencies fr
 5. Connect your browser device to the same network, open the ESP32’s IP address, then set your location and preferences. **Dhaka is the default location.**
 
 The ESP32’s home-network IP is assigned by DHCP and can change. Your phone or computer must be on the same network as the ESP32 to open its local dashboard. Some phones cannot reach devices connected to their own hotspot; if that happens, try another phone or computer connected to the hotspot.
+
+After Wi-Fi setup, the dashboard is available over both **HTTP** and **HTTPS** (ports 80 and 443); HTTP is not redirected. When mDNS starts successfully, open **https://prayer-bot.local/** to match the certificate's hostname; the ESP32 IP address is also printed in Serial Monitor, but the certificate does not include arbitrary router-assigned IP addresses. In setup-hotspot mode, open **https://192.168.4.1/**. HTTPS requires a valid certificate/key pair uploaded to LittleFS with `pio run --target uploadfs`. Browsers will show a certificate warning because this self-signed certificate is not issued by a public certificate authority; accept it to continue. HTTPS encrypts the connection but does not add dashboard authentication, so use the device only on a trusted local network.
+
+Typed Gemini requests work over HTTP or HTTPS. On HTTP, the voice button uses the browser's speech-recognition feature when supported and sends its transcript through Prayer-Bot to Gemini. Browsers restrict direct microphone recording on non-secure HTTP pages, so if speech recognition is unavailable or blocked, type your request or use HTTPS. For direct audio recording, open the HTTPS address, grant microphone permission, tap **Start recording**, speak for up to six seconds, then tap **Stop and send**. The recording is forwarded through the device to Gemini and is not stored by the firmware. Phone playback uses the visible audio controls when Safari blocks automatic playback.
 
 <details>
 <summary><strong>First boot, dashboard, and offline behavior</strong></summary>
@@ -144,6 +160,7 @@ The firmware uses focused C++ managers for feature logic and separate modules fo
 | Pins, defaults, timing, or API endpoints | [`src/config.h`](src/config.h) |
 | Prayer schedules and prohibited-time windows | [`src/prayer_manager.h`](src/prayer_manager.h), [`src/prayer_manager.cpp`](src/prayer_manager.cpp) |
 | Dashboard UI or its JSON API | [`src/dashboard_html.h`](src/dashboard_html.h), [`src/web_server_manager.cpp`](src/web_server_manager.cpp) |
+| HTTPS listener and device-local certificate | [`src/https_server_manager.cpp`](src/https_server_manager.cpp) |
 | Voice recognition and Quran playback | [`src/voice_manager.cpp`](src/voice_manager.cpp), [`src/screens/`](src/screens/) |
 | Pomodoro state and weekly statistics | [`src/pomodoro_manager.cpp`](src/pomodoro_manager.cpp), [`src/pomodoro_stats.cpp`](src/pomodoro_stats.cpp) |
 | Settings, LittleFS, or caches | [`src/storage_manager.cpp`](src/storage_manager.cpp), [`src/cache_manager.cpp`](src/cache_manager.cpp) |
@@ -183,7 +200,7 @@ See [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) for full wiring notes and
 
 ## 🔐 Set up API keys safely
 
-The firmware uses your OpenWeatherMap key for weather and air-quality data, and your Gemini key to recognize Quran Surah requests. Add both keys to the untracked local file `src/secrets.h`. Prayer times and Quran reciter metadata do not require keys from you.
+The firmware uses your OpenWeatherMap key for weather and air-quality data, and your Gemini key to recognize Quran Surah requests from text or supported browser audio recordings. Add both keys to the untracked local file `src/secrets.h`. Prayer times do not require keys from you.
 
 1. If you do not already have the file, copy [`src/secrets.h.example`](src/secrets.h.example) to `src/secrets.h`.
 2. Replace the Gemini and OpenWeatherMap placeholder strings with your own keys. Keep the quotation marks.
@@ -205,7 +222,6 @@ The firmware uses your OpenWeatherMap key for weather and air-quality data, and 
 | [OpenWeatherMap](https://openweathermap.org/api) | Weather and air-pollution readings | Yes |
 | [Google Gemini](https://aistudio.google.com/) | Recognizes typed or spoken Surah and Azan-notification requests | Yes |
 | [MP3Quran v3](https://www.mp3quran.net/eng/api) | Reciter metadata and Quran audio sources | No |
-| [MP3Quran Timing API](https://www.mp3quran.net/eng/timing-api) | Timed reciters and ayah progress for phone/browser playback | No |
 
 Prayer schedules are fetched as a monthly calendar and cached on-device. A network connection is needed for the first fetch and later month refreshes; this is not a preloaded offline timetable. Weather and prayer data refresh when online. Default location: Dhaka, Bangladesh (23.8103, 90.4125), `Asia/Dhaka` (UTC+6).
 

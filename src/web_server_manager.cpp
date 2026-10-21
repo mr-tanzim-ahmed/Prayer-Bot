@@ -11,11 +11,12 @@
 #include "wifi_manager.h"
 #include "voice_manager.h"
 #include "azan_manager.h"
+#include "https_server_manager.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
-#include <HTTPClient.h>
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
+#include <ESPmDNS.h>
+#include <esp_heap_caps.h>
 #include <time.h>
 #include <sys/time.h>
 #include <math.h>
@@ -43,6 +44,20 @@ namespace {
     bool serverRunning = false;
     Settings* settingsRef = nullptr;
     constexpr size_t MAX_REQUEST_BODY_BYTES = 2048;
+    constexpr size_t MAX_DASHBOARD_AUDIO_BYTES = 256 * 1024;
+
+    struct DashboardAudioUpload {
+        uint8_t* data;
+        size_t total;
+        size_t received;
+        char mimeType[32];
+    };
+
+    void freeDashboardAudioUpload(DashboardAudioUpload* upload) {
+        if (!upload) return;
+        if (upload->data) heap_caps_free(upload->data);
+        delete upload;
+    }
 
     bool validInteger(JsonVariantConst value, int minimum, int maximum) {
         if (value.isUnbound()) return true;
@@ -283,191 +298,6 @@ namespace {
         return body;
     }
 
-    bool fetchTimingApi(const String& path, String& payload) {
-        if (WiFi.status() != WL_CONNECTED) {
-            Serial.println("[QURAN] Timing API unavailable: router Wi-Fi is disconnected.");
-            return false;
-        }
-
-        WiFiClientSecure client;
-        client.setInsecure();
-        HTTPClient http;
-        http.setTimeout(10000);
-        if (!http.begin(client, String(MP3QURAN_API_BASE) + path)) {
-            Serial.println("[QURAN] Could not initialize MP3Quran timing request.");
-            return false;
-        }
-
-        const int status = http.GET();
-        if (status != HTTP_CODE_OK) {
-            Serial.printf("[QURAN] MP3Quran timing API returned HTTP %d.\n", status);
-            http.end();
-            return false;
-        }
-        payload = http.getString();
-        http.end();
-        return !payload.isEmpty();
-    }
-
-    bool isTrustedAudioFolder(const char* url) {
-        if (!url || strncmp(url, "https://", 8) != 0) return false;
-        const char* hostStart = url + 8;
-        const char* pathStart = strchr(hostStart, '/');
-        if (!pathStart || pathStart == hostStart || pathStart[-1] == '.') return false;
-        const String host(hostStart, pathStart - hostStart);
-        return host == "mp3quran.net" || host.endsWith(".mp3quran.net");
-    }
-
-    bool readPositiveQueryInt(AsyncWebServerRequest* request,
-                              const char* name, int maximum, int& value) {
-        if (!request->hasParam(name)) return false;
-        const String text = request->getParam(name)->value();
-        if (text.isEmpty()) return false;
-        for (size_t i = 0; i < text.length(); ++i) {
-            if (text[i] < '0' || text[i] > '9') return false;
-        }
-        char* end = nullptr;
-        const long parsed = strtol(text.c_str(), &end, 10);
-        if (!end || *end != '\0' || parsed < 1 || parsed > maximum) return false;
-        value = static_cast<int>(parsed);
-        return true;
-    }
-
-    void handleTimingReads(AsyncWebServerRequest* request) {
-        String payload;
-        if (!fetchTimingApi("/ayat_timing/reads", payload)) {
-            request->send(502, "application/json",
-                          "{\"error\":\"MP3Quran timing reads are unavailable.\"}");
-            return;
-        }
-        JsonDocument source;
-        if (deserializeJson(source, payload) || !source.is<JsonArray>() ||
-            source.as<JsonArrayConst>().size() > 256) {
-            request->send(502, "application/json",
-                          "{\"error\":\"MP3Quran returned invalid timing-read data.\"}");
-            return;
-        }
-
-        JsonDocument result;
-        JsonArray reads = result["reads"].to<JsonArray>();
-        for (JsonObjectConst item : source.as<JsonArrayConst>()) {
-            const int id = item["id"] | 0;
-            const char* name = item["name"] | "";
-            const char* folder = item["folder_url"] | "";
-            const int surahCount = item["soar_count"] | 0;
-            if (id < 1 || id > 65535 || !name[0] ||
-                !isTrustedAudioFolder(folder) ||
-                surahCount < 1 || surahCount > TOTAL_SURAHS) {
-                continue;
-            }
-            JsonObject read = reads.add<JsonObject>();
-            read["id"] = id;
-            read["name"] = name;
-            read["rewaya"] = item["rewaya"] | "";
-            read["folderUrl"] = folder;
-            read["surahCount"] = surahCount;
-        }
-        if (reads.size() == 0) {
-            request->send(502, "application/json",
-                          "{\"error\":\"MP3Quran returned no usable timing reads.\"}");
-            return;
-        }
-        String response;
-        serializeJson(result, response);
-        request->send(200, "application/json", response);
-    }
-
-    void handleTimingChapters(AsyncWebServerRequest* request) {
-        int readId = 0;
-        if (!readPositiveQueryInt(request, "read", 65535, readId)) {
-            request->send(400, "application/json",
-                          "{\"error\":\"A valid timing read ID is required.\"}");
-            return;
-        }
-        String payload;
-        if (!fetchTimingApi("/ayat_timing/soar?read=" + String(readId), payload)) {
-            request->send(502, "application/json",
-                          "{\"error\":\"MP3Quran timing chapters are unavailable.\"}");
-            return;
-        }
-        JsonDocument source;
-        if (deserializeJson(source, payload) || !source.is<JsonArray>() ||
-            source.as<JsonArrayConst>().size() > TOTAL_SURAHS) {
-            request->send(502, "application/json",
-                          "{\"error\":\"MP3Quran returned invalid chapter data.\"}");
-            return;
-        }
-
-        JsonDocument result;
-        JsonArray chapters = result["chapters"].to<JsonArray>();
-        for (JsonObjectConst item : source.as<JsonArrayConst>()) {
-            const int id = item["id"] | 0;
-            const char* name = item["name"] | "";
-            if (id < 1 || id > TOTAL_SURAHS || !name[0]) continue;
-            JsonObject chapter = chapters.add<JsonObject>();
-            chapter["id"] = id;
-            chapter["name"] = name;
-        }
-        if (chapters.size() == 0) {
-            request->send(404, "application/json",
-                          "{\"error\":\"No timed Surahs are available for this read.\"}");
-            return;
-        }
-        String response;
-        serializeJson(result, response);
-        request->send(200, "application/json", response);
-    }
-
-    void handleAyatTiming(AsyncWebServerRequest* request) {
-        int readId = 0;
-        int surah = 0;
-        if (!readPositiveQueryInt(request, "read", 65535, readId) ||
-            !readPositiveQueryInt(request, "surah", TOTAL_SURAHS, surah)) {
-            request->send(400, "application/json",
-                          "{\"error\":\"Valid timing read and Surah IDs are required.\"}");
-            return;
-        }
-        String payload;
-        const String path = "/ayat_timing?surah=" + String(surah) +
-                            "&read=" + String(readId);
-        if (!fetchTimingApi(path, payload)) {
-            request->send(502, "application/json",
-                          "{\"error\":\"Ayah timing is unavailable for this read and Surah.\"}");
-            return;
-        }
-        JsonDocument source;
-        if (deserializeJson(source, payload) || !source.is<JsonArray>() ||
-            source.as<JsonArrayConst>().size() > 300) {
-            request->send(502, "application/json",
-                          "{\"error\":\"MP3Quran returned invalid ayah timings.\"}");
-            return;
-        }
-
-        JsonDocument result;
-        JsonArray timings = result["timings"].to<JsonArray>();
-        for (JsonObjectConst item : source.as<JsonArrayConst>()) {
-            const int ayah = item["ayah"] | -1;
-            const int start = item["start_time"] | -1;
-            const int end = item["end_time"] | -1;
-            if (ayah < 0 || ayah > 286 || start < 0 || end <= start) {
-                request->send(502, "application/json",
-                              "{\"error\":\"MP3Quran returned an invalid ayah timing range.\"}");
-                return;
-            }
-            JsonObject timing = timings.add<JsonObject>();
-            timing["ayah"] = ayah;
-            timing["startMs"] = start;
-            timing["endMs"] = end;
-        }
-        if (timings.size() == 0) {
-            request->send(502, "application/json",
-                          "{\"error\":\"MP3Quran returned no ayah timings.\"}");
-            return;
-        }
-        String response;
-        serializeJson(result, response);
-        request->send(200, "application/json", response);
-    }
 }
 
 extern WeatherData g_weather;
@@ -490,6 +320,7 @@ extern volatile bool g_webAzanStartRequested;
 namespace WebServerManager {
 
 void init(Settings& settings) {
+    HttpsServerManager::stop();
     if (server) {
         server->end();
         delete server;
@@ -555,10 +386,6 @@ void init(Settings& settings) {
             handleSettings(request, *body);
             delete body;
         });
-
-    server->on("/api/quran/timing-reads", HTTP_GET, handleTimingReads);
-    server->on("/api/quran/timing-chapters", HTTP_GET, handleTimingChapters);
-    server->on("/api/quran/timing", HTTP_GET, handleAyatTiming);
 
     server->on("/api/time", HTTP_POST,
         [](AsyncWebServerRequest*) {},
@@ -927,6 +754,81 @@ void init(Settings& settings) {
             request->send(202, "application/json", json);
         });
 
+    server->on("/api/quran/recognize-audio", HTTP_POST,
+        [](AsyncWebServerRequest*) {},
+        nullptr,
+        [](AsyncWebServerRequest* request, uint8_t* data, size_t len,
+           size_t index, size_t total) {
+            if (index == 0) {
+                auto* upload = new (std::nothrow) DashboardAudioUpload{};
+                if (!upload || total == 0 || total > MAX_DASHBOARD_AUDIO_BYTES) {
+                    delete upload;
+                    request->send(413, "application/json",
+                                  "{\"error\":\"Audio must be shorter than 256 KB.\"}");
+                    return;
+                }
+                String mimeType = request->contentType();
+                const int parameters = mimeType.indexOf(';');
+                if (parameters >= 0) mimeType.remove(parameters);
+                mimeType.trim();
+                if (mimeType != "audio/mp4" && mimeType != "audio/webm" &&
+                    mimeType != "audio/wav" && mimeType != "audio/aac") {
+                    delete upload;
+                    request->send(415, "application/json",
+                                  "{\"error\":\"Use Safari audio/mp4 or a supported audio recording format.\"}");
+                    return;
+                }
+                upload->data = static_cast<uint8_t*>(
+                    heap_caps_malloc(total, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+                if (!upload->data) {
+                    delete upload;
+                    request->send(503, "application/json",
+                                  "{\"error\":\"Not enough device memory for this audio recording.\"}");
+                    return;
+                }
+                upload->total = total;
+                strlcpy(upload->mimeType, mimeType.c_str(),
+                        sizeof(upload->mimeType));
+                request->_tempObject = upload;
+                request->onDisconnect([request]() {
+                    auto* pending = static_cast<DashboardAudioUpload*>(
+                        request->_tempObject);
+                    request->_tempObject = nullptr;
+                    freeDashboardAudioUpload(pending);
+                });
+            }
+
+            auto* upload = static_cast<DashboardAudioUpload*>(request->_tempObject);
+            if (!upload || index != upload->received || len > upload->total - upload->received ||
+                total != upload->total) {
+                request->_tempObject = nullptr;
+                freeDashboardAudioUpload(upload);
+                request->send(400, "application/json",
+                              "{\"error\":\"Audio upload was incomplete or invalid.\"}");
+                return;
+            }
+            memcpy(upload->data + upload->received, data, len);
+            upload->received += len;
+            if (upload->received != upload->total) return;
+
+            request->_tempObject = nullptr;
+            uint32_t requestId = 0;
+            if (!VoiceManager::queueDashboardAudioRecognition(
+                    upload->data, upload->total, upload->mimeType, requestId)) {
+                freeDashboardAudioUpload(upload);
+                request->send(503, "application/json",
+                              "{\"error\":\"Gemini audio recognition is busy or unavailable. Try again shortly.\"}");
+                return;
+            }
+            upload->data = nullptr;
+            freeDashboardAudioUpload(upload);
+            JsonDocument response;
+            response["requestId"] = requestId;
+            String json;
+            serializeJson(response, json);
+            request->send(202, "application/json", json);
+        });
+
     server->on("/api/quran/recognize", HTTP_GET, [](AsyncWebServerRequest* request) {
         if (!request->hasParam("id")) {
             request->send(400, "application/json", "{\"error\":\"A recognition request ID is required.\"}");
@@ -1158,12 +1060,36 @@ void init(Settings& settings) {
 
     server->begin();
     serverRunning = true;
+    const bool mdnsStarted = WiFi.status() == WL_CONNECTED &&
+                             MDNS.begin("prayer-bot");
+    if (mdnsStarted) {
+        MDNS.addService("http", "tcp", WEB_SERVER_PORT);
+        Serial.println("[WEB] Dashboard hostname: prayer-bot.local");
+    }
+    if (!HttpsServerManager::init()) {
+        Serial.println("[WEB] HTTPS could not start; the HTTP dashboard remains available.");
+    } else if (mdnsStarted) {
+        MDNS.addService("https", "tcp", WEB_SERVER_HTTPS_PORT);
+    }
+    if (!mdnsStarted && WiFi.status() == WL_CONNECTED) {
+        Serial.println("[WEB] Could not start mDNS; use the device IP address.");
+    }
 
     Serial.print("[WEB] Dashboard: http://");
     Serial.println((WiFi.getMode() & WIFI_AP) ? WiFi.softAPIP() : WiFi.localIP());
+    if (HttpsServerManager::isRunning()) {
+        if (mdnsStarted) {
+            Serial.println("[WEB] Secure dashboard: https://prayer-bot.local/");
+        } else {
+            Serial.print("[WEB] Secure dashboard: https://");
+            Serial.print((WiFi.getMode() & WIFI_AP) ? WiFi.softAPIP() : WiFi.localIP());
+            Serial.println("/");
+        }
+    }
 }
 
 void stop() {
+    HttpsServerManager::stop();
     if (server) {
         server->end();
         serverRunning = false;

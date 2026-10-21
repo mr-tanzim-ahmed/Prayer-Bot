@@ -20,8 +20,10 @@ namespace {
         MIC_SAMPLE_RATE * MIC_RECORD_SECONDS * sizeof(int16_t);
     constexpr size_t MAX_GEMINI_RESPONSE_BYTES = 8192;
     constexpr size_t BASE64_INPUT_CHUNK_BYTES = 3072;
+    constexpr size_t MAX_DASHBOARD_AUDIO_BYTES = 256 * 1024;
     constexpr size_t MAX_SPOKEN_TRANSCRIPT_LENGTH = 120;
     constexpr uint8_t GEMINI_AZAN_INTENT = TOTAL_SURAHS + 1;
+    constexpr char GEMINI_MODEL[] = "gemini-2.5-flash";
 
     const char* const SURAH_NAMES[] = {
         "Al-Fatiha", "Al-Baqarah", "Aal-E-Imran", "An-Nisa", "Al-Maidah",
@@ -74,6 +76,10 @@ namespace {
     bool dashboardRecognitionQueued = false;
     bool dashboardRecognitionRunning = false;
     bool dashboardRecognitionFinished = false;
+    bool dashboardAudioQueued = false;
+    uint8_t* dashboardAudioBuffer = nullptr;
+    size_t dashboardAudioLength = 0;
+    char dashboardAudioMimeType[32] = {};
 
     void setStatus(const char* status) {
         strlcpy(statusText, status, sizeof(statusText));
@@ -235,13 +241,13 @@ namespace {
             return false;
         }
 
-        client.printf("POST /v1beta/models/gemini-flash-latest:generateContent HTTP/1.1\r\n"
+        client.printf("POST /v1beta/models/%s:generateContent HTTP/1.1\r\n"
                       "Host: generativelanguage.googleapis.com\r\n"
                       "X-goog-api-key: %s\r\n"
                       "Content-Type: application/json\r\n"
                       "Content-Length: %u\r\n"
                       "Connection: close\r\n\r\n",
-                      apiKey, static_cast<unsigned>(body.length()));
+                      GEMINI_MODEL, apiKey, static_cast<unsigned>(body.length()));
         if (!writeAll(client, reinterpret_cast<const uint8_t*>(body.c_str()),
                       body.length())) {
             Serial.println("[VOICE] Could not send transcript to Gemini.");
@@ -251,21 +257,25 @@ namespace {
         return readGeminiSurahResponse(client, surahNumber);
     }
 
-    bool recognizeSurah(const char* apiKey, uint8_t* wavData,
-                        size_t wavLength, uint8_t& surahNumber) {
-        if (!apiKey || !apiKey[0] || !wavData || !wavLength ||
+    bool recognizeAudio(const char* apiKey, const uint8_t* audioData,
+                        size_t audioLength, const char* mimeType,
+                        uint8_t& surahNumber) {
+        if (!apiKey || !apiKey[0] || !audioData || !audioLength ||
+            !mimeType || !mimeType[0] ||
             WiFi.status() != WL_CONNECTED) {
             return false;
         }
 
-        static const char prefix[] =
+        String prefix =
             "{\"contents\":[{\"parts\":["
-            "{\"text\":\"Identify the Quran Surah name spoken in this audio. The speaker may use English, Bangla/Bengali, or a common transliteration. Return only its Surah number from 1 to 114 as a single number. If no Surah name is spoken or it is unrecognized, return 0.\"},"
-            "{\"inlineData\":{\"mimeType\":\"audio/wav\",\"data\":\"";
+            "{\"text\":\"Identify this short voice command for a Quran and prayer device. The speaker may use English, Bangla/Bengali, or common transliteration. Return only one integer: 1 through 114 for a requested Quran Surah; 115 only for an explicit request to play the Azan alarm; otherwise 0.\"},"
+            "{\"inlineData\":{\"mimeType\":\"";
+        prefix += mimeType;
+        prefix += "\",\"data\":\"";
         static const char suffix[] =
             "\"}}]}],\"generationConfig\":{\"temperature\":0}}";
-        const size_t encodedLength = 4 * ((wavLength + 2) / 3);
-        const size_t bodyLength = (sizeof(prefix) - 1) +
+        const size_t encodedLength = 4 * ((audioLength + 2) / 3);
+        const size_t bodyLength = prefix.length() +
                                   encodedLength + (sizeof(suffix) - 1);
 
         WiFiClientSecure client;
@@ -276,16 +286,16 @@ namespace {
             return false;
         }
 
-        client.printf("POST /v1beta/models/gemini-flash-latest:generateContent HTTP/1.1\r\n"
+        client.printf("POST /v1beta/models/%s:generateContent HTTP/1.1\r\n"
                       "Host: generativelanguage.googleapis.com\r\n"
                       "X-goog-api-key: %s\r\n"
                       "Content-Type: application/json\r\n"
                       "Content-Length: %u\r\n"
                       "Connection: close\r\n\r\n",
-                      apiKey, static_cast<unsigned>(bodyLength));
+                      GEMINI_MODEL, apiKey, static_cast<unsigned>(bodyLength));
 
-        if (!writeAll(client, reinterpret_cast<const uint8_t*>(prefix),
-                      sizeof(prefix) - 1)) {
+        if (!writeAll(client, reinterpret_cast<const uint8_t*>(prefix.c_str()),
+                      prefix.length())) {
             Serial.println("[VOICE] Could not send Gemini request prefix.");
             client.stop();
             return false;
@@ -293,17 +303,17 @@ namespace {
 
         uint8_t encoded[4097];
         size_t offset = 0;
-        while (offset < wavLength) {
-            size_t inputLength = wavLength - offset;
+        while (offset < audioLength) {
+            size_t inputLength = audioLength - offset;
             if (inputLength > BASE64_INPUT_CHUNK_BYTES)
                 inputLength = BASE64_INPUT_CHUNK_BYTES;
-            if (offset + inputLength < wavLength)
+            if (offset + inputLength < audioLength)
                 inputLength -= inputLength % 3;
 
             size_t outputLength = 0;
             const int result = mbedtls_base64_encode(
                 encoded, sizeof(encoded), &outputLength,
-                wavData + offset, inputLength);
+                audioData + offset, inputLength);
             if (result != 0 ||
                 !writeAll(client, encoded, outputLength)) {
                 Serial.println("[VOICE] Could not stream microphone audio to Gemini.");
@@ -498,22 +508,41 @@ void processPending(const Settings& settings) {
     char transcript[MAX_SPOKEN_TRANSCRIPT_LENGTH + 1] = {};
     uint32_t transcriptRequestId = 0;
     bool processTranscript = false;
+    uint8_t* audioBuffer = nullptr;
+    size_t audioLength = 0;
+    char audioMimeType[sizeof(dashboardAudioMimeType)] = {};
+    bool processAudio = false;
     portENTER_CRITICAL(&dashboardRecognitionMux);
-    if (dashboardRecognitionQueued) {
+    if (dashboardRecognitionQueued || dashboardAudioQueued) {
         dashboardRecognitionQueued = false;
+        dashboardAudioQueued = false;
         dashboardRecognitionRunning = true;
         transcriptRequestId = dashboardRecognitionRequestId;
-        strlcpy(transcript, dashboardTranscript, sizeof(transcript));
-        processTranscript = true;
+        if (dashboardAudioBuffer) {
+            audioBuffer = dashboardAudioBuffer;
+            audioLength = dashboardAudioLength;
+            strlcpy(audioMimeType, dashboardAudioMimeType, sizeof(audioMimeType));
+            dashboardAudioBuffer = nullptr;
+            dashboardAudioLength = 0;
+            dashboardAudioMimeType[0] = '\0';
+            processAudio = true;
+        } else {
+            strlcpy(transcript, dashboardTranscript, sizeof(transcript));
+            processTranscript = true;
+        }
     }
     portEXIT_CRITICAL(&dashboardRecognitionMux);
 
-    if (processTranscript) {
+    if (processTranscript || processAudio) {
         ::g_voiceState = VOICE_PROCESSING;
         uint8_t recognizedSurah = 0;
         const bool recognized = settings.geminiApiKey[0] &&
-            recognizeSpokenTranscript(settings.geminiApiKey, transcript,
-                                      recognizedSurah);
+            (processAudio
+                ? recognizeAudio(settings.geminiApiKey, audioBuffer, audioLength,
+                                 audioMimeType, recognizedSurah)
+                : recognizeSpokenTranscript(settings.geminiApiKey, transcript,
+                                            recognizedSurah));
+        if (audioBuffer) heap_caps_free(audioBuffer);
         portENTER_CRITICAL(&dashboardRecognitionMux);
         if (dashboardRecognitionRequestId == transcriptRequestId) {
             dashboardRecognitionRunning = false;
@@ -582,8 +611,8 @@ void processPending(const Settings& settings) {
                     recordingBuffer, capturedBytes);
             makeWavHeader(recordingBuffer, capturedBytes);
             const size_t wavLength = capturedBytes + WAV_HEADER_BYTES;
-            if (recognizeSurah(apiKey, recordingBuffer,
-                               wavLength, recognizedSurah) &&
+            if (recognizeAudio(apiKey, recordingBuffer,
+                               wavLength, "audio/wav", recognizedSurah) &&
                 surahScreenActive && !cancelRequested &&
                 requestGeneration == screenGeneration) {
                 Serial.printf("[VOICE] Recognized Surah %u (%s).\n",
@@ -659,7 +688,8 @@ bool queueDashboardRecognition(const char* transcript, uint32_t& requestId) {
     if (length == 0 || length > MAX_SPOKEN_TRANSCRIPT_LENGTH) return false;
 
     portENTER_CRITICAL(&dashboardRecognitionMux);
-    if (dashboardRecognitionQueued || dashboardRecognitionRunning) {
+    if (dashboardRecognitionQueued || dashboardAudioQueued ||
+        dashboardRecognitionRunning) {
         portEXIT_CRITICAL(&dashboardRecognitionMux);
         return false;
     }
@@ -675,12 +705,42 @@ bool queueDashboardRecognition(const char* transcript, uint32_t& requestId) {
     return true;
 }
 
+bool queueDashboardAudioRecognition(uint8_t* audio, size_t audioLength,
+                                    const char* mimeType,
+                                    uint32_t& requestId) {
+    if (WiFi.status() != WL_CONNECTED || !audio || audioLength == 0 ||
+        audioLength > MAX_DASHBOARD_AUDIO_BYTES || !mimeType) return false;
+    if (strcmp(mimeType, "audio/mp4") != 0 &&
+        strcmp(mimeType, "audio/webm") != 0 &&
+        strcmp(mimeType, "audio/wav") != 0 &&
+        strcmp(mimeType, "audio/aac") != 0) return false;
+
+    portENTER_CRITICAL(&dashboardRecognitionMux);
+    if (dashboardRecognitionQueued || dashboardAudioQueued ||
+        dashboardRecognitionRunning) {
+        portEXIT_CRITICAL(&dashboardRecognitionMux);
+        return false;
+    }
+    uint32_t nextId = nextDashboardRecognitionRequestId++;
+    if (nextId == 0) nextId = nextDashboardRecognitionRequestId++;
+    dashboardRecognitionRequestId = nextId;
+    dashboardRecognizedSurah = 0;
+    dashboardRecognitionFinished = false;
+    dashboardAudioBuffer = audio;
+    dashboardAudioLength = audioLength;
+    strlcpy(dashboardAudioMimeType, mimeType, sizeof(dashboardAudioMimeType));
+    dashboardAudioQueued = true;
+    requestId = nextId;
+    portEXIT_CRITICAL(&dashboardRecognitionMux);
+    return true;
+}
+
 const char* getDashboardRecognition(uint32_t requestId,
                                     uint8_t& surahNumber) {
     const char* status = "unknown";
     portENTER_CRITICAL(&dashboardRecognitionMux);
     if (requestId == dashboardRecognitionRequestId && requestId != 0) {
-        if (dashboardRecognitionQueued) {
+        if (dashboardRecognitionQueued || dashboardAudioQueued) {
             status = "queued";
         } else if (dashboardRecognitionRunning) {
             status = "processing";
