@@ -254,6 +254,7 @@ void loop() {
 
 void taskDisplay(void* param) {
     TickType_t lastWake = xTaskGetTickCount();
+    unsigned long lastScreenUpdateMs = millis();
 
     for (;;) {
         // Service OLED health
@@ -340,8 +341,12 @@ void taskDisplay(void* param) {
             changeScreen((SystemScreen)((g_currentScreen + 1) % SYS_SCREEN_COUNT));
         }
 
-        // Update current screen content (clock tick, countdown, etc.)
-        ScreenRouter::update(g_currentScreen);
+        // Poll touch responsively while keeping full screen refreshes at 10 Hz.
+        const unsigned long now = millis();
+        if (now - lastScreenUpdateMs >= 100UL) {
+            lastScreenUpdateMs = now;
+            ScreenRouter::update(g_currentScreen);
+        }
 
         // Auto-slide logic for Dhikr screen (100 seconds)
         if (g_currentScreen == SYS_SCREEN_DHIKR &&
@@ -350,7 +355,7 @@ void taskDisplay(void* param) {
             changeScreen(SYS_SCREEN_PRAYER_FOCUS);
         }
 
-        vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(100));
+        vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(50));
     }
 }
 

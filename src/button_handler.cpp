@@ -24,8 +24,8 @@ void init() {
     rawTouchState = previousTouchState;
     touchPressed = false;
     touchLongPressed = false;
-    longPressReported = false;
-    touchStartedMs = previousTouchState ? millis() : 0;
+    longPressReported = previousTouchState;
+    touchStartedMs = 0;
     rawStateChangedMs = millis();
     Serial.println("[BUTTON] TTP223 active-HIGH digital input initialized.");
 }

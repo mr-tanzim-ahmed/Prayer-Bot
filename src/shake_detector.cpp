@@ -14,27 +14,39 @@ namespace {
 
     uint8_t peakCount = 0;
     unsigned long firstPeakTime = 0;
+    unsigned long lastMpuCheckMs = 0;
+    constexpr unsigned long MPU_RETRY_INTERVAL_MS = 5000UL;
 
-    void writeMPU(uint8_t reg, uint8_t val) {
+    bool writeMPU(uint8_t reg, uint8_t val) {
         Wire.beginTransmission(MPU6050_I2C_ADDRESS);
         Wire.write(reg);
         Wire.write(val);
-        Wire.endTransmission();
+        return Wire.endTransmission() == 0;
     }
 
-    int16_t readAxis(uint8_t regH) {
+    bool readAxis(uint8_t regH, int16_t& value) {
         Wire.beginTransmission(MPU6050_I2C_ADDRESS);
         Wire.write(regH);
-        Wire.endTransmission(false);
-        Wire.requestFrom((uint8_t)MPU6050_I2C_ADDRESS, (uint8_t)2);
-        int16_t val = (Wire.read() << 8) | Wire.read();
-        return val;
+        if (Wire.endTransmission(false) != 0 ||
+            Wire.requestFrom((uint8_t)MPU6050_I2C_ADDRESS, (uint8_t)2) != 2 ||
+            Wire.available() < 2) {
+            return false;
+        }
+
+        const int highByte = Wire.read();
+        const int lowByte = Wire.read();
+        if (highByte < 0 || lowByte < 0) return false;
+
+        value = (int16_t)((highByte << 8) | lowByte);
+        return true;
     }
 }
 
 namespace ShakeDetector {
 
 bool init() {
+    lastMpuCheckMs = millis();
+
     // Check MPU6050 presence
     Wire.beginTransmission(MPU6050_I2C_ADDRESS);
     if (Wire.endTransmission() != 0) {
@@ -44,11 +56,19 @@ bool init() {
     }
 
     // Wake up MPU6050 (clear sleep bit)
-    writeMPU(0x6B, 0x00);
+    if (!writeMPU(0x6B, 0x00)) {
+        Serial.println("[MPU] Failed to wake sensor.");
+        mpuAvailable = false;
+        return false;
+    }
     delay(10);
 
     // Set accelerometer to +/- 8g range
-    writeMPU(0x1C, 0x10);
+    if (!writeMPU(0x1C, 0x10)) {
+        Serial.println("[MPU] Failed to configure accelerometer.");
+        mpuAvailable = false;
+        return false;
+    }
 
     mpuAvailable = true;
     Serial.println("[MPU] Initialized.");
@@ -56,11 +76,23 @@ bool init() {
 }
 
 void update() {
-    if (!mpuAvailable) return;
+    if (!mpuAvailable) {
+        if (millis() - lastMpuCheckMs >= MPU_RETRY_INTERVAL_MS) init();
+        return;
+    }
 
-    int16_t ax = readAxis(0x3B);
-    int16_t ay = readAxis(0x3D);
-    int16_t az = readAxis(0x3F);
+    int16_t ax;
+    int16_t ay;
+    int16_t az;
+    if (!readAxis(0x3B, ax) ||
+        !readAxis(0x3D, ay) ||
+        !readAxis(0x3F, az)) {
+        mpuAvailable = false;
+        lastMpuCheckMs = millis();
+        peakCount = 0;
+        Serial.println("[MPU] Read failed; sensor will be retried.");
+        return;
+    }
 
     // Calculate magnitude (squared to avoid sqrt)
     int32_t mag = (int32_t)ax * ax + (int32_t)ay * ay + (int32_t)az * az;

@@ -102,7 +102,7 @@ pio device monitor -b 115200
 
 The first `pio run` may take a few minutes while PlatformIO downloads the platform, toolchain, framework, and libraries. Subsequent builds reuse those downloads. Connect the ESP32-S3 with a USB data cable before uploading; if more than one board is connected, specify its port with `--upload-port`, for example `pio run --target upload --upload-port COM5` on Windows. The serial monitor runs at **115200 baud** and shows startup and connection messages. Close it before uploading again.
 
-HTTPS uses `data/https_certificate.pem` and `data/https_private_key.pem`, which are uploaded to LittleFS separately from the firmware. The private key is local-only and must not be committed or shared. If these files are missing, create a self-signed pair (requires OpenSSL):
+HTTPS uses `data/https_certificate.pem` and `data/https_private_key.pem`, which are uploaded to LittleFS separately from the firmware. The project configures PlatformIO's filesystem image as LittleFS to match the firmware's storage driver. After building or updating the firmware, upload the filesystem image with `pio run --target uploadfs`; this is required for HTTPS to load the certificate and key. The private key is local-only and must not be committed or shared. If these files are missing, create a self-signed pair (requires OpenSSL):
 
 ```sh
 openssl req -x509 -newkey rsa:2048 -nodes \

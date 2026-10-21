@@ -26,6 +26,7 @@ namespace DisplayManager {
 bool init() {
     Wire.begin(PIN_OLED_SDA, PIN_OLED_SCL);
     Wire.setClock(I2C_CLOCK_SPEED);
+    Wire.setTimeOut(50);
     delay(20);
 
     if (!checkOLED()) {
@@ -80,6 +81,7 @@ void clearBuffer() {
 }
 
 void sendBuffer() {
+    if (!oledAvailable) return;
     oled.sendBuffer();
 }
 

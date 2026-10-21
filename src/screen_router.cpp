@@ -91,7 +91,7 @@ void draw(SystemScreen screen) {
 void transitionOut() {
     if (!DisplayManager::isAvailable() || g_azanState == AZAN_PLAYING) return;
 
-    constexpr uint8_t TRANSITION_STEPS = 12;
+    constexpr uint8_t TRANSITION_STEPS = 4;
     U8G2& oled = DisplayManager::getDisplay();
     for (uint8_t step = 1; step <= TRANSITION_STEPS; ++step) {
         oled.setDrawColor(0);
@@ -100,7 +100,6 @@ void transitionOut() {
                      SCREEN_HEIGHT);
         oled.setDrawColor(1);
         DisplayManager::sendBuffer();
-        delay(1);
     }
 }
 

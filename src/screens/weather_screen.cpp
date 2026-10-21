@@ -58,11 +58,12 @@ namespace {
         oled.setFont(u8g2_font_5x8_tf);
         DisplayManager::drawCenteredText(city, 25);
 
-        const WeatherIconType iconType = weather.weatherId == 800 &&
-                                         weather.iconCode.endsWith("n")
-            ? ICON_MOON
-            : WeatherManager::getIconType(weather.weatherId);
-        WeatherIcons::drawCompact(oled, 9, 32, iconType);
+        if (weather.valid) {
+            const WeatherIconType iconType =
+                WeatherManager::getIconType(weather.weatherId,
+                                            weather.iconCode);
+            WeatherIcons::drawCompact(oled, 9, 32, iconType);
+        }
 
         oled.setFont(u8g2_font_logisoso20_tf);
         String temperature = weather.valid

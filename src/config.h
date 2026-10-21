@@ -55,7 +55,7 @@
 #define PRAYER_FETCH_INTERVAL     (30UL * 60UL * 1000UL)
 #define PRAYER_UPDATE_INTERVAL    (60UL * 1000UL)
 #define NTP_SYNC_INTERVAL         (6UL * 3600UL * 1000UL)
-#define TOUCH_DEBOUNCE_MS         200UL
+#define TOUCH_DEBOUNCE_MS         50UL
 
 // ------------------------------------------------------------
 // Shake Detection (MPU6050)

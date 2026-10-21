@@ -118,7 +118,9 @@ enum WeatherIconType : uint8_t {
     ICON_STORM,
     ICON_SNOW,
     ICON_FOG,
-    ICON_MOON
+    ICON_MOON,
+    ICON_PARTLY_CLOUDY,
+    ICON_NIGHT_CLOUDY
 };
 
 // ------------------------------------------------------------

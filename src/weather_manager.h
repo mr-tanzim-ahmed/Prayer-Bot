@@ -15,6 +15,7 @@ namespace WeatherManager {
 
     // Get weather icon type from OpenWeather condition ID
     WeatherIconType getIconType(int weatherId);
+    WeatherIconType getIconType(int weatherId, const String& iconCode);
 
     // Get AQI category text
     String getAQIText(int aqi);

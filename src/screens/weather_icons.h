@@ -40,6 +40,18 @@ inline void drawCloud(U8G2& oled, int x, int y) {
     oled.drawBox(x + 10, y + 17, 25, 9);
 }
 
+inline void drawPartlyCloudy(U8G2& oled, int x, int y, bool isNight) {
+    if (isNight) {
+        oled.drawDisc(x + 10, y + 9, 7);
+        oled.setDrawColor(0);
+        oled.drawDisc(x + 14, y + 6, 6);
+        oled.setDrawColor(1);
+    } else {
+        drawSun(oled, x - 5, y - 5);
+    }
+    drawCloud(oled, x, y + 3);
+}
+
 inline void drawRain(U8G2& oled, int x, int y) {
     drawCloud(oled, x, y - 3);
     oled.drawLine(x + 14, y + 29, x + 11, y + 35);
@@ -79,6 +91,12 @@ inline void draw(U8G2& oled, int x, int y, WeatherIconType type) {
         case ICON_SNOW:  drawSnow(oled, x, y);  break;
         case ICON_FOG:   drawFog(oled, x, y);   break;
         case ICON_MOON:  drawMoon(oled, x, y);  break;
+        case ICON_PARTLY_CLOUDY:
+            drawPartlyCloudy(oled, x, y, false);
+            break;
+        case ICON_NIGHT_CLOUDY:
+            drawPartlyCloudy(oled, x, y, true);
+            break;
         default:         drawSun(oled, x, y);   break;
     }
 }
@@ -103,11 +121,25 @@ inline void drawCompact(U8G2& oled, int x, int y, WeatherIconType type) {
             oled.drawLine(x + 19, y + 3, x + 17, y + 5);
             oled.drawLine(x + 7, y + 15, x + 5, y + 17);
             break;
+        case ICON_PARTLY_CLOUDY:
+            oled.drawCircle(x + 8, y + 6, 4);
+            oled.drawVLine(x + 8, y, 2);
+            oled.drawHLine(x + 2, y + 6, 2);
+            oled.drawLine(x + 4, y + 2, x + 5, y + 3);
+            drawCloud();
+            break;
         case ICON_MOON:
             oled.drawDisc(x + 12, y + 10, 8);
             oled.setDrawColor(0);
             oled.drawDisc(x + 16, y + 6, 7);
             oled.setDrawColor(1);
+            break;
+        case ICON_NIGHT_CLOUDY:
+            oled.drawDisc(x + 8, y + 6, 5);
+            oled.setDrawColor(0);
+            oled.drawDisc(x + 11, y + 4, 4);
+            oled.setDrawColor(1);
+            drawCloud();
             break;
         case ICON_CLOUD:
             drawCloud();
