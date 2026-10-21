@@ -25,7 +25,7 @@ void draw(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers&
         const int hour12 = (t.tm_hour % 12 == 0) ? 12 : t.tm_hour % 12;
         const char* meridiem = t.tm_hour < 12 ? "AM" : "PM";
         char timeBuf[8];
-        snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", hour12, t.tm_min);
+        snprintf(timeBuf, sizeof(timeBuf), "%d:%02d", hour12, t.tm_min);
         oled.setFont(u8g2_font_logisoso18_tf);
         const int timeWidth = oled.getStrWidth(timeBuf);
         const int startX = (SCREEN_WIDTH - timeWidth - 20) / 2;
@@ -65,10 +65,17 @@ void draw(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers&
         DisplayManager::drawCenteredText(eventText, 63);
     } else {
         oled.setFont(u8g2_font_5x8_tf);
-        char sunTimes[24];
-        snprintf(sunTimes, sizeof(sunTimes), "RISE %02u:%02u   SET %02u:%02u",
-                 prayers.sunrise.hour, prayers.sunrise.minute,
-                 prayers.maghrib.hour, prayers.maghrib.minute);
+        const uint8_t sunriseHour12 =
+            prayers.sunrise.hour % 12 == 0 ? 12 : prayers.sunrise.hour % 12;
+        const uint8_t sunsetHour12 =
+            prayers.maghrib.hour % 12 == 0 ? 12 : prayers.maghrib.hour % 12;
+        const char* sunriseMeridiem = prayers.sunrise.hour < 12 ? "AM" : "PM";
+        const char* sunsetMeridiem = prayers.maghrib.hour < 12 ? "AM" : "PM";
+        char sunTimes[32];
+        snprintf(sunTimes, sizeof(sunTimes), "RISE %u:%02u%s SET %u:%02u%s",
+                 sunriseHour12, prayers.sunrise.minute, sunriseMeridiem,
+                 sunsetHour12, prayers.maghrib.minute, sunsetMeridiem);
+        oled.setFont(u8g2_font_4x6_tf);
         DisplayManager::drawCenteredText(String(sunTimes), 63);
     }
 

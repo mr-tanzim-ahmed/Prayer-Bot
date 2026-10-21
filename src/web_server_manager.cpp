@@ -138,16 +138,17 @@ namespace {
         return error.isEmpty();
     }
 
-    String formatTime(const PrayerTime& time) {
-        char text[6];
-        snprintf(text, sizeof(text), "%02u:%02u", time.hour, time.minute);
+    String formatTime(uint8_t hour, uint8_t minute) {
+        if (hour == 0 && minute == 0) return "00:00";
+        const uint8_t hour12 = hour % 12 == 0 ? 12 : hour % 12;
+        const char* meridiem = hour < 12 ? "AM" : "PM";
+        char text[12];
+        snprintf(text, sizeof(text), "%u:%02u %s", hour12, minute, meridiem);
         return String(text);
     }
 
-    String formatTime(uint8_t hour, uint8_t minute) {
-        char text[6];
-        snprintf(text, sizeof(text), "%02u:%02u", hour, minute);
-        return String(text);
+    String formatTime(const PrayerTime& time) {
+        return formatTime(time.hour, time.minute);
     }
 
     String formatDuration(int32_t seconds) {

@@ -354,6 +354,35 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       font-variant-numeric: tabular-nums;
       display: block;
     }
+    .fasting-times {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .fasting-time {
+      padding: 14px 16px;
+      border: 1.5px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel-subtle);
+      text-align: center;
+    }
+    .fasting-time span {
+      display: block;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+    .fasting-time strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--primary-dark);
+      font-size: 1.35rem;
+      font-variant-numeric: tabular-nums;
+    }
+    @media (max-width: 480px) {
+      .fasting-times { grid-template-columns: 1fr; }
+    }
     .prayer-badge {
       display: inline-block;
       font-size: 0.68rem;
@@ -1094,37 +1123,47 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
           <span class="prayer-icon">🌌</span>
           <span class="prayer-name">Fajr</span>
           <span class="prayer-arabic">الفجر</span>
-          <span class="prayer-time" id="fajr">04:41</span>
+          <span class="prayer-time" id="fajr">4:41 AM</span>
         </div>
         <div class="prayer-card" id="card-sunrise">
           <span class="prayer-icon">🌅</span>
           <span class="prayer-name">Sunrise</span>
           <span class="prayer-arabic">الشروق</span>
-          <span class="prayer-time" id="sunrise">05:57</span>
+          <span class="prayer-time" id="sunrise">5:57 AM</span>
         </div>
         <div class="prayer-card" id="card-dhuhr">
           <span class="prayer-icon">☀️</span>
           <span class="prayer-name">Dhuhr</span>
           <span class="prayer-arabic">الظهر</span>
-          <span class="prayer-time" id="dhuhr">11:44</span>
+          <span class="prayer-time" id="dhuhr">11:44 AM</span>
         </div>
         <div class="prayer-card" id="card-asr">
           <span class="prayer-icon">🌤</span>
           <span class="prayer-name">Asr</span>
           <span class="prayer-arabic">العصر</span>
-          <span class="prayer-time" id="asr">15:53</span>
+          <span class="prayer-time" id="asr">3:53 PM</span>
         </div>
         <div class="prayer-card" id="card-maghrib">
           <span class="prayer-icon">🌇</span>
           <span class="prayer-name">Maghrib</span>
           <span class="prayer-arabic">المغرب</span>
-          <span class="prayer-time" id="maghrib">17:30</span>
+          <span class="prayer-time" id="maghrib">5:30 PM</span>
         </div>
         <div class="prayer-card" id="card-isha">
           <span class="prayer-icon">🌙</span>
           <span class="prayer-name">Isha</span>
           <span class="prayer-arabic">العشاء</span>
-          <span class="prayer-time" id="isha">18:41</span>
+          <span class="prayer-time" id="isha">6:41 PM</span>
+        </div>
+      </div>
+      <div class="fasting-times" aria-label="Sahari and Iftar times">
+        <div class="fasting-time">
+          <span>🌙 Sahari ends (Fajr)</span>
+          <strong id="sahariEnd">4:41 AM</strong>
+        </div>
+        <div class="fasting-time">
+          <span>🌇 Iftar (Maghrib)</span>
+          <strong id="iftarTime">5:30 PM</strong>
         </div>
       </div>
       <p id="prayerNote" class="hint" style="margin-top:14px">Times automatically update based on your location and calculation method.</p>
@@ -1141,19 +1180,19 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <div class="prohibited-grid">
         <div class="prohibited-card" id="card-prohibited-sunrise">
           <div class="prohibited-title"><span>🌅</span> 1. After Sunrise (طلوع الشمس)</div>
-          <span class="prohibited-range" id="afterSunriseRange">05:57 – 06:12</span>
+          <span class="prohibited-range" id="afterSunriseRange">5:57 AM – 6:12 AM</span>
           <span class="prohibited-state" id="afterSunriseState">Not active now</span>
           <p class="hint">From sunrise until the sun rises a spear's height (~15 min).</p>
         </div>
         <div class="prohibited-card" id="card-prohibited-zawal">
           <div class="prohibited-title"><span>☀️</span> 2. At Zawal (استواء الشمس)</div>
-          <span class="prohibited-range" id="atZawalRange">11:34 – 11:44</span>
+          <span class="prohibited-range" id="atZawalRange">11:34 AM – 11:44 AM</span>
           <span class="prohibited-state" id="atZawalState">Not active now</span>
           <p class="hint">Exact solar noon just before Dhuhr azan starts (~10 min).</p>
         </div>
         <div class="prohibited-card" id="card-prohibited-sunset">
           <div class="prohibited-title"><span>🌇</span> 3. Before Sunset (غروب الشمس)</div>
-          <span class="prohibited-range" id="beforeSunsetRange">17:15 – 17:30</span>
+          <span class="prohibited-range" id="beforeSunsetRange">5:15 PM – 5:30 PM</span>
           <span class="prohibited-state" id="beforeSunsetState">Not active now</span>
           <p class="hint">When the sun pales until it sets into Maghrib (~15 min).</p>
         </div>
@@ -1619,6 +1658,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         card.classList.toggle('active-prayer', Boolean(isNext));
       }
     }
+    put('sahariEnd', s.prayers.fajr && s.prayers.fajr !== '00:00' ? s.prayers.fajr : '—');
+    put('iftarTime', s.prayers.maghrib && s.prayers.maghrib !== '00:00' ? s.prayers.maghrib : '—');
     put('prayerApiStatus', s.prayers.liveSynced ? 'Live Aladhan API ✅' : 'Default / Cache');
 
     // Populate Prohibited Times Cards
@@ -1701,6 +1742,15 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     return Boolean(s.prayers.liveSynced);
   }
 
+  function formatPrayerTime(value) {
+    const match = /^(\d{1,2}):(\d{2})/.exec(String(value));
+    if (!match) return value;
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${String(minute).padStart(2, '0')} ${hour < 12 ? 'AM' : 'PM'}`;
+  }
+
   async function triggerPrayerSync() {
     const btn = byId('syncPrayerBtn');
     if (btn) btn.disabled = true;
@@ -1720,8 +1770,9 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         const data = await res.json();
         if (data && data.data && data.data.timings) {
           const t = data.data.timings;
-          put('fajr', t.Fajr); put('sunrise', t.Sunrise); put('dhuhr', t.Dhuhr);
-          put('asr', t.Asr); put('maghrib', t.Maghrib); put('isha', t.Isha);
+          put('fajr', formatPrayerTime(t.Fajr)); put('sunrise', formatPrayerTime(t.Sunrise)); put('dhuhr', formatPrayerTime(t.Dhuhr));
+          put('asr', formatPrayerTime(t.Asr)); put('maghrib', formatPrayerTime(t.Maghrib)); put('isha', formatPrayerTime(t.Isha));
+          put('sahariEnd', formatPrayerTime(t.Fajr)); put('iftarTime', formatPrayerTime(t.Maghrib));
           put('prayerApiStatus', 'Aladhan Direct ✅');
           message('Prayer times updated directly from Aladhan online service.');
         } else {

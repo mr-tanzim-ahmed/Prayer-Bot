@@ -11,6 +11,7 @@
 
 namespace AllPrayersScreen {
     void draw(const DailyPrayers& prayers, const NextPrayerInfo& next);
+    void drawSahariIftar(const DailyPrayers& prayers);
 }
 
 #endif // ALL_PRAYERS_SCREEN_H

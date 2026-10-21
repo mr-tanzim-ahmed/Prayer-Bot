@@ -39,6 +39,10 @@ Prayer-Bot is a DIY **ESP32-S3 prayer clock and Mumins Personal Assistant**. Use
 
 **Seven OLED screens:** Prayer Focus · All Prayers · Clock & Calendar · Weather · Pomodoro · Dhikr · Quran.
 
+While **All Prayers** is selected, the OLED shows the full prayer timetable for 3 seconds, then Sahari end (Fajr) and Iftar (Maghrib) times for 2 seconds. This 5-second cycle repeats until you advance to another screen.
+
+The dashboard prayer schedule also shows Sahari end and Iftar times, using the day's Fajr and Maghrib times.
+
 The OLED startup screen presents a centered “Assalamualaikum” greeting and its translation, sized to fit within the display frame.
 
 > **Audio note:** The Azan alert is a repeating notification tone. Recorded Adhan audio is not included. The Quran assistant identifies Surah requests; it does not provide Quran translation, tafsir, or free-form Quran-text search.

@@ -28,6 +28,15 @@ extern bool            g_prayerReady;
 
 namespace {
     unsigned long lastQuranRedrawMs = 0;
+    bool showingSahariIftar = false;
+    bool allPrayersViewInitialized = false;
+    bool azanOverlayDisplayed = false;
+
+    bool shouldShowSahariIftar(unsigned long timeOnScreen) {
+        constexpr unsigned long CYCLE_MS = 5000UL;
+        constexpr unsigned long PRAYER_TABLE_MS = 3000UL;
+        return timeOnScreen % CYCLE_MS >= PRAYER_TABLE_MS;
+    }
 }
 
 // Track time on current screen for animations
@@ -39,6 +48,7 @@ void draw(SystemScreen screen) {
     if (!DisplayManager::isAvailable()) return;
 
     if (g_azanState == AZAN_PLAYING) {
+        azanOverlayDisplayed = true;
         PrayerFocusScreen::draw(g_nextPrayer, g_prohibited, true,
                                 PrayerManager::getCurrentPrayerName(),
                                 g_prayerRefreshing ||
@@ -58,7 +68,13 @@ void draw(SystemScreen screen) {
             break;
 
         case SYS_SCREEN_ALL_PRAYERS:
-            AllPrayersScreen::draw(g_todayPrayers, g_nextPrayer);
+            showingSahariIftar = shouldShowSahariIftar(timeOnScreen);
+            allPrayersViewInitialized = true;
+            if (showingSahariIftar) {
+                AllPrayersScreen::drawSahariIftar(g_todayPrayers);
+            } else {
+                AllPrayersScreen::draw(g_todayPrayers, g_nextPrayer);
+            }
             break;
 
         case SYS_SCREEN_CLOCK_CALENDAR:
@@ -107,10 +123,17 @@ void update(SystemScreen screen) {
     if (!DisplayManager::isAvailable()) return;
 
     if (g_azanState == AZAN_PLAYING) {
+        azanOverlayDisplayed = true;
         PrayerFocusScreen::update(g_nextPrayer, g_prohibited, true,
                                   PrayerManager::getCurrentPrayerName(),
                                   g_prayerRefreshing ||
                                       g_locationRefreshRequested);
+        return;
+    }
+
+    if (azanOverlayDisplayed) {
+        azanOverlayDisplayed = false;
+        draw(screen);
         return;
     }
 
@@ -124,6 +147,21 @@ void update(SystemScreen screen) {
                                       g_prayerRefreshing ||
                                           g_locationRefreshRequested);
             break;
+
+        case SYS_SCREEN_ALL_PRAYERS: {
+            const bool shouldShowSahari = shouldShowSahariIftar(timeOnScreen);
+            if (!allPrayersViewInitialized ||
+                shouldShowSahari != showingSahariIftar) {
+                showingSahariIftar = shouldShowSahari;
+                allPrayersViewInitialized = true;
+                if (showingSahariIftar) {
+                    AllPrayersScreen::drawSahariIftar(g_todayPrayers);
+                } else {
+                    AllPrayersScreen::draw(g_todayPrayers, g_nextPrayer);
+                }
+            }
+            break;
+        }
 
         case SYS_SCREEN_CLOCK_CALENDAR:
             ClockCalendarScreen::update(g_hijriDate, g_todayEvent, g_todayPrayers);

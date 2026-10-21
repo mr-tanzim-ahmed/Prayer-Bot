@@ -211,6 +211,7 @@ void setup() {
     }
 
     // 14. Draw initial screen
+    g_screenStartMs = millis();
     ScreenRouter::draw(g_currentScreen);
 
     // 15. Create FreeRTOS tasks
