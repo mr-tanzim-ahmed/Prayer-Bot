@@ -98,25 +98,31 @@ Edit `src/secrets.h` and add your own API keys. **If the file already exists, do
 
 Open a terminal in the repository root. With PlatformIO IDE installed, use the VS Code integrated terminal; with PlatformIO Core installed, use your normal terminal. Run:
 
-```sh
+```powershell
 pio run
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 pio run --target upload
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 pio device monitor -b 115200
 ```
 
-The first `pio run` may take a few minutes while PlatformIO downloads the platform, toolchain, framework, and libraries. Subsequent builds reuse those downloads. Connect the ESP32-S3 with a USB data cable before uploading; if more than one board is connected, specify its port with `--upload-port`, for example `pio run --target upload --upload-port COM5` on Windows. The serial monitor runs at **115200 baud** and shows startup and connection messages. Close it before uploading again.
+The first `pio run` may take a few minutes while PlatformIO downloads the platform, toolchain, framework, and libraries. Subsequent builds reuse those downloads. Connect the ESP32-S3 with a USB data cable before uploading; if more than one board is connected, specify its port with `--upload-port`, for example `pio run --target upload --upload-port COM5` on Windows. After upload, the final command opens the serial monitor at **115200 baud**. Leave it open while the ESP32 starts: the terminal prints the setup dashboard address (`192.168.4.1`) and, once connected, the router-assigned home Wi-Fi address. It also prints the HTTPS dashboard addresses when HTTPS starts. Press **Ctrl+C** to close the monitor; close it before uploading again.
 
-HTTPS uses `data/https_certificate.pem` and `data/https_private_key.pem`, which are uploaded to LittleFS separately from the firmware. The project configures PlatformIO's filesystem image as LittleFS to match the firmware's storage driver. After building or updating the firmware, upload the filesystem image with `pio run --target uploadfs`; this is required for HTTPS to load the certificate and key. The private key is local-only and must not be committed or shared. If these files are missing, create a self-signed pair (requires OpenSSL):
+HTTPS uses `data/https_certificate.pem` and `data/https_private_key.pem`, which are uploaded to LittleFS separately from the firmware. The project configures PlatformIO's filesystem image as LittleFS to match the firmware's storage driver. After building or updating the firmware, upload the filesystem image with `pio run --target uploadfs`; this is required for HTTPS to load the certificate and key. The private key is local-only and must not be committed or shared. If these files are missing, create a self-signed pair (requires OpenSSL). Replace `192.168.1.103` with the device's current router-assigned IP:
 
-```sh
-openssl req -x509 -newkey rsa:2048 -nodes \
-  -keyout data/https_private_key.pem \
-  -out data/https_certificate.pem \
-  -days 3650 -subj "/CN=Prayer-Bot" \
-  -addext "subjectAltName=DNS:Prayer-Bot,DNS:prayer-bot.local,IP:192.168.4.1"
+Outbound HTTPS API requests verify server certificates against the Sectigo and Google Trust Services roots embedded in [`src/https_client.h`](src/https_client.h). The device clock must be synchronized before these requests can succeed; the firmware syncs it over NTP after connecting to Wi-Fi. If an API provider changes its certificate authority, update the trusted roots in that header rather than disabling verification. These trusted roots are for connections the ESP32 makes to online APIs; they do not configure the dashboard's HTTPS server certificate or make a browser trust it.
+
+```powershell
+openssl req -x509 -newkey rsa:2048 -noenc -keyout data\https_private_key.pem -out data\https_certificate.pem -days 3650 -subj "/CN=Prayer-Bot" -addext "subjectAltName=DNS:Prayer-Bot,DNS:prayer-bot.local,IP:192.168.4.1,IP:192.168.1.103"
 ```
 
-After uploading the firmware, upload the certificate files with `pio run --target uploadfs`. Repeat this whenever you replace the certificate pair.
+The `openssl s_client` command inspects a running server; it does not create a key or certificate. To check the device's HTTPS server and verify its IP against the generated self-signed certificate, run:
+
+```powershell
+openssl s_client -connect 192.168.1.103:443 -showcerts -verify_ip 192.168.1.103 -CAfile data\https_certificate.pem -verify_return_error -brief
+```
+
+After generating or replacing the certificate pair, upload it to the device with `pio run --target uploadfs`. Repeat this whenever you replace the certificate pair.
 
 <details>
 <summary><strong>Prefer VS Code buttons?</strong></summary>
@@ -132,12 +138,12 @@ PlatformIO is the canonical build system and installs the pinned dependencies fr
 1. Power on the ESP32-S3. On your phone or computer, join the device’s **Prayer-Bot** setup Wi-Fi (default password: `12345678`).
 2. Tap the captive-portal notification to open setup. If it does not appear, visit **http://192.168.4.1** while connected to the setup Wi-Fi.
 3. Enter the name (SSID) and password for a **2.4 GHz Wi-Fi router or phone hotspot**, then select **Connect to Wi-Fi**.
-4. Once connected, find the ESP32’s home-network IP on the dashboard or in your router’s connected-device list.
-5. Connect your browser device to the same network, open the ESP32’s IP address, then set your location and preferences. **Dhaka is the default location.**
+4. Once connected, read the **home Wi-Fi** dashboard address printed in Serial Monitor (or find the ESP32 in your router’s connected-device list). The `192.168.4.1` address is only for devices connected directly to the Prayer-Bot setup Wi-Fi.
+5. Connect your browser device to the same router or Wi-Fi network as the ESP32, then open the printed home Wi-Fi address and set your location and preferences. **Dhaka is the default location.**
 
 The ESP32’s home-network IP is assigned by DHCP and can change. Your phone or computer must be on the same network as the ESP32 to open its local dashboard. Some phones cannot reach devices connected to their own hotspot; if that happens, try another phone or computer connected to the hotspot.
 
-After Wi-Fi setup, the dashboard is available over both **HTTP** and **HTTPS** (ports 80 and 443); HTTP is not redirected. When mDNS starts successfully, open **https://prayer-bot.local/** to match the certificate's hostname; the ESP32 IP address is also printed in Serial Monitor, but the certificate does not include arbitrary router-assigned IP addresses. In setup-hotspot mode, open **https://192.168.4.1/**. HTTPS requires a valid certificate/key pair uploaded to LittleFS with `pio run --target uploadfs`. Browsers will show a certificate warning because this self-signed certificate is not issued by a public certificate authority; accept it to continue. HTTPS encrypts the connection but does not add dashboard authentication, so use the device only on a trusted local network.
+When HTTPS is running, HTTP requests to the dashboard are redirected to HTTPS while preserving the requested path and query. Use **https://prayer-bot.local/** when mDNS is available, or the HTTPS URL for the active interface (for example, **https://192.168.4.1/** on the setup hotspot). HTTPS requires a valid certificate/key pair uploaded to LittleFS with `pio run --target uploadfs`. Browsers may show a certificate warning because the certificate is self-signed, and it must match the address you use; the generation command above covers `prayer-bot.local`, `192.168.4.1`, and the example router IP `192.168.1.103`. Replace that IP with your device's current router-assigned IP. HTTPS encrypts the connection but does not add dashboard authentication, so use the device only on a trusted local network. If HTTPS cannot start, HTTP remains available.
 
 Typed Gemini requests work over HTTP or HTTPS. On HTTP, the voice button uses the browser's speech-recognition feature when supported and sends its transcript through Prayer-Bot to Gemini. Browsers restrict direct microphone recording on non-secure HTTP pages, so if speech recognition is unavailable or blocked, type your request or use HTTPS. For direct audio recording, open the HTTPS address, grant microphone permission, tap **Start recording**, speak for up to six seconds, then tap **Stop and send**. The recording is forwarded through the device to Gemini and is not stored by the firmware. Phone playback uses the visible audio controls when Safari blocks automatic playback.
 
