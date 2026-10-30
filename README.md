@@ -4,6 +4,8 @@
 
 ### An open-source ESP32 prayer clock and Mumins Personal Assistant.
 
+**Board Specification:** Target hardware is **ESP32‑WROOM‑32 DevKit with CH340 USB‑C** interface.
+
 Prayer-Bot brings prayer times, a Hijri calendar, weather, Quran audio, Dhikr, and Pomodoro focus sessions together in a DIY project you can build, understand, and customize.
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32-orange?logo=platformio)](https://platformio.org/)
