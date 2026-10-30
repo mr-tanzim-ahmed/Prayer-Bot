@@ -1,0 +1,203 @@
+#include "display_manager.h"
+#include <Wire.h>
+#include "i2c_bus.h"
+
+// ============================================================
+//  DISPLAY MANAGER IMPLEMENTATION
+// ============================================================
+
+namespace {
+    bool oledAvailable = false;
+    bool wireInitialized = false;
+    bool i2cLockWarningLogged = false;
+    unsigned long lastOLEDCheck = 0;
+
+    #if OLED_USE_SH1106
+    U8G2_SH1106_128X64_NONAME_F_HW_I2C oled(U8G2_R0, U8X8_PIN_NONE);
+    #else
+    U8G2_SSD1306_128X64_NONAME_F_HW_I2C oled(U8G2_R0, U8X8_PIN_NONE);
+    #endif
+
+    bool checkOLED(bool& available) {
+        if (!I2CBus::lock()) return false;
+        Wire.beginTransmission(OLED_I2C_ADDRESS);
+        available = Wire.endTransmission() == 0;
+        I2CBus::unlock();
+        return true;
+    }
+}
+
+namespace DisplayManager {
+
+bool init() {
+    if (!I2CBus::init()) {
+        Serial.println("[OLED] Could not initialize shared I2C bus lock.");
+        oledAvailable = false;
+        return false;
+    }
+    if (!wireInitialized) {
+        Wire.begin(PIN_OLED_SDA, PIN_OLED_SCL);
+        Wire.setClock(I2C_CLOCK_SPEED);
+        Wire.setTimeOut(50);
+        wireInitialized = true;
+        delay(20);
+    }
+
+    bool oledFound = false;
+    if (!checkOLED(oledFound)) {
+        Serial.println("[OLED] Could not acquire shared I2C bus.");
+        oledAvailable = false;
+        return false;
+    }
+    if (!oledFound) {
+        Serial.println("[OLED] Device not found at 0x3C");
+        oledAvailable = false;
+        return false;
+    }
+
+    oled.setI2CAddress(OLED_I2C_ADDRESS << 1);
+    if (!I2CBus::lock()) {
+        Serial.println("[OLED] Could not acquire shared I2C bus for initialization.");
+        oledAvailable = false;
+        return false;
+    }
+    oled.begin();
+    oled.setContrast(255);
+    oled.clearBuffer();
+    oled.sendBuffer();
+    I2CBus::unlock();
+
+    oledAvailable = true;
+    lastOLEDCheck = millis();
+    Serial.println("[OLED] Initialized.");
+    return true;
+}
+
+bool isAvailable() {
+    return oledAvailable;
+}
+
+void service() {
+    unsigned long now = millis();
+    if ((now - lastOLEDCheck) < OLED_CHECK_INTERVAL) return;
+    lastOLEDCheck = now;
+
+    if (oledAvailable) {
+        bool oledFound = false;
+        if (!checkOLED(oledFound)) return;
+        if (!oledFound) {
+            oledAvailable = false;
+            Serial.println("[OLED] Connection lost.");
+        }
+        return;
+    }
+
+    // Try to reconnect
+    Serial.println("[OLED] Trying to reconnect...");
+    if (init()) {
+        Serial.println("[OLED] Reconnected.");
+    }
+}
+
+U8G2& getDisplay() {
+    return oled;
+}
+
+void clearBuffer() {
+    oled.clearBuffer();
+    oled.setDrawColor(1);
+}
+
+void sendBuffer() {
+    if (!oledAvailable) return;
+    if (!I2CBus::lock()) {
+        if (!i2cLockWarningLogged) {
+            Serial.println("[OLED] Shared I2C bus unavailable; skipping display update.");
+            i2cLockWarningLogged = true;
+        }
+        return;
+    }
+    oled.sendBuffer();
+    I2CBus::unlock();
+    i2cLockWarningLogged = false;
+}
+
+void drawCenteredText(const String& text, int y) {
+    int width = oled.getUTF8Width(text.c_str());
+    int x = (SCREEN_WIDTH - width) / 2;
+    if (x < 0) x = 0;
+    oled.drawUTF8(x, y, text.c_str());
+}
+
+void drawText(const String& text, int x, int y) {
+    oled.drawUTF8(x, y, text.c_str());
+}
+
+void drawHLine(int x, int y, int w) {
+    oled.drawHLine(x, y, w);
+}
+
+void showStartupScreen() {
+    if (!oledAvailable) return;
+
+    clearBuffer();
+    oled.drawRFrame(2, 2, SCREEN_WIDTH - 4, SCREEN_HEIGHT - 4, 9);
+    oled.setFont(u8g2_font_helvB10_tf);
+    drawCenteredText("Assalamualaikum", 31);
+    oled.drawHLine(24, 38, SCREEN_WIDTH - 48);
+    oled.setFont(u8g2_font_5x8_tf);
+    drawCenteredText("Peace be upon you", 51);
+    sendBuffer();
+    delay(2000);
+
+    clearBuffer();
+    oled.drawRFrame(2, 2, SCREEN_WIDTH - 4, SCREEN_HEIGHT - 4, 9);
+    oled.setFont(u8g2_font_6x10_tf);
+    drawCenteredText("PRAYER-BOT", 20);
+    oled.drawHLine(24, 25, SCREEN_WIDTH - 48);
+    oled.setFont(u8g2_font_5x8_tf);
+    drawCenteredText("Islamic Personal", 39);
+    drawCenteredText("Assistant", 48);
+    drawCenteredText("Starting...", 57);
+    sendBuffer();
+}
+
+void showConnectingScreen() {
+    if (!oledAvailable) return;
+    clearBuffer();
+    oled.setFont(u8g2_font_6x10_tf);
+    drawCenteredText("Connecting WiFi...", 25);
+    oled.setFont(u8g2_font_5x8_tf);
+    drawCenteredText("Please wait", 42);
+    sendBuffer();
+}
+
+void showErrorScreen(const String& line1, const String& line2) {
+    if (!oledAvailable) return;
+    clearBuffer();
+    oled.setFont(u8g2_font_6x10_tf);
+    drawCenteredText(line1, 25);
+    oled.setFont(u8g2_font_5x8_tf);
+    drawCenteredText(line2, 42);
+    sendBuffer();
+}
+
+void showListeningScreen() {
+    if (!oledAvailable) return;
+    clearBuffer();
+    oled.setFont(u8g2_font_6x10_tf);
+    drawCenteredText("Listening...", 25);
+    oled.setFont(u8g2_font_5x8_tf);
+    drawCenteredText("Say a surah name", 42);
+    sendBuffer();
+}
+
+void showProcessingScreen() {
+    if (!oledAvailable) return;
+    clearBuffer();
+    oled.setFont(u8g2_font_6x10_tf);
+    drawCenteredText("Processing...", 32);
+    sendBuffer();
+}
+
+} // namespace DisplayManager

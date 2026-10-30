@@ -1,0 +1,17 @@
+# Gitignore for Prayer‑Bot
+
+# Build output and PlatformIO dependencies
+.pio/
+
+# IDE configuration files (VS Code)
+.vscode/
+
+# Runtime data / generated files – keep out of version control
+/data/
+
+# Any other transient files (e.g., compiled binaries)
+*.bin
+*.elf
+*.map
+secrets.h
+Prayer-Bot.code-workspace

@@ -1,0 +1,120 @@
+#include "surah_screen.h"
+#include "../config.h"
+#include "../display_manager.h"
+#include "../voice_manager.h"
+#include "screen_ui.h"
+
+namespace SurahScreen {
+
+namespace {
+    void drawSurahTitle(uint8_t number, int16_t baseline) {
+        char text[40];
+        snprintf(text, sizeof(text), "%u. %s", number,
+                 VoiceManager::getSurahName(number));
+        U8G2& oled = DisplayManager::getDisplay();
+        const int16_t width = oled.getStrWidth(text);
+        if (width <= SCREEN_WIDTH - 8) {
+            DisplayManager::drawCenteredText(text, baseline);
+            return;
+        }
+
+        const int16_t gap = 24;
+        const int16_t travel = width + gap;
+        const int16_t offset = static_cast<int16_t>((millis() / 100) % travel);
+        oled.drawStr(SCREEN_WIDTH - offset, baseline, text);
+        oled.drawStr(SCREEN_WIDTH - offset + travel, baseline, text);
+    }
+}
+
+void draw() {
+    U8G2& oled = DisplayManager::getDisplay();
+    DisplayManager::clearBuffer();
+
+    ScreenUI::drawHeader(oled, "QURAN PLAYER", "LISTEN");
+
+    const unsigned long now = millis();
+
+    if (VoiceManager::isListening()) {
+        ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 45);
+        const int cx = 64;
+        const int cy = 34;
+        const uint8_t pulse = static_cast<uint8_t>((now / 280) % 3);
+        oled.drawCircle(cx, cy, 12 + pulse);
+        oled.drawRBox(cx - 3, cy - 8, 7, 10, 3);
+        oled.drawCircle(cx, cy, 7,
+                        U8G2_DRAW_LOWER_LEFT | U8G2_DRAW_LOWER_RIGHT);
+        oled.drawVLine(cx, cy + 7, 4);
+        oled.drawHLine(cx - 5, cy + 11, 11);
+
+        oled.setFont(u8g2_font_6x12_tf);
+        DisplayManager::drawCenteredText("Listening...", 54);
+        oled.setFont(u8g2_font_5x8_tf);
+        DisplayManager::drawCenteredText("Speak in English / Bangla", 62);
+
+    } else if (VoiceManager::isProcessing()) {
+        ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 45);
+        const int cx = 64;
+        const int cy = 34;
+        static const int8_t spinnerX[8] = {0, 8, 12, 8, 0, -8, -12, -8};
+        static const int8_t spinnerY[8] = {-12, -8, 0, 8, 12, 8, 0, -8};
+        const uint8_t activeDot = static_cast<uint8_t>((now / 100) % 8);
+        for (uint8_t i = 0; i < 8; ++i) {
+            const int x = cx + spinnerX[i];
+            const int y = cy + spinnerY[i];
+            if (i == activeDot)
+                oled.drawDisc(x, y, 3);
+            else
+                oled.drawDisc(x, y, 1);
+        }
+        oled.setFont(u8g2_font_6x12_tf);
+        DisplayManager::drawCenteredText("Recognizing voice", 55);
+        oled.setFont(u8g2_font_5x8_tf);
+        DisplayManager::drawCenteredText("Gemini is processing", 62);
+
+    } else if (VoiceManager::isPlaying()) {
+        const uint8_t surah = VoiceManager::getPlayingSurah();
+        ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 37);
+        oled.setFont(u8g2_font_helvB10_tf);
+        drawSurahTitle(surah, 32);
+
+        const uint8_t frame = (now / 260) % 6;
+        const uint8_t eqHeights[6][11] = {
+            {3, 6, 9, 13, 8, 4, 11, 7, 12, 6, 4},
+            {5, 11, 4, 8, 14, 7, 5, 12, 8, 10, 5},
+            {8, 5, 12, 6, 9, 13, 7, 4, 11, 5, 8},
+            {12, 9, 6, 11, 5, 8, 14, 9, 6, 12, 4},
+            {6, 13, 8, 4, 11, 6, 8, 13, 5, 7, 11},
+            {4, 8, 11, 7, 12, 5, 10, 6, 9, 13, 6}
+        };
+
+        const int startX = 29;
+        for (int b = 0; b < 11; ++b) {
+            const int h = eqHeights[frame][b];
+            oled.drawVLine(startX + b * 6, 47 - h, h);
+            oled.drawVLine(startX + b * 6 + 1, 47 - h, h);
+        }
+
+        oled.setFont(u8g2_font_5x8_tf);
+        DisplayManager::drawCenteredText("Now playing", 52);
+        DisplayManager::drawCenteredText("[Tap] Next   [Shake] Stop", 63);
+
+    } else {
+        const uint8_t surah = VoiceManager::getPlayingSurah();
+        ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 37);
+        oled.setFont(u8g2_font_helvB10_tf);
+        drawSurahTitle(surah, 34);
+
+        oled.setFont(u8g2_font_6x10_tf);
+        DisplayManager::drawCenteredText(VoiceManager::getStatusText(), 49);
+
+        oled.setFont(u8g2_font_5x8_tf);
+        if (VoiceManager::hasError())
+            DisplayManager::drawCenteredText("Check Wi-Fi, mic, Gemini", 63);
+        else
+            DisplayManager::drawCenteredText("[Tap] Next   [Shake] Play", 63);
+    }
+
+    DisplayManager::sendBuffer();
+}
+
+} // namespace SurahScreen
