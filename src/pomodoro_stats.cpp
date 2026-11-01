@@ -1,5 +1,5 @@
-#include "pomodoro_stats.h"
-#include "storage_manager.h"
+#include "managers/pomodoro_stats.h"
+#include "managers/storage_manager.h"
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>

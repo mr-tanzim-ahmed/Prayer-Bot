@@ -41,7 +41,7 @@ Prayer-Bot is a DIY **ESP32 prayer clock and Mumins Personal Assistant**. Use it
 
 The Qibla screen shows a large arrow that turns toward Qibla relative to the device, without a compass dial or extra readouts. A short message appears only when the compass, location, or calibration is not ready. Set another area in the dashboard or use its permission-based device-location option to update the bearing. The screen uses an HMC5883L or QMC5883L compass. On first use, keep the device flat and rotate it through a full turn (a figure-eight motion also helps) to calibrate hard-iron offsets; the offsets are saved in LittleFS. Long-press the touch sensor on the Qibla screen to recalibrate. The bearing uses zero magnetic declination and is approximate. Keep the compass away from speakers, motors, magnets, and metal; magnetic interference or an incorrectly oriented module can make the direction inaccurate.
 
-Touch feedback plays [`data/beep_sound.wav`](data/beep_sound.wav) from LittleFS over I2S and follows the configured device volume. Upload the filesystem image with `pio run --target uploadfs` after flashing the firmware so the sound is available on the ESP32. Touch feedback is skipped during Quran playback and interrupted by the Azan alarm. Make sure the amplifier and speaker are wired safely before powering them.
+Touch feedback decodes the embedded MP3 in flash and plays it over I2S at the configured device volume; no filesystem upload is needed for the sound. Touch feedback is skipped during Quran playback and interrupted by the Azan alarm. Make sure the amplifier and speaker are wired safely before powering them.
 
 The setup hotspot SSID is **`Prayer-Bot`** (password: **`12345678`**) at default IP **`http://10.77.0.1`**. Connecting from a smartphone or laptop automatically triggers a captive-portal prompt ("Sign in to network") that opens the dashboard immediately. The dashboard is also directly accessible in any browser at `http://10.77.0.1` (or `https://10.77.0.1` when certificates are installed). Once connected to home Wi-Fi, the router-side IP remains assigned by your router DHCP.
 
@@ -66,16 +66,16 @@ The firmware uses focused C++ managers for feature logic and separate modules fo
 | If you want to change… | Start here |
 |---|---|
 | Startup, task scheduling, or module coordination | [`src/main.cpp`](src/main.cpp) |
-| Pins, defaults, timing, or API endpoints | [`src/config.h`](src/config.h) |
-| Prayer schedules and prohibited-time windows | [`src/prayer_manager.h`](src/prayer_manager.h), [`src/prayer_manager.cpp`](src/prayer_manager.cpp) |
-| Dashboard UI or its JSON API | [`src/dashboard_html.h`](src/dashboard_html.h), [`src/web_server_manager.cpp`](src/web_server_manager.cpp) |
+| Pins, defaults, timing, or API endpoints | [`include/core/config.h`](include/core/config.h) |
+| Prayer schedules and prohibited-time windows | [`include/managers/prayer_manager.h`](include/managers/prayer_manager.h), [`src/prayer_manager.cpp`](src/prayer_manager.cpp) |
+| Dashboard UI or its JSON API | [`include/web/dashboard_html.h`](include/web/dashboard_html.h), [`src/web_server_manager.cpp`](src/web_server_manager.cpp) |
 | HTTPS listener and device-local certificate | [`src/https_server_manager.cpp`](src/https_server_manager.cpp) |
-| Voice recognition and Quran playback | [`src/voice_manager.cpp`](src/voice_manager.cpp), [`src/screens/`](src/screens/) |
+| Voice recognition and Quran playback | [`src/voice_manager.cpp`](src/voice_manager.cpp), [`include/screens/`](include/screens/) |
 | Pomodoro state and weekly statistics | [`src/pomodoro_manager.cpp`](src/pomodoro_manager.cpp), [`src/pomodoro_stats.cpp`](src/pomodoro_stats.cpp) |
 | Settings, LittleFS, or caches | [`src/storage_manager.cpp`](src/storage_manager.cpp), [`src/cache_manager.cpp`](src/cache_manager.cpp) |
-| OLED presentation | [`src/screens/`](src/screens/), [`src/screen_router.cpp`](src/screen_router.cpp) |
+| OLED presentation | [`src/screens/`](src/screens/), [`include/screens/`](include/screens/), [`src/screen_router.cpp`](src/screen_router.cpp) |
 
-Shared state and screen IDs live in [`src/types.h`](src/types.h). Most managers have a matching `.h` interface and `.cpp` implementation. Keep feature behavior close to the module that owns it; use `main.cpp` to initialize services and connect them. If responsibilities or filenames change, update this map so the next contributor can find their way.
+Shared state and screen IDs live in [`include/core/types.h`](include/core/types.h). Public interfaces are grouped under `include/` by core, managers, screens, networking, web, and audio; their implementations remain under `src/`. The private, Git-ignored API-key header lives beside the core configuration. Keep feature behavior close to the module that owns it; use `main.cpp` to initialize services and connect them. If responsibilities or filenames change, update this map so the next contributor can find their way.
 
 ## 🧰 Hardware components and wiring
 
@@ -106,13 +106,13 @@ The OLED, MPU6050, and optional compass share an I²C bus; the MAX98357A amplifi
 
 The compass driver supports HMC5883L sensors at I²C address `0x1E` and QMC5883L sensors at `0x0D`, auto-detecting which chip is fitted. The sensor is expected to be mounted flat with its X axis toward the display's right edge and Y axis toward the top edge. The firmware checks the HMC5883L identity or verifies QMC5883L configuration, rejects overflow or stale readings, retries sensor communication, and requests a full-turn calibration before showing the arrow. Calibration corrects hard-iron offsets, but does not correct soft-iron distortion, tilt, or local magnetic declination. The displayed true-north bearing is therefore approximate, not guaranteed to be within a particular percentage or degree error. The firmware also expects the OLED at `0x3C` and MPU6050 at `0x68`; unlike the supplied diagnostic, it does not try alternate addresses.
 
-See [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) for full wiring notes and [CIRCUIT.md](CIRCUIT.md) for the illustrated connection reference. Pin assignments are defined in [`src/config.h`](src/config.h).
+See [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) for full wiring notes and [CIRCUIT.md](CIRCUIT.md) for the illustrated connection reference. Pin assignments are defined in [`include/core/config.h`](include/core/config.h).
 
 </details>
 
 ## Services and API keys
 
-Prayer schedules use Aladhan and do not require a personal API key. Weather and air-quality features need an optional OpenWeatherMap key; Gemini recognition of Quran requests needs an optional Gemini key. Store optional keys in the local, Git-ignored `src/secrets.h` file. See the [Setup Guide](SETUP_GUIDE.md#api-keys) for safe key setup and service details.
+Prayer schedules use Aladhan and do not require a personal API key. Weather and air-quality features need an optional OpenWeatherMap key; Gemini recognition of Quran requests needs an optional Gemini key. Store optional keys in the local, Git-ignored `include/core/secrets.h` file. See the [Setup Guide](SETUP_GUIDE.md#api-keys) for safe key setup and service details.
 
 Prayer schedules are fetched as a monthly calendar and cached on-device. A network connection is needed for the first fetch and later month refreshes; this is not a preloaded offline timetable. Weather and prayer data refresh when online. Default location: Dhaka, Bangladesh (23.8103, 90.4125), `Asia/Dhaka` (UTC+6).
 

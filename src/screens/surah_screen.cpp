@@ -1,8 +1,8 @@
-#include "surah_screen.h"
-#include "../config.h"
-#include "../display_manager.h"
-#include "../voice_manager.h"
-#include "screen_ui.h"
+#include "screens/surah_screen.h"
+#include "core/config.h"
+#include "managers/display_manager.h"
+#include "managers/voice_manager.h"
+#include "screens/screen_ui.h"
 
 namespace SurahScreen {
 

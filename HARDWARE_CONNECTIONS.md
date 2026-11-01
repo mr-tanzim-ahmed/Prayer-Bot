@@ -51,7 +51,7 @@ Mount the HMC5883L or QMC5883L flat, with its X axis toward the display's right 
 
 The diagnostic's alternate OLED and MPU addresses are not supported by the current firmware configuration. Use OLED `0x3C` and MPU6050 `0x68` for the project firmware, or update and test the firmware before using modules configured at alternate addresses. The ESP32-WROOM-32 target has no PSRAM by default; dashboard audio uploads fall back to internal RAM and may be rejected if a sufficiently large contiguous block is unavailable. An I²C response or successful I²S setup does not prove a sensor's measurements are accurate or that speaker output is electrically safe.
 
-The touch confirmation plays `data/beep_sound.wav` from LittleFS and sends it over I²S to the MAX98357A (BCLK GPIO 26, LRC GPIO 25, DIN GPIO 27), then to the speaker. Upload the filesystem image after flashing firmware. It is played at reduced gain and skipped while Azan or Quran audio is active.
+The touch confirmation plays an MP3 embedded in program flash and sends it over I²S to the MAX98357A (BCLK GPIO 26, LRC GPIO 25, DIN GPIO 27), then to the speaker. No filesystem upload is needed for touch feedback. It is played at reduced gain and skipped while Quran audio is active; an Azan alarm interrupts playback.
 
 If the amplifier or its wiring sparks, disconnect its power and the speaker; do not continue testing or assume that disconnecting SD resolves the fault. Check for shorts, confirm the board's VIN rating and speaker wiring, and keep both speaker terminals isolated from ground and each other.
 

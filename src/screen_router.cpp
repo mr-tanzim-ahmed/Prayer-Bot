@@ -1,15 +1,15 @@
-#include "screen_router.h"
-#include "display_manager.h"
+#include "managers/screen_router.h"
+#include "managers/display_manager.h"
 #include "screens/prayer_focus_screen.h"
 #include "screens/all_prayers_screen.h"
 #include "screens/clock_calendar_screen.h"
 #include "screens/qibla_screen.h"
-#include "compass_manager.h"
+#include "managers/compass_manager.h"
 #include "screens/weather_screen.h"
 #include "screens/pomodoro_screen.h"
 #include "screens/dhikr_screen.h"
 #include "screens/surah_screen.h"
-#include "prayer_manager.h"
+#include "managers/prayer_manager.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 

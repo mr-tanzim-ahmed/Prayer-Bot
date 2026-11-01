@@ -1,6 +1,6 @@
-#include "https_server_manager.h"
-#include "config.h"
-#include "storage_manager.h"
+#include "managers/https_server_manager.h"
+#include "core/config.h"
+#include "managers/storage_manager.h"
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <esp_err.h>

@@ -2,28 +2,28 @@
 #include <WiFi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
-#include "config.h"
-#include "types.h"
+#include "core/config.h"
+#include "core/types.h"
 
 // Module headers
-#include "wifi_manager.h"
-#include "display_manager.h"
-#include "prayer_manager.h"
-#include "weather_manager.h"
-#include "azan_manager.h"
-#include "shake_detector.h"
-#include "compass_manager.h"
-#include "button_handler.h"
-#include "pomodoro_manager.h"
-#include "calendar_manager.h"
-#include "voice_manager.h"
-#include "storage_manager.h"
-#include "web_server_manager.h"
-#include "screen_router.h"
-#include "logger.h"
-#include "cache_manager.h"
+#include "managers/wifi_manager.h"
+#include "managers/display_manager.h"
+#include "managers/prayer_manager.h"
+#include "managers/weather_manager.h"
+#include "managers/azan_manager.h"
+#include "managers/shake_detector.h"
+#include "managers/compass_manager.h"
+#include "managers/button_handler.h"
+#include "managers/pomodoro_manager.h"
+#include "managers/calendar_manager.h"
+#include "managers/voice_manager.h"
+#include "managers/storage_manager.h"
+#include "managers/web_server_manager.h"
+#include "managers/screen_router.h"
+#include "managers/logger.h"
+#include "managers/cache_manager.h"
 #include "screens/dhikr_screen.h"
-#include "pomodoro_stats.h"
+#include "managers/pomodoro_stats.h"
 
 // ============================================================
 //  PRAYER-BOT MAIN
@@ -661,7 +661,7 @@ void taskNetwork(void* param) {
 
 // ============================================================
 //  TASK: Audio
-//  High priority task feeds MP3/WAV decoders and I2S audio playback.
+//  High priority task feeds MP3 decoders and I2S audio playback.
 // ============================================================
 
 void taskAudio(void* param) {

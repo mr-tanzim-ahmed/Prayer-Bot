@@ -1,7 +1,7 @@
-#include "clock_calendar_screen.h"
-#include "../display_manager.h"
-#include "../config.h"
-#include "screen_ui.h"
+#include "screens/clock_calendar_screen.h"
+#include "managers/display_manager.h"
+#include "core/config.h"
+#include "screens/screen_ui.h"
 #include <time.h>
 
 // ============================================================

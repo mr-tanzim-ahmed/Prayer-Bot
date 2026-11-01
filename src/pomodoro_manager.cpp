@@ -1,5 +1,5 @@
-#include "pomodoro_manager.h"
-#include "config.h"
+#include "managers/pomodoro_manager.h"
+#include "core/config.h"
 
 // ============================================================
 //  POMODORO MANAGER IMPLEMENTATION

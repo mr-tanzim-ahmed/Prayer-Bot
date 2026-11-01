@@ -1,7 +1,7 @@
 #ifndef PRAYER_MANAGER_H
 #define PRAYER_MANAGER_H
 
-#include "types.h"
+#include "core/types.h"
 
 // ============================================================
 //  PRAYER MANAGER

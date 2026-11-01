@@ -1,4 +1,4 @@
-#include "i2c_bus.h"
+#include "managers/i2c_bus.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 

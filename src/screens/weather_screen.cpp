@@ -1,9 +1,9 @@
-#include "weather_screen.h"
-#include "../display_manager.h"
-#include "../weather_manager.h"
-#include "weather_icons.h"
-#include "../config.h"
-#include "screen_ui.h"
+#include "screens/weather_screen.h"
+#include "managers/display_manager.h"
+#include "managers/weather_manager.h"
+#include "screens/weather_icons.h"
+#include "core/config.h"
+#include "screens/screen_ui.h"
 
 namespace {
     constexpr unsigned long CURRENT_PAGE_MS = 3000UL;

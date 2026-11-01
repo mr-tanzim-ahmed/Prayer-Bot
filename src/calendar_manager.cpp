@@ -1,6 +1,6 @@
-#include "calendar_manager.h"
-#include "config.h"
-#include "storage_manager.h"
+#include "managers/calendar_manager.h"
+#include "core/config.h"
+#include "managers/storage_manager.h"
 #include <ArduinoJson.h>
 #include <time.h>
 

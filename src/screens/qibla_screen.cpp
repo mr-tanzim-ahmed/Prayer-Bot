@@ -1,8 +1,8 @@
-#include "qibla_screen.h"
-#include "screen_ui.h"
-#include "../compass_manager.h"
-#include "../config.h"
-#include "../display_manager.h"
+#include "screens/qibla_screen.h"
+#include "screens/screen_ui.h"
+#include "managers/compass_manager.h"
+#include "core/config.h"
+#include "managers/display_manager.h"
 #include <math.h>
 #include <stdio.h>
 

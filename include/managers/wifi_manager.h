@@ -2,7 +2,7 @@
 #define WIFI_MANAGER_H
 
 #include <Arduino.h>
-#include "types.h"
+#include "core/types.h"
 
 // ============================================================
 //  WIFI MANAGER

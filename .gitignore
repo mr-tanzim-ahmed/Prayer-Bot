@@ -6,10 +6,9 @@
 # IDE configuration files (VS Code)
 .vscode/
 
-# Runtime data / generated files – keep out of version control, except bundled audio
+# Runtime data / generated files – keep out of version control, except the Qibla icon
 /data/*
 !/data/.gitkeep
-!/data/beep_sound.wav
 !/data/PrayerBot_Arrow.svg
 
 # Any other transient files (e.g., compiled binaries)

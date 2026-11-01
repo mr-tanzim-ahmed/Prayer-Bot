@@ -8,7 +8,7 @@ Prayer-Bot is built around a typical ESP32-WROOM-32 DevKit with a CH340 USB-C in
 
 [![Prayer-Bot circuit diagram](circuit_image.svg)](HARDWARE_CONNECTIONS.md)
 
-The illustration is a wiring overview. Use the pin table below and [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) as the detailed connection reference. Firmware pin assignments are defined in `src/config.h`.
+The illustration is a wiring overview. Use the pin table below and [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) as the detailed connection reference. Firmware pin assignments are defined in `include/core/config.h`.
 
 ## Pin and signal map
 

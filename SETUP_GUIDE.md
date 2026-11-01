@@ -50,10 +50,10 @@ Download or clone the repository. In VS Code, select **File → Open Folder…**
 Open the VS Code integrated terminal with **Terminal → New Terminal** and create the local secrets file from the example if it does not already exist:
 
 ```powershell
-if (-not (Test-Path src\secrets.h)) { Copy-Item src\secrets.h.example src\secrets.h }
+if (-not (Test-Path include\core\secrets.h)) { Copy-Item include\core\secrets.h.example include\core\secrets.h }
 ```
 
-Open `src/secrets.h` in the Explorer. Add API keys if you want weather/air-quality data (OpenWeatherMap) or Quran request recognition (Gemini). Prayer times do not require your own API key. Keep the file private: Git ignores `secrets.h`, so do not force-add or share it. If the file already exists, preserve your current keys; do not overwrite it.
+Open `include\core\secrets.h` in the Explorer. Add API keys if you want weather/air-quality data (OpenWeatherMap) or Quran request recognition (Gemini). Prayer times do not require your own API key. Keep the file private: Git ignores `secrets.h`, so do not force-add or share it. If the file already exists, preserve your current keys; do not overwrite it.
 
 ## Build, upload, and monitor
 
@@ -86,13 +86,7 @@ The serial log prints the setup dashboard address (`10.77.0.1`) and, after route
 
 ## Touch feedback sound
 
-Touch feedback plays the bundled [`data/beep_sound.wav`](data/beep_sound.wav) file through the MAX98357A I²S amplifier. After flashing the firmware, upload the LittleFS image once:
-
-```powershell
-pio run --target uploadfs
-```
-
-The file is PCM WAV and does not need conversion. Uploading the filesystem image replaces LittleFS contents, so do this before configuring Wi-Fi or changing device settings; back up persistent settings first if the device has already been configured.
+Touch feedback uses an MP3 embedded in program flash and plays through the MAX98357A I²S amplifier. The sound is included in the firmware, so no filesystem upload is needed for touch feedback.
 
 ## Optional: configure dashboard HTTPS
 
@@ -147,7 +141,7 @@ The firmware uses:
 | [Google Gemini](https://aistudio.google.com/) | Recognizes typed or spoken Surah and Azan-notification requests | Yes |
 | [MP3Quran v3](https://www.mp3quran.net/eng/api) | Reciter metadata and Quran audio sources | No |
 
-Add the optional keys to `src/secrets.h`, then rebuild and upload the firmware. The keys are compiled into the device and are not shown or editable in the dashboard. Never commit, screenshot, or share API keys. If a key is exposed, revoke it with its provider and create a replacement.
+Add the optional keys to `include\core\secrets.h`, then rebuild and upload the firmware. The keys are compiled into the device and are not shown or editable in the dashboard. Never commit, screenshot, or share API keys. If a key is exposed, revoke it with its provider and create a replacement.
 
 ## Troubleshooting
 

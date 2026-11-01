@@ -1,7 +1,7 @@
 #ifndef PRAYER_FOCUS_SCREEN_H
 #define PRAYER_FOCUS_SCREEN_H
 
-#include "../types.h"
+#include "core/types.h"
 
 // ============================================================
 //  PRAYER FOCUS SCREEN (Screen 1 - Default)

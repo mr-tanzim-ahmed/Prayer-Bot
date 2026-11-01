@@ -1,7 +1,7 @@
 #ifndef CALENDAR_MANAGER_H
 #define CALENDAR_MANAGER_H
 
-#include "types.h"
+#include "core/types.h"
 
 // ============================================================
 //  CALENDAR MANAGER

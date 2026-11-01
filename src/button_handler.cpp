@@ -1,5 +1,5 @@
-#include "button_handler.h"
-#include "config.h"
+#include "managers/button_handler.h"
+#include "core/config.h"
 
 // ============================================================
 //  BUTTON HANDLER IMPLEMENTATION (CAPACITIVE TOUCH)

@@ -1,7 +1,7 @@
 #ifndef STORAGE_MANAGER_H
 #define STORAGE_MANAGER_H
 
-#include "types.h"
+#include "core/types.h"
 
 // ============================================================
 //  STORAGE MANAGER

@@ -1,7 +1,7 @@
 #ifndef AZAN_MANAGER_H
 #define AZAN_MANAGER_H
 
-#include "types.h"
+#include "core/types.h"
 
 // ============================================================
 //  AZAN MANAGER

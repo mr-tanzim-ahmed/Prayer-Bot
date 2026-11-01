@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <U8g2lib.h>
-#include "config.h"
+#include "core/config.h"
 
 // ============================================================
 //  DISPLAY MANAGER

@@ -1,7 +1,7 @@
 #ifndef VOICE_MANAGER_H
 #define VOICE_MANAGER_H
 
-#include "types.h"
+#include "core/types.h"
 
 // ============================================================
 //  VOICE MANAGER

@@ -1,7 +1,7 @@
 #ifndef WEATHER_MANAGER_H
 #define WEATHER_MANAGER_H
 
-#include "types.h"
+#include "core/types.h"
 
 // ============================================================
 //  WEATHER MANAGER

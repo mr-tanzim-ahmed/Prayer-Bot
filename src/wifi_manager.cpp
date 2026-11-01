@@ -1,6 +1,6 @@
-#include "wifi_manager.h"
-#include "config.h"
-#include "storage_manager.h"
+#include "managers/wifi_manager.h"
+#include "core/config.h"
+#include "managers/storage_manager.h"
 #include <ArduinoJson.h>
 #include <DNSServer.h>
 #include <WiFi.h>

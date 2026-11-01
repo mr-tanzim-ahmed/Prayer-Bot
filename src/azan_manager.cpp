@@ -1,15 +1,16 @@
-#include "azan_manager.h"
-#include "config.h"
-#include "https_client.h"
+#include "managers/azan_manager.h"
+#include "core/config.h"
+#include "network/https_client.h"
 #include <ArduinoJson.h>
 #include <AudioFileSource.h>
+#include <AudioFileSourcePROGMEM.h>
 #include <AudioGeneratorMP3.h>
 #include <AudioOutputI2S.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
-#include <LittleFS.h>
 #include <new>
 #include <stdlib.h>
+#include "audio/touch_beep_audio.h"
 
 // ============================================================
 //  AZAN MANAGER IMPLEMENTATION
@@ -116,7 +117,6 @@ namespace {
     constexpr float SCREEN_CHANGE_BEEP_GAIN = 0.45f;
     constexpr float TOUCH_BEEP_GAIN = 0.65f;
     constexpr size_t AUDIO_SAMPLES_PER_UPDATE = 256;
-    constexpr char TOUCH_BEEP_WAV_PATH[] = "/beep_sound.wav";
 
     volatile bool playing = false;
     volatile bool pomodoroBeepPending = false;
@@ -144,14 +144,9 @@ namespace {
     AudioOutputI2S *out = nullptr;
     HttpsAudioSource *quranSource = nullptr;
     AudioGeneratorMP3 *quranDecoder = nullptr;
-    File touchBeepFile;
-    uint32_t touchBeepSampleRate = 0;
-    uint32_t touchBeepDataBytesRemaining = 0;
-    uint16_t touchBeepChannels = 0;
-    uint16_t touchBeepBlockAlign = 0;
-    int16_t touchBeepPendingLeft = 0;
-    int16_t touchBeepPendingRight = 0;
-    bool touchBeepSamplePending = false;
+    AudioFileSourcePROGMEM touchBeepSource;
+    AudioGeneratorMP3 touchBeepDecoder;
+    bool touchBeepDecoderStarted = false;
 
     bool startI2SOutput() {
         if (!out) return false;
@@ -166,120 +161,40 @@ namespace {
                TOUCH_BEEP_GAIN;
     }
 
-    uint16_t readLittleEndian16(const uint8_t* bytes) {
-        return static_cast<uint16_t>(bytes[0]) |
-               (static_cast<uint16_t>(bytes[1]) << 8);
-    }
-
-    uint32_t readLittleEndian32(const uint8_t* bytes) {
-        return static_cast<uint32_t>(bytes[0]) |
-               (static_cast<uint32_t>(bytes[1]) << 8) |
-               (static_cast<uint32_t>(bytes[2]) << 16) |
-               (static_cast<uint32_t>(bytes[3]) << 24);
-    }
-
     void stopTouchBeep() {
-        if (touchBeepFile) touchBeepFile.close();
+        if (touchBeepDecoderStarted) {
+            touchBeepDecoder.stop();
+            touchBeepDecoderStarted = false;
+            outputStarted = false;
+        }
+        touchBeepSource.close();
         touchBeepActive = false;
-        touchBeepDataBytesRemaining = 0;
-        touchBeepSamplePending = false;
     }
 
     bool startTouchBeep() {
-        touchBeepFile = LittleFS.open(TOUCH_BEEP_WAV_PATH, "r");
-        if (!touchBeepFile || touchBeepFile.size() < 12) {
-            Serial.printf("[AZAN] Touch sound %s is missing or empty; upload the LittleFS image.\n",
-                          TOUCH_BEEP_WAV_PATH);
-            stopTouchBeep();
+        if (!touchBeepSource.open(touchBeepMP3, touchBeepMP3Length)) {
+            Serial.println("[AZAN] Could not open embedded touch MP3.");
             return false;
         }
-
-        uint8_t riffHeader[12];
-        if (touchBeepFile.read(riffHeader, sizeof(riffHeader)) !=
-                sizeof(riffHeader) ||
-            memcmp(riffHeader, "RIFF", 4) != 0 ||
-            memcmp(riffHeader + 8, "WAVE", 4) != 0) {
-            Serial.println("[AZAN] Touch sound is not a valid RIFF/WAVE file.");
-            stopTouchBeep();
+        if (!startI2SOutput()) {
+            Serial.println("[AZAN] Could not start I2S for touch MP3 playback.");
+            touchBeepSource.close();
             return false;
         }
-
-        const uint32_t fileSize = touchBeepFile.size();
-        uint32_t offset = sizeof(riffHeader);
-        uint32_t dataOffset = 0;
-        uint16_t audioFormat = 0;
-        uint16_t bitsPerSample = 0;
-        bool formatFound = false;
-        while (offset <= fileSize && fileSize - offset >= 8) {
-            if (!touchBeepFile.seek(offset)) break;
-            uint8_t chunkHeader[8];
-            if (touchBeepFile.read(chunkHeader, sizeof(chunkHeader)) !=
-                sizeof(chunkHeader)) {
-                break;
-            }
-
-            const uint32_t chunkSize = readLittleEndian32(chunkHeader + 4);
-            const uint32_t chunkDataOffset = offset + sizeof(chunkHeader);
-            if (chunkDataOffset > fileSize ||
-                chunkSize > fileSize - chunkDataOffset) {
-                break;
-            }
-
-            if (memcmp(chunkHeader, "fmt ", 4) == 0) {
-                uint8_t format[16];
-                if (chunkSize < sizeof(format) ||
-                    touchBeepFile.read(format, sizeof(format)) !=
-                        sizeof(format)) {
-                    break;
-                }
-                audioFormat = readLittleEndian16(format);
-                touchBeepChannels = readLittleEndian16(format + 2);
-                touchBeepSampleRate = readLittleEndian32(format + 4);
-                touchBeepBlockAlign = readLittleEndian16(format + 12);
-                bitsPerSample = readLittleEndian16(format + 14);
-                formatFound = true;
-            } else if (memcmp(chunkHeader, "data", 4) == 0) {
-                dataOffset = chunkDataOffset;
-                touchBeepDataBytesRemaining = chunkSize;
-            }
-
-            const uint32_t paddedChunkSize =
-                chunkSize + (chunkSize & 1U);
-            if (paddedChunkSize < chunkSize ||
-                paddedChunkSize > fileSize - chunkDataOffset) {
-                break;
-            }
-            offset = chunkDataOffset + paddedChunkSize;
-        }
-
-        if (!formatFound || !dataOffset || audioFormat != 1 ||
-            bitsPerSample != 16 ||
-            (touchBeepChannels != 1 && touchBeepChannels != 2) ||
-            touchBeepSampleRate < 8000 || touchBeepSampleRate > 48000 ||
-            touchBeepBlockAlign != touchBeepChannels * sizeof(int16_t) ||
-            touchBeepDataBytesRemaining < touchBeepBlockAlign) {
-            Serial.println("[AZAN] Touch WAV must contain 16-bit PCM mono or stereo audio.");
-            stopTouchBeep();
-            return false;
-        }
-        touchBeepDataBytesRemaining -=
-            touchBeepDataBytesRemaining % touchBeepBlockAlign;
-        if (!touchBeepFile.seek(dataOffset) ||
-            !startI2SOutput() ||
-            !out->SetRate(touchBeepSampleRate) ||
-            !out->SetBitsPerSample(16) ||
-            !out->SetChannels(2)) {
-            Serial.println("[AZAN] Could not configure I2S for touch WAV playback.");
+        out->SetGain(getTouchBeepGain());
+        if (!touchBeepDecoder.begin(&touchBeepSource, out)) {
+            Serial.println("[AZAN] Could not start touch MP3 playback.");
             outputStarted = false;
-            stopTouchBeep();
+            touchBeepSource.close();
+            if (!startI2SOutput()) {
+                Serial.println("[AZAN] Could not restore I2S after touch MP3 startup failed.");
+            }
             return false;
         }
         outputStarted = true;
-        out->SetGain(getTouchBeepGain());
+        touchBeepDecoderStarted = true;
         touchBeepActive = true;
-        Serial.printf("[AZAN] Playing touch WAV (%u Hz, %u channel(s)).\n",
-                      static_cast<unsigned>(touchBeepSampleRate),
-                      static_cast<unsigned>(touchBeepChannels));
+        Serial.println("[AZAN] Playing embedded touch MP3.");
         return true;
     }
 
@@ -587,11 +502,11 @@ void update() {
 
     if (touchBeepStopRequested) {
         touchBeepStopRequested = false;
-        if (touchBeepFile) {
+        if (touchBeepActive) {
             stopTouchBeep();
             out->SetGain(static_cast<float>(currentVolume) / 100.0f);
             if (playing && !startI2SOutput()) {
-                Serial.println("[AZAN] Could not restart I2S after interrupting touch WAV.");
+                Serial.println("[AZAN] Could not restart I2S after interrupting touch MP3.");
             }
         }
     }
@@ -605,42 +520,11 @@ void update() {
     }
 
     if (touchBeepActive) {
-        for (size_t i = 0; i < AUDIO_SAMPLES_PER_UPDATE; ++i) {
-            if (!touchBeepSamplePending) {
-                if (touchBeepDataBytesRemaining < touchBeepBlockAlign) {
-                    Serial.println("[AZAN] Touch WAV playback finished.");
-                    stopTouchBeep();
-                    out->SetRate(AMP_SAMPLE_RATE);
-                    out->SetGain(static_cast<float>(currentVolume) / 100.0f);
-                    break;
-                }
-
-                uint8_t sampleBytes[4];
-                if (touchBeepFile.read(sampleBytes, touchBeepBlockAlign) !=
-                    touchBeepBlockAlign) {
-                    Serial.println("[AZAN] Could not read the next touch WAV sample.");
-                    stopTouchBeep();
-                    out->SetRate(AMP_SAMPLE_RATE);
-                    out->SetGain(static_cast<float>(currentVolume) / 100.0f);
-                    break;
-                }
-                touchBeepPendingLeft = static_cast<int16_t>(
-                    readLittleEndian16(sampleBytes));
-                touchBeepPendingRight = touchBeepChannels == 1
-                    ? touchBeepPendingLeft
-                    : static_cast<int16_t>(
-                        readLittleEndian16(sampleBytes + sizeof(int16_t)));
-                touchBeepSamplePending = true;
-            }
-
-            int16_t sample[2] = {
-                touchBeepPendingLeft, touchBeepPendingRight
-            };
-            if (!out->ConsumeSample(sample)) return;
-            touchBeepDataBytesRemaining -= touchBeepBlockAlign;
-            touchBeepSamplePending = false;
-        }
-        if (touchBeepActive) return;
+        if (touchBeepDecoder.loop()) return;
+        Serial.println("[AZAN] Touch MP3 playback finished.");
+        stopTouchBeep();
+        out->SetGain(static_cast<float>(currentVolume) / 100.0f);
+        return;
     }
 
     if (touchBeepPending && !playing && !pomodoroBeepActive &&
@@ -652,17 +536,25 @@ void update() {
     } else if (screenChangeBeepPending && !playing && !pomodoroBeepActive &&
         !screenChangeBeepActive) {
         screenChangeBeepPending = false;
-        out->SetGain(getScreenChangeBeepGain());
-        screenChangeGainReduced = true;
-        screenChangeBeepActive = true;
-        screenChangeBeepStartedMs = millis();
-        samplePhase = 0;
+        if (!startI2SOutput()) {
+            Serial.println("[AZAN] Could not start I2S for screen-change beep.");
+        } else {
+            out->SetGain(getScreenChangeBeepGain());
+            screenChangeGainReduced = true;
+            screenChangeBeepActive = true;
+            screenChangeBeepStartedMs = millis();
+            samplePhase = 0;
+        }
     } else if (pomodoroBeepPending && !playing && !screenChangeBeepActive &&
                !touchBeepActive) {
         pomodoroBeepPending = false;
-        pomodoroBeepActive = true;
-        pomodoroBeepStartedMs = millis();
-        samplePhase = 0;
+        if (!startI2SOutput()) {
+            Serial.println("[AZAN] Could not start I2S for Pomodoro beep.");
+        } else {
+            pomodoroBeepActive = true;
+            pomodoroBeepStartedMs = millis();
+            samplePhase = 0;
+        }
     }
     if (!playing && !pomodoroBeepActive && !screenChangeBeepActive) return;
 

@@ -1,7 +1,7 @@
 #ifndef POMODORO_MANAGER_H
 #define POMODORO_MANAGER_H
 
-#include "types.h"
+#include "core/types.h"
 
 // ============================================================
 //  POMODORO MANAGER

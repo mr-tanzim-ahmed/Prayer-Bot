@@ -1,7 +1,7 @@
-#include "voice_manager.h"
-#include "azan_manager.h"
-#include "config.h"
-#include "https_client.h"
+#include "managers/voice_manager.h"
+#include "managers/azan_manager.h"
+#include "core/config.h"
+#include "network/https_client.h"
 #include <ArduinoJson.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
