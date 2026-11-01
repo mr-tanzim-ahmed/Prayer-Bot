@@ -87,7 +87,6 @@ void taskVoice(void* param);
 namespace {
     void changeScreen(SystemScreen screen, bool touchTriggered = false) {
         if (screen == g_currentScreen) return;
-        ScreenRouter::transitionOut();
         if (g_currentScreen == SYS_SCREEN_QURAN)
             VoiceManager::leaveSurahScreen();
         if (!touchTriggered) AzanManager::playScreenChangeBeep();

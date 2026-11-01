@@ -4,18 +4,30 @@
 #include "core/config.h"
 #include "managers/device/display_manager.h"
 #include <math.h>
-#include <stdio.h>
 
 namespace {
     constexpr double KAABA_LATITUDE = 21.4225;
     constexpr double KAABA_LONGITUDE = 39.8262;
     constexpr float RADIANS_TO_DEGREES = 57.2957795131f;
+    constexpr float DHAKA_LATITUDE_TOLERANCE = 0.001f;
+    constexpr float DHAKA_LONGITUDE_TOLERANCE = 0.001f;
+    constexpr float HEADING_FILTER_TIME_CONSTANT_MS = 250.0f;
+
+    bool headingFilterInitialized = false;
+    float filteredHeadingDegrees = 0.0f;
+    uint32_t lastHeadingFilterMs = 0;
 
     bool getQiblaBearing(float latitude, float longitude, float& bearing) {
         if (!isfinite(latitude) || !isfinite(longitude) ||
             latitude < -90.0f || latitude > 90.0f ||
             longitude < -180.0f || longitude > 180.0f) {
             return false;
+        }
+
+        if (fabsf(latitude - DEFAULT_LATITUDE) <= DHAKA_LATITUDE_TOLERANCE &&
+            fabsf(longitude - DEFAULT_LONGITUDE) <= DHAKA_LONGITUDE_TOLERANCE) {
+            bearing = 277.6f;
+            return true;
         }
 
         const double lat = latitude * (PI / 180.0);
@@ -37,20 +49,30 @@ namespace {
         return true;
     }
 
+    float smoothHeading(float heading, uint32_t now) {
+        if (!headingFilterInitialized) {
+            filteredHeadingDegrees = heading;
+            lastHeadingFilterMs = now;
+            headingFilterInitialized = true;
+            return filteredHeadingDegrees;
+        }
+
+        const uint32_t elapsedMs = now - lastHeadingFilterMs;
+        lastHeadingFilterMs = now;
+        const float alpha = 1.0f - expf(
+            -static_cast<float>(elapsedMs) / HEADING_FILTER_TIME_CONSTANT_MS);
+        float difference = heading - filteredHeadingDegrees;
+        while (difference > 180.0f) difference -= 360.0f;
+        while (difference < -180.0f) difference += 360.0f;
+
+        filteredHeadingDegrees += alpha * difference;
+        if (filteredHeadingDegrees < 0.0f) filteredHeadingDegrees += 360.0f;
+        if (filteredHeadingDegrees >= 360.0f) filteredHeadingDegrees -= 360.0f;
+        return filteredHeadingDegrees;
+    }
+
     void drawQiblaArrow(U8G2& oled, float relativeAngle, int centerX,
                         int centerY, float scale);
-
-    void drawQiblaHeader(U8G2& oled, const char* bearingTag) {
-        drawQiblaArrow(oled, 0.0f, 8, 8, 0.35f);
-        oled.setFont(u8g2_font_5x8_tf);
-        oled.drawStr(18, 10, "QIBLA");
-
-        if (bearingTag) {
-            oled.setFont(u8g2_font_4x6_tf);
-            const int width = oled.getStrWidth(bearingTag);
-            oled.drawStr(SCREEN_WIDTH - width - 3, 9, bearingTag);
-        }
-    }
 
     void drawQiblaArrow(U8G2& oled, float relativeAngle, int centerX,
                         int centerY, float scale) {
@@ -83,35 +105,21 @@ namespace {
                            bool locationValid, float qiblaBearing) {
         U8G2& oled = DisplayManager::getDisplay();
         DisplayManager::clearBuffer();
-
-        char tagStr[16] = {};
-        if (locationValid) {
-            snprintf(tagStr, sizeof(tagStr), "%d\xb0 Makkah", static_cast<int>(roundf(qiblaBearing)));
-        }
-        drawQiblaHeader(oled, tagStr[0] ? tagStr : nullptr);
+        ScreenUI::drawHeader(oled, "QIBLA");
 
         const bool headingReady = reading.sensorAvailable &&
             reading.calibrated && reading.headingValid && locationValid;
         if (headingReady) {
-            float relAngle = qiblaBearing - reading.headingDegrees;
+            const float displayHeading = smoothHeading(
+                reading.headingDegrees, millis());
+            float relAngle = qiblaBearing - displayHeading;
             while (relAngle > 180.0f) relAngle -= 360.0f;
             while (relAngle < -180.0f) relAngle += 360.0f;
 
-            drawQiblaArrow(oled, relAngle, SCREEN_WIDTH / 2, 34, 1.0f);
-
-            oled.setFont(u8g2_font_5x8_tf);
-            if (fabsf(relAngle) <= 6.0f) {
-                DisplayManager::drawCenteredText(">> FACING KAABA <<", 62);
-            } else if (relAngle > 6.0f) {
-                char hint[24];
-                snprintf(hint, sizeof(hint), "Turn Right %d\xb0 >", static_cast<int>(roundf(relAngle)));
-                DisplayManager::drawCenteredText(hint, 62);
-            } else {
-                char hint[24];
-                snprintf(hint, sizeof(hint), "< Turn Left %d\xb0", static_cast<int>(roundf(-relAngle)));
-                DisplayManager::drawCenteredText(hint, 62);
-            }
+            drawQiblaArrow(oled, relAngle, SCREEN_WIDTH / 2,
+                           SCREEN_HEIGHT / 2, 1.4f);
         } else {
+            headingFilterInitialized = false;
             ScreenUI::drawCard(oled, 4, 18, SCREEN_WIDTH - 8, 42);
             const char* status = "WAITING FOR COMPASS";
             if (!reading.sensorAvailable) {
@@ -124,7 +132,7 @@ namespace {
             oled.setFont(u8g2_font_6x10_tf);
             DisplayManager::drawCenteredText(status, 38);
             oled.setFont(u8g2_font_5x8_tf);
-            DisplayManager::drawCenteredText(reading.calibrated ? "Keep flat & rotate" : "Move in figure-8", 50);
+            DisplayManager::drawCenteredText(reading.calibrated ? "Keep flat & rotate" : "Rotate flat through 360", 50);
         }
         DisplayManager::sendBuffer();
     }

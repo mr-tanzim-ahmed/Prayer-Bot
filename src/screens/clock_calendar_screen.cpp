@@ -9,16 +9,24 @@
 //  Current time, Gregorian date, Hijri date, sunrise, sunset.
 // ============================================================
 
+namespace {
+    unsigned long lastDrawMs = 0;
+}
+
 namespace ClockCalendarScreen {
 
 void draw(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers& prayers) {
     U8G2& oled = DisplayManager::getDisplay();
+    lastDrawMs = millis();
 
     DisplayManager::clearBuffer();
     ScreenUI::drawHeader(oled, "CLOCK & DATE", "LOCAL");
 
-    struct tm t;
-    bool timeValid = getLocalTime(&t);
+    struct tm t = {};
+    const time_t currentTime = time(nullptr);
+    const bool timeValid = currentTime > 0 &&
+        localtime_r(&currentTime, &t) != nullptr &&
+        t.tm_year >= (2016 - 1900);
 
     ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 24);
     if (timeValid) {
@@ -83,7 +91,7 @@ void draw(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers&
 }
 
 void update(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers& prayers) {
-    // Redraw every second for the clock.
+    if (millis() - lastDrawMs < CLOCK_DISPLAY_INTERVAL) return;
     draw(hijri, event, prayers);
 }
 

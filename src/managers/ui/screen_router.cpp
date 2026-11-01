@@ -39,7 +39,7 @@ namespace {
     bool azanOverlayDisplayed = false;
     float lastQiblaLatitude = DEFAULT_LATITUDE;
     float lastQiblaLongitude = DEFAULT_LONGITUDE;
-    bool hasQiblaLocation = false;
+    bool hasQiblaLocation = true;
 
     bool getQiblaLocation(float& latitude, float& longitude) {
         if (!g_settingsMutex) {
@@ -142,21 +142,6 @@ void draw(SystemScreen screen) {
 
         default:
             break;
-    }
-}
-
-void transitionOut() {
-    if (!DisplayManager::isAvailable() || g_azanState == AZAN_PLAYING) return;
-
-    constexpr uint8_t TRANSITION_STEPS = 2;
-    U8G2& oled = DisplayManager::getDisplay();
-    for (uint8_t step = 1; step <= TRANSITION_STEPS; ++step) {
-        oled.setDrawColor(0);
-        oled.drawBox(0, 0,
-                     (SCREEN_WIDTH * step) / TRANSITION_STEPS,
-                     SCREEN_HEIGHT);
-        oled.setDrawColor(1);
-        DisplayManager::sendBuffer();
     }
 }
 

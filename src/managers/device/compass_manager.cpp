@@ -31,6 +31,10 @@ namespace {
     constexpr int16_t OVERFLOW_VALUE = -4096;
     constexpr uint16_t CALIBRATION_MIN_SAMPLES = 80;
     constexpr int16_t CALIBRATION_MIN_AXIS_SPAN = 100;
+    constexpr uint8_t CALIBRATION_DIRECTION_COUNT = 8;
+    constexpr uint8_t CALIBRATION_DIRECTION_MASK =
+        (1U << CALIBRATION_DIRECTION_COUNT) - 1U;
+    constexpr uint8_t CALIBRATION_FORMAT_VERSION = 2;
     constexpr uint32_t SENSOR_POLL_INTERVAL_MS = 50;
     constexpr uint32_t SENSOR_RETRY_MS = 5000;
     constexpr uint32_t SENSOR_STALE_MS = 1500;
@@ -41,6 +45,7 @@ namespace {
     bool calibrated = false;
     bool calibrationSaveFailed = false;
     uint16_t calibrationSamples = 0;
+    uint8_t calibrationDirections = 0;
     int16_t minimumX = INT16_MAX;
     int16_t maximumX = INT16_MIN;
     int16_t minimumY = INT16_MAX;
@@ -136,9 +141,11 @@ namespace {
         const String json = StorageManager::readFile(CALIBRATION_PATH);
         JsonDocument document;
         if (json.isEmpty() || deserializeJson(document, json) ||
+            !document["version"].is<int>() ||
+            document["version"].as<int>() != CALIBRATION_FORMAT_VERSION ||
             (!document["x"].is<float>() && !document["x"].is<int>()) ||
             (!document["y"].is<float>() && !document["y"].is<int>())) {
-            Serial.println("[COMPASS] Saved calibration is invalid; recalibration required.");
+            Serial.println("[COMPASS] Saved calibration is outdated or invalid; full-turn recalibration required.");
             return false;
         }
 
@@ -167,6 +174,7 @@ namespace {
 
     void saveCalibration() {
         JsonDocument document;
+        document["version"] = CALIBRATION_FORMAT_VERSION;
         document["x"] = offsetX;
         document["y"] = offsetY;
         document["sensor"] = sensorType == SensorType::QMC5883L
@@ -201,14 +209,28 @@ namespace {
             return;
         }
 
-        offsetX = (static_cast<float>(maximumX) + minimumX) * 0.5f;
-        offsetY = (static_cast<float>(maximumY) + minimumY) * 0.5f;
-        if (!isfinite(offsetX) || !isfinite(offsetY)) {
-            offsetX = 0.0f;
-            offsetY = 0.0f;
+        const float candidateOffsetX =
+            (static_cast<float>(maximumX) + minimumX) * 0.5f;
+        const float candidateOffsetY =
+            (static_cast<float>(maximumY) + minimumY) * 0.5f;
+        if (!isfinite(candidateOffsetX) || !isfinite(candidateOffsetY)) {
             return;
         }
+
+        float angle = atan2f(static_cast<float>(y) - candidateOffsetY,
+                             static_cast<float>(x) - candidateOffsetX);
+        if (angle < 0.0f) angle += 2.0f * PI;
+        const uint8_t direction = static_cast<uint8_t>(
+            angle * CALIBRATION_DIRECTION_COUNT / (2.0f * PI));
+        if (direction < CALIBRATION_DIRECTION_COUNT) {
+            calibrationDirections |= static_cast<uint8_t>(1U << direction);
+        }
+        if (calibrationDirections != CALIBRATION_DIRECTION_MASK) return;
+
+        offsetX = candidateOffsetX;
+        offsetY = candidateOffsetY;
         calibrated = true;
+        Serial.println("[COMPASS] Full-turn calibration complete.");
         saveCalibration();
     }
 
@@ -289,6 +311,7 @@ bool init() {
     } else {
         calibrated = false;
         calibrationSamples = 0;
+        calibrationDirections = 0;
         minimumX = INT16_MAX;
         maximumX = INT16_MIN;
         minimumY = INT16_MAX;
@@ -339,6 +362,7 @@ bool resetCalibration() {
     calibrated = false;
     calibrationSaveFailed = false;
     calibrationSamples = 0;
+    calibrationDirections = 0;
     minimumX = INT16_MAX;
     maximumX = INT16_MIN;
     minimumY = INT16_MAX;
