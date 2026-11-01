@@ -5,25 +5,31 @@
 #include "core/config.h"
 #include "core/types.h"
 
-// Module headers
-#include "managers/wifi_manager.h"
-#include "managers/display_manager.h"
-#include "managers/prayer_manager.h"
-#include "managers/weather_manager.h"
-#include "managers/azan_manager.h"
-#include "managers/shake_detector.h"
-#include "managers/compass_manager.h"
-#include "managers/button_handler.h"
-#include "managers/pomodoro_manager.h"
-#include "managers/calendar_manager.h"
-#include "managers/voice_manager.h"
-#include "managers/storage_manager.h"
-#include "managers/web_server_manager.h"
-#include "managers/screen_router.h"
-#include "managers/logger.h"
-#include "managers/cache_manager.h"
+// Device and audio services
+#include "managers/audio/azan_manager.h"
+#include "managers/device/button_handler.h"
+#include "managers/device/compass_manager.h"
+#include "managers/device/display_manager.h"
+#include "managers/device/shake_detector.h"
+#include "managers/audio/voice_manager.h"
+
+// Feature services
+#include "managers/prayer/calendar_manager.h"
+#include "managers/prayer/prayer_manager.h"
+#include "managers/productivity/pomodoro_manager.h"
+#include "managers/productivity/pomodoro_stats.h"
+
+// Platform and application services
+#include "managers/diagnostics/logger.h"
+#include "managers/network/weather_manager.h"
+#include "managers/network/wifi_manager.h"
+#include "managers/storage/cache_manager.h"
+#include "managers/storage/storage_manager.h"
+#include "managers/ui/screen_router.h"
+#include "managers/web/web_server_manager.h"
+
+// Screen-specific behavior
 #include "screens/dhikr_screen.h"
-#include "managers/pomodoro_stats.h"
 
 // ============================================================
 //  PRAYER-BOT MAIN

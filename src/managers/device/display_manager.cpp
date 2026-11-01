@@ -1,6 +1,6 @@
-#include "managers/display_manager.h"
+#include "managers/device/display_manager.h"
 #include <Wire.h>
-#include "managers/i2c_bus.h"
+#include "managers/device/i2c_bus.h"
 
 // ============================================================
 //  DISPLAY MANAGER IMPLEMENTATION

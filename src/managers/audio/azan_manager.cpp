@@ -1,4 +1,4 @@
-#include "managers/azan_manager.h"
+#include "managers/audio/azan_manager.h"
 #include "core/config.h"
 #include "network/https_client.h"
 #include <ArduinoJson.h>
@@ -8,6 +8,7 @@
 #include <AudioOutputI2S.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <math.h>
 #include <new>
 #include <stdlib.h>
 #include "audio/touch_beep_audio.h"
@@ -117,6 +118,9 @@ namespace {
     constexpr float SCREEN_CHANGE_BEEP_GAIN = 0.45f;
     constexpr float TOUCH_BEEP_GAIN = 0.65f;
     constexpr size_t AUDIO_SAMPLES_PER_UPDATE = 256;
+    constexpr float AUDIO_TWO_PI = 6.28318530718f;
+    constexpr float PHASE_SCALE = AUDIO_TWO_PI / 4294967296.0f;
+    constexpr uint16_t BEEP_FADE_STEP = 150;
 
     volatile bool playing = false;
     volatile bool pomodoroBeepPending = false;
@@ -140,6 +144,7 @@ namespace {
     unsigned long pomodoroBeepStartedMs = 0;
     unsigned long screenChangeBeepStartedMs = 0;
     uint32_t samplePhase = 0;
+    uint16_t beepEnvelope = 0;
 
     AudioOutputI2S *out = nullptr;
     HttpsAudioSource *quranSource = nullptr;
@@ -556,7 +561,8 @@ void update() {
             samplePhase = 0;
         }
     }
-    if (!playing && !pomodoroBeepActive && !screenChangeBeepActive) return;
+    if (!playing && !pomodoroBeepActive && !screenChangeBeepActive &&
+        beepEnvelope == 0) return;
 
     const unsigned long now = millis();
     if (pomodoroBeepActive &&
@@ -584,12 +590,22 @@ void update() {
     for (size_t i = 0; i < AUDIO_SAMPLES_PER_UPDATE; ++i) {
         int16_t value = 0;
         if (beepOn) {
-            value = (samplePhase & 0x80000000UL) ? amplitude : -amplitude;
+            const int32_t scaledAmplitude =
+                (static_cast<int32_t>(amplitude) * beepEnvelope) / 32767;
+            const float phase = static_cast<float>(samplePhase) * PHASE_SCALE;
+            value = static_cast<int16_t>(sinf(phase) * scaledAmplitude);
         }
 
         int16_t sample[2] = {value, value};
         if (!out->ConsumeSample(sample)) return;
         samplePhase += phaseIncrement;
+        if (beepOn) {
+            beepEnvelope = beepEnvelope > 32767 - BEEP_FADE_STEP
+                ? 32767 : beepEnvelope + BEEP_FADE_STEP;
+        } else {
+            beepEnvelope = beepEnvelope > BEEP_FADE_STEP
+                ? beepEnvelope - BEEP_FADE_STEP : 0;
+        }
     }
 }
 

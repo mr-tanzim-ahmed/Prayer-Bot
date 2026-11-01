@@ -1,4 +1,4 @@
-#include "managers/logger.h"
+#include "managers/diagnostics/logger.h"
 #include <stdarg.h>
 
 namespace Logger {

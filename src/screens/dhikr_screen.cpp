@@ -1,5 +1,5 @@
 #include "screens/dhikr_screen.h"
-#include "managers/display_manager.h"
+#include "managers/device/display_manager.h"
 #include "core/config.h"
 #include "screens/screen_ui.h"
 

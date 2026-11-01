@@ -1,7 +1,7 @@
-#include "managers/compass_manager.h"
+#include "managers/device/compass_manager.h"
 #include "core/config.h"
-#include "managers/i2c_bus.h"
-#include "managers/storage_manager.h"
+#include "managers/device/i2c_bus.h"
+#include "managers/storage/storage_manager.h"
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include <math.h>

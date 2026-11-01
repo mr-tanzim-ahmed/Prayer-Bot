@@ -1,5 +1,5 @@
-#include "managers/voice_manager.h"
-#include "managers/azan_manager.h"
+#include "managers/audio/voice_manager.h"
+#include "managers/audio/azan_manager.h"
 #include "core/config.h"
 #include "network/https_client.h"
 #include <ArduinoJson.h>

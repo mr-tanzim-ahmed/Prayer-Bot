@@ -1,7 +1,7 @@
-#include "managers/shake_detector.h"
+#include "managers/device/shake_detector.h"
 #include "core/config.h"
 #include <Wire.h>
-#include "managers/i2c_bus.h"
+#include "managers/device/i2c_bus.h"
 
 // ============================================================
 //  SHAKE DETECTOR IMPLEMENTATION

@@ -1,19 +1,23 @@
-# Gitignore for Prayer‑Bot
-
-# Build output and PlatformIO dependencies
+# PlatformIO build output and downloaded dependencies
 .pio/
 
-# IDE configuration files (VS Code)
+# Local IDE configuration
 .vscode/
+Prayer-Bot.code-workspace
 
-# Runtime data / generated files – keep out of version control, except the Qibla icon
+# Runtime filesystem assets and generated/private certificates
 /data/*
 !/data/.gitkeep
 !/data/PrayerBot_Arrow.svg
 
-# Any other transient files (e.g., compiled binaries)
+# Firmware build artifacts
 *.bin
 *.elf
 *.map
-secrets.h
-Prayer-Bot.code-workspace
+
+# Local credentials and editor/OS files
+/include/core/secrets.h
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

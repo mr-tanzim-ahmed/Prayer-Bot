@@ -106,7 +106,7 @@ pio run --target uploadfs
 
 Repeat the filesystem upload whenever you replace the certificate pair. **Never commit or share the private key.** Browsers may show a warning for a self-signed certificate; the certificate must match the dashboard address you use. HTTPS encrypts traffic but does not add dashboard authentication, so use the device only on a trusted local network.
 
-The trusted root certificates in [`src/https_client.h`](src/https_client.h) are used for outbound HTTPS API requests made by the ESP32. They are separate from the dashboard's certificate files.
+The trusted root certificates in [`include/network/https_client.h`](include/network/https_client.h) are used for outbound HTTPS API requests made by the ESP32. They are separate from the dashboard's certificate files.
 
 ## Connect Prayer-Bot to Wi-Fi
 

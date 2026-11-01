@@ -1,12 +1,12 @@
-#include "managers/weather_manager.h"
+#include "managers/network/weather_manager.h"
 #include "core/config.h"
 #include "network/https_client.h"
-#include "managers/storage_manager.h"
+#include "managers/storage/storage_manager.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-#include "managers/cache_manager.h"
+#include "managers/storage/cache_manager.h"
 #include <math.h>
 
 // ============================================================

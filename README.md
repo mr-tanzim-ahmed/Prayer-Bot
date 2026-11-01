@@ -41,7 +41,7 @@ Prayer-Bot is a DIY **ESP32 prayer clock and Mumins Personal Assistant**. Use it
 
 The Qibla screen shows a large arrow that turns toward Qibla relative to the device, without a compass dial or extra readouts. A short message appears only when the compass, location, or calibration is not ready. Set another area in the dashboard or use its permission-based device-location option to update the bearing. The screen uses an HMC5883L or QMC5883L compass. On first use, keep the device flat and rotate it through a full turn (a figure-eight motion also helps) to calibrate hard-iron offsets; the offsets are saved in LittleFS. Long-press the touch sensor on the Qibla screen to recalibrate. The bearing uses zero magnetic declination and is approximate. Keep the compass away from speakers, motors, magnets, and metal; magnetic interference or an incorrectly oriented module can make the direction inaccurate.
 
-Touch feedback decodes the embedded MP3 in flash and plays it over I2S at the configured device volume; no filesystem upload is needed for the sound. Touch feedback is skipped during Quran playback and interrupted by the Azan alarm. Make sure the amplifier and speaker are wired safely before powering them.
+Touch feedback decodes the embedded MP3 in flash and plays it over I2S at the configured device volume; no filesystem upload is needed for the sound. Short notification and prayer-alarm tones use a sine waveform with a brief fade to reduce the harshness and clicks of abrupt square-wave tones. Touch feedback is skipped during Quran playback and interrupted by the Azan alarm. When first testing the MAX98357A and speaker, start at a low device volume and raise it gradually; never connect either speaker terminal to ground.
 
 The setup hotspot SSID is **`Prayer-Bot`** (password: **`12345678`**) at default IP **`http://10.77.0.1`**. Connecting from a smartphone or laptop automatically triggers a captive-portal prompt ("Sign in to network") that opens the dashboard immediately. The dashboard is also directly accessible in any browser at `http://10.77.0.1` (or `https://10.77.0.1` when certificates are installed). Once connected to home Wi-Fi, the router-side IP remains assigned by your router DHCP.
 
@@ -67,15 +67,44 @@ The firmware uses focused C++ managers for feature logic and separate modules fo
 |---|---|
 | Startup, task scheduling, or module coordination | [`src/main.cpp`](src/main.cpp) |
 | Pins, defaults, timing, or API endpoints | [`include/core/config.h`](include/core/config.h) |
-| Prayer schedules and prohibited-time windows | [`include/managers/prayer_manager.h`](include/managers/prayer_manager.h), [`src/prayer_manager.cpp`](src/prayer_manager.cpp) |
-| Dashboard UI or its JSON API | [`include/web/dashboard_html.h`](include/web/dashboard_html.h), [`src/web_server_manager.cpp`](src/web_server_manager.cpp) |
-| HTTPS listener and device-local certificate | [`src/https_server_manager.cpp`](src/https_server_manager.cpp) |
-| Voice recognition and Quran playback | [`src/voice_manager.cpp`](src/voice_manager.cpp), [`include/screens/`](include/screens/) |
-| Pomodoro state and weekly statistics | [`src/pomodoro_manager.cpp`](src/pomodoro_manager.cpp), [`src/pomodoro_stats.cpp`](src/pomodoro_stats.cpp) |
-| Settings, LittleFS, or caches | [`src/storage_manager.cpp`](src/storage_manager.cpp), [`src/cache_manager.cpp`](src/cache_manager.cpp) |
-| OLED presentation | [`src/screens/`](src/screens/), [`include/screens/`](include/screens/), [`src/screen_router.cpp`](src/screen_router.cpp) |
+| Prayer schedules and prohibited-time windows | [`include/managers/prayer/prayer_manager.h`](include/managers/prayer/prayer_manager.h), [`src/managers/prayer/prayer_manager.cpp`](src/managers/prayer/prayer_manager.cpp) |
+| Device inputs, sensors, display, and I²C | [`include/managers/device/`](include/managers/device/), [`src/managers/device/`](src/managers/device/) |
+| Voice recognition, Quran playback, audio output, and notification tones | [`include/managers/audio/azan_manager.h`](include/managers/audio/azan_manager.h), [`src/managers/audio/azan_manager.cpp`](src/managers/audio/azan_manager.cpp), [`include/audio/touch_beep_audio.h`](include/audio/touch_beep_audio.h) |
+| Pomodoro state and weekly statistics | [`src/managers/productivity/pomodoro_manager.cpp`](src/managers/productivity/pomodoro_manager.cpp), [`src/managers/productivity/pomodoro_stats.cpp`](src/managers/productivity/pomodoro_stats.cpp) |
+| Wi-Fi, weather, or outbound network clients | [`include/managers/network/`](include/managers/network/), [`include/network/`](include/network/) |
+| Settings, LittleFS, or caches | [`include/managers/storage/`](include/managers/storage/), [`src/managers/storage/`](src/managers/storage/) |
+| Dashboard routes or HTTPS listener | [`include/managers/web/`](include/managers/web/), [`src/managers/web/`](src/managers/web/) |
+| OLED presentation and screen routing | [`src/screens/`](src/screens/), [`include/screens/`](include/screens/), [`src/managers/ui/screen_router.cpp`](src/managers/ui/screen_router.cpp) |
 
-Shared state and screen IDs live in [`include/core/types.h`](include/core/types.h). Public interfaces are grouped under `include/` by core, managers, screens, networking, web, and audio; their implementations remain under `src/`. The private, Git-ignored API-key header lives beside the core configuration. Keep feature behavior close to the module that owns it; use `main.cpp` to initialize services and connect them. If responsibilities or filenames change, update this map so the next contributor can find their way.
+### Project layout and module boundaries
+
+```text
+include/
+  core/                    Shared configuration, types, and local secrets
+  audio/                   Embedded audio assets
+  managers/                Public manager interfaces, grouped by responsibility
+    audio/                 Azan and voice/audio features
+    device/                Buttons, display, sensors, and I2C
+    diagnostics/           Logging and diagnostics
+    network/               Wi-Fi and weather services
+    prayer/                Prayer times and Islamic calendar
+    productivity/          Pomodoro timer and statistics
+    storage/               LittleFS settings, files, and caches
+    ui/                    Screen navigation and routing
+    web/                   Dashboard and HTTPS server interfaces
+  network/                 Outbound network clients and trust roots
+  screens/                 OLED screen interfaces
+  web/                     Dashboard assets
+src/
+  main.cpp                 Startup, task creation, and dependency wiring
+  managers/                Implementations mirroring include/managers/
+  screens/                 OLED screen implementations
+data/                      LittleFS upload files; local certificates stay untracked
+```
+
+Shared state and screen IDs live in [`include/core/types.h`](include/core/types.h). Each manager's public interface belongs in `include/managers/<area>/`; its implementation belongs in the matching `src/managers/<area>/` folder. This keeps headers discoverable for DIY changes while allowing each domain to grow without a flat manager directory. `main.cpp` is the composition root: it initializes modules, passes shared settings, and creates FreeRTOS tasks. Screen modules own presentation, while managers own hardware access, feature behavior, or external services.
+
+Persistent application data should go through [`StorageManager`](src/managers/storage/storage_manager.cpp); cache freshness and retention belong to [`CacheManager`](src/managers/storage/cache_manager.cpp). Keep outbound HTTP clients in `include/network/`, dashboard assets in `include/web/`, and generated or private filesystem assets in the ignored `data/` directory. When adding a feature, put its interface and implementation in the same responsibility area, update the caller includes, and add or update the feature screen when needed. Keep dependencies explicit, avoid duplicating shared state or storage logic, and update this map whenever a public path changes.
 
 ## 🧰 Hardware components and wiring
 
