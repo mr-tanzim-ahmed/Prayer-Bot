@@ -661,8 +661,7 @@ void taskNetwork(void* param) {
 
 // ============================================================
 //  TASK: Audio
-//  High priority task dedicated entirely to feeding the MP3
-//  decoder loop for stutter-free I2S audio playback.
+//  High priority task feeds MP3/WAV decoders and I2S audio playback.
 // ============================================================
 
 void taskAudio(void* param) {

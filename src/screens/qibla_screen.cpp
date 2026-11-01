@@ -37,70 +37,46 @@ namespace {
         return true;
     }
 
-    void drawQiblaArrow(U8G2& oled, float relativeAngle) {
-        constexpr int centerX = SCREEN_WIDTH / 2;
-        constexpr int centerY = 36;
-        constexpr int ringRadius = 18;
+    void drawQiblaArrow(U8G2& oled, float relativeAngle, int centerX,
+                        int centerY, float scale);
 
-        // Draw compass ring with 4 cardinal tick marks
-        oled.drawCircle(centerX, centerY, ringRadius);
-        oled.drawVLine(centerX, centerY - ringRadius - 3, 3); // Forward / Device top
-        oled.drawVLine(centerX, centerY + ringRadius, 3);
-        oled.drawHLine(centerX - ringRadius - 3, centerY, 3);
-        oled.drawHLine(centerX + ringRadius, centerY, 3);
+    void drawQiblaHeader(U8G2& oled, const char* bearingTag) {
+        drawQiblaArrow(oled, 0.0f, 8, 8, 0.35f);
+        oled.setFont(u8g2_font_5x8_tf);
+        oled.drawStr(18, 10, "QIBLA");
 
+        if (bearingTag) {
+            oled.setFont(u8g2_font_4x6_tf);
+            const int width = oled.getStrWidth(bearingTag);
+            oled.drawStr(SCREEN_WIDTH - width - 3, 9, bearingTag);
+        }
+    }
+
+    void drawQiblaArrow(U8G2& oled, float relativeAngle, int centerX,
+                        int centerY, float scale) {
+        constexpr float pivotX = 24.0f;
+        constexpr float pivotY = 39.0f;
         const float radians = relativeAngle * (PI / 180.0f);
-        const float forwardX = sinf(radians);
-        const float forwardY = -cosf(radians);
-        const float sideX = cosf(radians);
-        const float sideY = sinf(radians);
+        const float cosine = cosf(radians);
+        const float sine = sinf(radians);
+        const auto transform = [&](float x, float y, int& screenX,
+                                   int& screenY) {
+            const float dx = x - pivotX;
+            const float dy = y - pivotY;
+            screenX = static_cast<int>(roundf(
+                centerX + (dx * cosine - dy * sine) * scale));
+            screenY = static_cast<int>(roundf(
+                centerY + (dx * sine + dy * cosine) * scale));
+        };
 
-        // Arrow geometry (sleek directional navigation arrow -->)
-        constexpr float tipDist = 17.0f;
-        constexpr float wingDist = 7.0f;
-        constexpr float wingWidth = 6.0f;
-        constexpr float notchDist = 10.0f;
-        constexpr float tailDist = 13.0f;
-        constexpr float fletchDist = 4.0f;
+        int tipX, tipY, notchX, notchY, rightX, rightY, leftX, leftY;
+        transform(24.0f, 22.0f, tipX, tipY);
+        transform(24.0f, 43.0f, notchX, notchY);
+        transform(37.0f, 55.0f, rightX, rightY);
+        transform(11.0f, 55.0f, leftX, leftY);
 
-        const float tipX = centerX + forwardX * tipDist;
-        const float tipY = centerY + forwardY * tipDist;
-        const float leftWingX = centerX + forwardX * wingDist + sideX * wingWidth;
-        const float leftWingY = centerY + forwardY * wingDist + sideY * wingWidth;
-        const float rightWingX = centerX + forwardX * wingDist - sideX * wingWidth;
-        const float rightWingY = centerY + forwardY * wingDist - sideY * wingWidth;
-        const float notchX = centerX + forwardX * notchDist;
-        const float notchY = centerY + forwardY * notchDist;
-
-        const float tailX = centerX - forwardX * tailDist;
-        const float tailY = centerY - forwardY * tailDist;
-        const float fletchLeftX = tailX + forwardX * fletchDist + sideX * fletchDist;
-        const float fletchLeftY = tailY + forwardY * fletchDist + sideY * fletchDist;
-        const float fletchRightX = tailX + forwardX * fletchDist - sideX * fletchDist;
-        const float fletchRightY = tailY + forwardY * fletchDist - sideY * fletchDist;
-
-        // Draw crisp filled chevron arrowhead
-        oled.drawTriangle(static_cast<int>(roundf(tipX)), static_cast<int>(roundf(tipY)),
-                          static_cast<int>(roundf(leftWingX)), static_cast<int>(roundf(leftWingY)),
-                          static_cast<int>(roundf(notchX)), static_cast<int>(roundf(notchY)));
-        oled.drawTriangle(static_cast<int>(roundf(tipX)), static_cast<int>(roundf(tipY)),
-                          static_cast<int>(roundf(rightWingX)), static_cast<int>(roundf(rightWingY)),
-                          static_cast<int>(roundf(notchX)), static_cast<int>(roundf(notchY)));
-
-        // Draw sleek slim arrow shaft (2 pixels wide for crisp visibility without chunkiness)
-        oled.drawLine(static_cast<int>(roundf(notchX)), static_cast<int>(roundf(notchY)),
-                      static_cast<int>(roundf(tailX)), static_cast<int>(roundf(tailY)));
-        oled.drawLine(static_cast<int>(roundf(notchX + sideX * 0.7f)), static_cast<int>(roundf(notchY + sideY * 0.7f)),
-                      static_cast<int>(roundf(tailX + sideX * 0.7f)), static_cast<int>(roundf(tailY + sideY * 0.7f)));
-
-        // Draw tail fletchings (the "-->" feathers)
-        oled.drawLine(static_cast<int>(roundf(tailX)), static_cast<int>(roundf(tailY)),
-                      static_cast<int>(roundf(fletchLeftX)), static_cast<int>(roundf(fletchLeftY)));
-        oled.drawLine(static_cast<int>(roundf(tailX)), static_cast<int>(roundf(tailY)),
-                      static_cast<int>(roundf(fletchRightX)), static_cast<int>(roundf(fletchRightY)));
-
-        // Center pivot dot
-        oled.drawDisc(centerX, centerY, 2);
+        oled.drawTriangle(tipX, tipY, rightX, rightY, notchX, notchY);
+        oled.drawTriangle(tipX, tipY, notchX, notchY, leftX, leftY);
     }
 
     void drawCompassScreen(const CompassReading& reading,
@@ -112,7 +88,7 @@ namespace {
         if (locationValid) {
             snprintf(tagStr, sizeof(tagStr), "%d\xb0 Makkah", static_cast<int>(roundf(qiblaBearing)));
         }
-        ScreenUI::drawHeader(oled, "QIBLA COMPASS", tagStr[0] ? tagStr : nullptr);
+        drawQiblaHeader(oled, tagStr[0] ? tagStr : nullptr);
 
         const bool headingReady = reading.sensorAvailable &&
             reading.calibrated && reading.headingValid && locationValid;
@@ -121,12 +97,10 @@ namespace {
             while (relAngle > 180.0f) relAngle -= 360.0f;
             while (relAngle < -180.0f) relAngle += 360.0f;
 
-            drawQiblaArrow(oled, relAngle);
+            drawQiblaArrow(oled, relAngle, SCREEN_WIDTH / 2, 34, 1.0f);
 
             oled.setFont(u8g2_font_5x8_tf);
             if (fabsf(relAngle) <= 6.0f) {
-                // Aligned with Kaaba! Highlight with double circle and indicator
-                oled.drawCircle(SCREEN_WIDTH / 2, 36, 15);
                 DisplayManager::drawCenteredText(">> FACING KAABA <<", 62);
             } else if (relAngle > 6.0f) {
                 char hint[24];

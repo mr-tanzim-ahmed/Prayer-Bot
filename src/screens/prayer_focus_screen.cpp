@@ -64,8 +64,6 @@ void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
 
     ScreenUI::drawHeader(oled, "NEXT PRAYER", syncing ? "SYNC" : nullptr);
     ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 30);
-    oled.setFont(u8g2_font_5x8_tf);
-    oled.drawStr(8, 27, "UP NEXT");
     oled.setFont(u8g2_font_7x14B_tf);
     const char* name = PrayerManager::getPrayerNameStr(next.name);
     oled.drawStr(8, 43, name);
@@ -79,12 +77,15 @@ void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
     String countdown = "STARTS IN " + formatCountdown(next.countdownSeconds);
     DisplayManager::drawCenteredText(countdown, 55);
 
-    if (prohibited.nextWindow.active) {
+    if (next.windowOpen) {
+        String windowEnd = String(PrayerManager::getPrayerNameStr(
+            next.currentPrayer)) + " ENDS " +
+            formatCompactTime(next.windowEndTime.hour,
+                              next.windowEndTime.minute);
+        if (prohibited.nextWindow.active) windowEnd += " PAUSE";
+        oled.drawStr(8, 63, windowEnd.c_str());
+    } else if (prohibited.nextWindow.active) {
         oled.drawStr(8, 63, "PRAYER PAUSE ACTIVE");
-    } else if (next.windowOpen) {
-        String remaining = "PRAYER WINDOW " +
-                           formatCountdown(next.remainingSeconds);
-        oled.drawStr(8, 63, remaining.c_str());
     } else if (prohibited.nextWindow.startHour > 0 || prohibited.nextWindow.startMinute > 0) {
         String probStr = "PAUSE " +
             formatCompactTime(prohibited.nextWindow.startHour, prohibited.nextWindow.startMinute) +

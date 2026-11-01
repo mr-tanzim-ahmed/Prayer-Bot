@@ -12,6 +12,28 @@
 namespace {
     int8_t hijriOffset = 0;
 
+    void normalizeHijriDate(HijriDate& date) {
+        while (date.day < 1) {
+            date.day += 30;
+            if (date.month == 1) {
+                date.month = 12;
+                date.year--;
+            } else {
+                date.month--;
+            }
+        }
+
+        while (date.day > 30) {
+            date.day -= 30;
+            if (date.month == 12) {
+                date.month = 1;
+                date.year++;
+            } else {
+                date.month++;
+            }
+        }
+    }
+
     // Built-in Islamic events table
     const IslamicEvent EVENTS[] = {
         { 1,  1,  "Islamic New Year",  false},
@@ -57,6 +79,7 @@ void getHijriDate(HijriDate& date) {
                 date.monthName = String((const char*)(singleHijri["monthName"] | "Muharram"));
                 date.designation = "AH";
                 date.day += hijriOffset;
+                normalizeHijriDate(date);
                 return;
             }
 
@@ -75,8 +98,9 @@ void getHijriDate(HijriDate& date) {
                         date.monthName = String((const char*)(todayHijri["monthName"] | "Muharram"));
                         date.designation = "AH";
 
-                        // Apply offset
+                        // Apply offset and keep the Hijri month/day valid after rollover.
                         date.day += hijriOffset;
+                        normalizeHijriDate(date);
                         return;
                     }
                 }

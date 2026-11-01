@@ -268,24 +268,16 @@ WeatherIconType getIconType(int weatherId) {
 }
 
 WeatherIconType getIconType(int weatherId, const String& iconCode) {
+    WeatherIconType type = getIconType(weatherId);
     if (iconCode.length() == 3 &&
         (iconCode[2] == 'd' || iconCode[2] == 'n')) {
         const bool isNight = iconCode[2] == 'n';
-        const String conditionCode = iconCode.substring(0, 2);
-        if (conditionCode == "01") return isNight ? ICON_MOON : ICON_SUN;
-        if (conditionCode == "02")
-            return isNight ? ICON_NIGHT_CLOUDY : ICON_PARTLY_CLOUDY;
-        if (conditionCode == "03" || conditionCode == "04")
-            return ICON_CLOUD;
-        if (conditionCode == "09" || conditionCode == "10")
-            return ICON_RAIN;
-        if (conditionCode == "11") return ICON_STORM;
-        if (conditionCode == "13") return ICON_SNOW;
-        if (conditionCode == "50") return ICON_FOG;
+        if (type == ICON_SUN && isNight) return ICON_MOON;
+        if (type == ICON_PARTLY_CLOUDY && isNight)
+            return ICON_NIGHT_CLOUDY;
     }
 
-    if (weatherId == 800 && iconCode.endsWith("n")) return ICON_MOON;
-    return getIconType(weatherId);
+    return type;
 }
 
 String getAQIText(int aqi) {

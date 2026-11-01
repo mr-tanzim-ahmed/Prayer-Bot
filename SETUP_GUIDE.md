@@ -86,7 +86,13 @@ The serial log prints the setup dashboard address (`10.77.0.1`) and, after route
 
 ## Touch feedback sound
 
-Touch feedback is generated directly over I2S as a short, low-gain tone. It does not need an MP3 file, audio conversion, or a LittleFS upload. This avoids additional MP3-decoder memory use and prevents a filesystem upload from overwriting saved settings or Wi-Fi credentials just to install a beep.
+Touch feedback plays the bundled [`data/beep_sound.wav`](data/beep_sound.wav) file through the MAX98357A I²S amplifier. After flashing the firmware, upload the LittleFS image once:
+
+```powershell
+pio run --target uploadfs
+```
+
+The file is PCM WAV and does not need conversion. Uploading the filesystem image replaces LittleFS contents, so do this before configuring Wi-Fi or changing device settings; back up persistent settings first if the device has already been configured.
 
 ## Optional: configure dashboard HTTPS
 

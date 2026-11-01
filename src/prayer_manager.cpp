@@ -400,6 +400,7 @@ void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited,
     next.remainingSeconds = 0;
     next.windowOpen = false;
     next.currentPrayer = PRAYER_NONE;
+    next.windowEndTime = {0, 0};
 
     if (nowSec >= 0) {
         bool foundUpcoming = false;
@@ -437,12 +438,21 @@ void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited,
             const int startSec = timeToMinutes(prayerList[i].time) * 60;
             int endSec   = timeToMinutes(windowEnds[i]) * 60;
 
+            if (i == 5 && nowSec < endSec) {
+                next.windowOpen = true;
+                next.currentPrayer = PRAYER_ISHA;
+                next.remainingSeconds = endSec - nowSec;
+                next.windowEndTime = windowEnds[i];
+                break;
+            }
+
             if (i == 5 && endSec < startSec) endSec += 86400;
 
             if (nowSec >= startSec && nowSec < endSec) {
                 next.windowOpen = true;
                 next.currentPrayer = prayerList[i].name;
                 next.remainingSeconds = endSec - nowSec;
+                next.windowEndTime = windowEnds[i];
                 break;
             }
         }

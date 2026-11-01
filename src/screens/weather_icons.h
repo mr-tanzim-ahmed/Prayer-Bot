@@ -122,10 +122,10 @@ inline void drawCompact(U8G2& oled, int x, int y, WeatherIconType type) {
             oled.drawLine(x + 7, y + 15, x + 5, y + 17);
             break;
         case ICON_PARTLY_CLOUDY:
-            oled.drawCircle(x + 8, y + 6, 4);
-            oled.drawVLine(x + 8, y, 2);
-            oled.drawHLine(x + 2, y + 6, 2);
-            oled.drawLine(x + 4, y + 2, x + 5, y + 3);
+            oled.drawCircle(x + 6, y + 5, 3);
+            oled.drawVLine(x + 6, y, 2);
+            oled.drawHLine(x + 1, y + 5, 2);
+            oled.drawLine(x + 3, y + 2, x + 4, y + 3);
             drawCloud();
             break;
         case ICON_MOON:

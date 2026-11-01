@@ -7,6 +7,7 @@
 #include <AudioOutputI2S.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <LittleFS.h>
 #include <new>
 #include <stdlib.h>
 
@@ -113,21 +114,19 @@ namespace {
     constexpr uint32_t SCREEN_CHANGE_BEEP_LENGTH_MS = 130;
     constexpr int16_t SCREEN_CHANGE_BEEP_AMPLITUDE = 9000;
     constexpr float SCREEN_CHANGE_BEEP_GAIN = 0.45f;
-    constexpr uint32_t TOUCH_BEEP_LENGTH_MS = 100;
-    constexpr int16_t TOUCH_BEEP_AMPLITUDE = 12000;
     constexpr float TOUCH_BEEP_GAIN = 0.65f;
     constexpr size_t AUDIO_SAMPLES_PER_UPDATE = 256;
+    constexpr char TOUCH_BEEP_WAV_PATH[] = "/beep_sound.wav";
 
     volatile bool playing = false;
     volatile bool pomodoroBeepPending = false;
     volatile bool screenChangeBeepPending = false;
     volatile bool touchBeepPending = false;
+    volatile bool touchBeepStopRequested = false;
     bool pomodoroBeepActive = false;
     bool screenChangeBeepActive = false;
     bool touchBeepActive = false;
     bool screenChangeGainReduced = false;
-    bool touchBeepGainReduced = false;
-    bool touchAudioWarningLogged = false;
     bool audioReady = false;
     bool outputStarted = false;
     bool quranActive = false;
@@ -140,12 +139,19 @@ namespace {
     unsigned long alarmStartedMs = 0;
     unsigned long pomodoroBeepStartedMs = 0;
     unsigned long screenChangeBeepStartedMs = 0;
-    unsigned long touchBeepStartedMs = 0;
     uint32_t samplePhase = 0;
 
     AudioOutputI2S *out = nullptr;
     HttpsAudioSource *quranSource = nullptr;
     AudioGeneratorMP3 *quranDecoder = nullptr;
+    File touchBeepFile;
+    uint32_t touchBeepSampleRate = 0;
+    uint32_t touchBeepDataBytesRemaining = 0;
+    uint16_t touchBeepChannels = 0;
+    uint16_t touchBeepBlockAlign = 0;
+    int16_t touchBeepPendingLeft = 0;
+    int16_t touchBeepPendingRight = 0;
+    bool touchBeepSamplePending = false;
 
     bool startI2SOutput() {
         if (!out) return false;
@@ -158,6 +164,123 @@ namespace {
     float getTouchBeepGain() {
         return static_cast<float>(currentVolume) / 100.0f *
                TOUCH_BEEP_GAIN;
+    }
+
+    uint16_t readLittleEndian16(const uint8_t* bytes) {
+        return static_cast<uint16_t>(bytes[0]) |
+               (static_cast<uint16_t>(bytes[1]) << 8);
+    }
+
+    uint32_t readLittleEndian32(const uint8_t* bytes) {
+        return static_cast<uint32_t>(bytes[0]) |
+               (static_cast<uint32_t>(bytes[1]) << 8) |
+               (static_cast<uint32_t>(bytes[2]) << 16) |
+               (static_cast<uint32_t>(bytes[3]) << 24);
+    }
+
+    void stopTouchBeep() {
+        if (touchBeepFile) touchBeepFile.close();
+        touchBeepActive = false;
+        touchBeepDataBytesRemaining = 0;
+        touchBeepSamplePending = false;
+    }
+
+    bool startTouchBeep() {
+        touchBeepFile = LittleFS.open(TOUCH_BEEP_WAV_PATH, "r");
+        if (!touchBeepFile || touchBeepFile.size() < 12) {
+            Serial.printf("[AZAN] Touch sound %s is missing or empty; upload the LittleFS image.\n",
+                          TOUCH_BEEP_WAV_PATH);
+            stopTouchBeep();
+            return false;
+        }
+
+        uint8_t riffHeader[12];
+        if (touchBeepFile.read(riffHeader, sizeof(riffHeader)) !=
+                sizeof(riffHeader) ||
+            memcmp(riffHeader, "RIFF", 4) != 0 ||
+            memcmp(riffHeader + 8, "WAVE", 4) != 0) {
+            Serial.println("[AZAN] Touch sound is not a valid RIFF/WAVE file.");
+            stopTouchBeep();
+            return false;
+        }
+
+        const uint32_t fileSize = touchBeepFile.size();
+        uint32_t offset = sizeof(riffHeader);
+        uint32_t dataOffset = 0;
+        uint16_t audioFormat = 0;
+        uint16_t bitsPerSample = 0;
+        bool formatFound = false;
+        while (offset <= fileSize && fileSize - offset >= 8) {
+            if (!touchBeepFile.seek(offset)) break;
+            uint8_t chunkHeader[8];
+            if (touchBeepFile.read(chunkHeader, sizeof(chunkHeader)) !=
+                sizeof(chunkHeader)) {
+                break;
+            }
+
+            const uint32_t chunkSize = readLittleEndian32(chunkHeader + 4);
+            const uint32_t chunkDataOffset = offset + sizeof(chunkHeader);
+            if (chunkDataOffset > fileSize ||
+                chunkSize > fileSize - chunkDataOffset) {
+                break;
+            }
+
+            if (memcmp(chunkHeader, "fmt ", 4) == 0) {
+                uint8_t format[16];
+                if (chunkSize < sizeof(format) ||
+                    touchBeepFile.read(format, sizeof(format)) !=
+                        sizeof(format)) {
+                    break;
+                }
+                audioFormat = readLittleEndian16(format);
+                touchBeepChannels = readLittleEndian16(format + 2);
+                touchBeepSampleRate = readLittleEndian32(format + 4);
+                touchBeepBlockAlign = readLittleEndian16(format + 12);
+                bitsPerSample = readLittleEndian16(format + 14);
+                formatFound = true;
+            } else if (memcmp(chunkHeader, "data", 4) == 0) {
+                dataOffset = chunkDataOffset;
+                touchBeepDataBytesRemaining = chunkSize;
+            }
+
+            const uint32_t paddedChunkSize =
+                chunkSize + (chunkSize & 1U);
+            if (paddedChunkSize < chunkSize ||
+                paddedChunkSize > fileSize - chunkDataOffset) {
+                break;
+            }
+            offset = chunkDataOffset + paddedChunkSize;
+        }
+
+        if (!formatFound || !dataOffset || audioFormat != 1 ||
+            bitsPerSample != 16 ||
+            (touchBeepChannels != 1 && touchBeepChannels != 2) ||
+            touchBeepSampleRate < 8000 || touchBeepSampleRate > 48000 ||
+            touchBeepBlockAlign != touchBeepChannels * sizeof(int16_t) ||
+            touchBeepDataBytesRemaining < touchBeepBlockAlign) {
+            Serial.println("[AZAN] Touch WAV must contain 16-bit PCM mono or stereo audio.");
+            stopTouchBeep();
+            return false;
+        }
+        touchBeepDataBytesRemaining -=
+            touchBeepDataBytesRemaining % touchBeepBlockAlign;
+        if (!touchBeepFile.seek(dataOffset) ||
+            !startI2SOutput() ||
+            !out->SetRate(touchBeepSampleRate) ||
+            !out->SetBitsPerSample(16) ||
+            !out->SetChannels(2)) {
+            Serial.println("[AZAN] Could not configure I2S for touch WAV playback.");
+            outputStarted = false;
+            stopTouchBeep();
+            return false;
+        }
+        outputStarted = true;
+        out->SetGain(getTouchBeepGain());
+        touchBeepActive = true;
+        Serial.printf("[AZAN] Playing touch WAV (%u Hz, %u channel(s)).\n",
+                      static_cast<unsigned>(touchBeepSampleRate),
+                      static_cast<unsigned>(touchBeepChannels));
+        return true;
     }
 
     float getScreenChangeBeepGain() {
@@ -371,6 +494,7 @@ bool play(PrayerName prayer) {
     }
 
     stopQuran();
+    touchBeepStopRequested = true;
     if (!startI2SOutput()) {
         Serial.println("[AZAN] Could not restart I2S output.");
         return false;
@@ -383,7 +507,6 @@ bool play(PrayerName prayer) {
     screenChangeBeepPending = false;
     screenChangeBeepActive = false;
     touchBeepPending = false;
-    touchBeepActive = false;
     playing = true;
     return true;
 }
@@ -462,6 +585,17 @@ void update() {
         }
     }
 
+    if (touchBeepStopRequested) {
+        touchBeepStopRequested = false;
+        if (touchBeepFile) {
+            stopTouchBeep();
+            out->SetGain(static_cast<float>(currentVolume) / 100.0f);
+            if (playing && !startI2SOutput()) {
+                Serial.println("[AZAN] Could not restart I2S after interrupting touch WAV.");
+            }
+        }
+    }
+
     if (quranActive && quranDecoder) {
         if (!quranDecoder->loop()) {
             Serial.println("[QURAN] Surah stream finished.");
@@ -470,23 +604,56 @@ void update() {
         return;
     }
 
+    if (touchBeepActive) {
+        for (size_t i = 0; i < AUDIO_SAMPLES_PER_UPDATE; ++i) {
+            if (!touchBeepSamplePending) {
+                if (touchBeepDataBytesRemaining < touchBeepBlockAlign) {
+                    Serial.println("[AZAN] Touch WAV playback finished.");
+                    stopTouchBeep();
+                    out->SetRate(AMP_SAMPLE_RATE);
+                    out->SetGain(static_cast<float>(currentVolume) / 100.0f);
+                    break;
+                }
+
+                uint8_t sampleBytes[4];
+                if (touchBeepFile.read(sampleBytes, touchBeepBlockAlign) !=
+                    touchBeepBlockAlign) {
+                    Serial.println("[AZAN] Could not read the next touch WAV sample.");
+                    stopTouchBeep();
+                    out->SetRate(AMP_SAMPLE_RATE);
+                    out->SetGain(static_cast<float>(currentVolume) / 100.0f);
+                    break;
+                }
+                touchBeepPendingLeft = static_cast<int16_t>(
+                    readLittleEndian16(sampleBytes));
+                touchBeepPendingRight = touchBeepChannels == 1
+                    ? touchBeepPendingLeft
+                    : static_cast<int16_t>(
+                        readLittleEndian16(sampleBytes + sizeof(int16_t)));
+                touchBeepSamplePending = true;
+            }
+
+            int16_t sample[2] = {
+                touchBeepPendingLeft, touchBeepPendingRight
+            };
+            if (!out->ConsumeSample(sample)) return;
+            touchBeepDataBytesRemaining -= touchBeepBlockAlign;
+            touchBeepSamplePending = false;
+        }
+        if (touchBeepActive) return;
+    }
+
     if (touchBeepPending && !playing && !pomodoroBeepActive &&
         !screenChangeBeepActive && !touchBeepActive &&
         !quranActive && !quranStarting && !quranDecoder && !quranSource &&
         !quranStopRequested) {
         touchBeepPending = false;
-        if (!startI2SOutput()) {
-            Serial.println("[AZAN] Could not restart I2S output for touch feedback.");
-        } else {
-            out->SetGain(getTouchBeepGain());
-            touchBeepGainReduced = true;
-            touchBeepActive = true;
-            touchBeepStartedMs = millis();
-            samplePhase = 0;
-        }
+        startTouchBeep();
     } else if (screenChangeBeepPending && !playing && !pomodoroBeepActive &&
         !screenChangeBeepActive) {
         screenChangeBeepPending = false;
+        out->SetGain(getScreenChangeBeepGain());
+        screenChangeGainReduced = true;
         screenChangeBeepActive = true;
         screenChangeBeepStartedMs = millis();
         samplePhase = 0;
@@ -497,8 +664,7 @@ void update() {
         pomodoroBeepStartedMs = millis();
         samplePhase = 0;
     }
-    if (!playing && !pomodoroBeepActive && !screenChangeBeepActive &&
-        !touchBeepActive) return;
+    if (!playing && !pomodoroBeepActive && !screenChangeBeepActive) return;
 
     const unsigned long now = millis();
     if (pomodoroBeepActive &&
@@ -509,27 +675,17 @@ void update() {
         now - screenChangeBeepStartedMs >= SCREEN_CHANGE_BEEP_LENGTH_MS) {
         screenChangeBeepActive = false;
     }
-    if (touchBeepActive &&
-        now - touchBeepStartedMs >= TOUCH_BEEP_LENGTH_MS) {
-        touchBeepActive = false;
-    }
     if (screenChangeGainReduced && !screenChangeBeepActive &&
         !screenChangeBeepPending && !touchBeepActive &&
         !touchBeepPending) {
         out->SetGain(static_cast<float>(currentVolume) / 100.0f);
         screenChangeGainReduced = false;
     }
-    if (touchBeepGainReduced && !touchBeepActive && !touchBeepPending &&
-        !screenChangeBeepActive && !screenChangeBeepPending) {
-        out->SetGain(static_cast<float>(currentVolume) / 100.0f);
-        touchBeepGainReduced = false;
-    }
     const bool beepOn = playing
         ? isBeepOn(now - alarmStartedMs)
-        : (pomodoroBeepActive || screenChangeBeepActive || touchBeepActive);
+        : (pomodoroBeepActive || screenChangeBeepActive);
     const int16_t amplitude = screenChangeBeepActive
-        ? SCREEN_CHANGE_BEEP_AMPLITUDE
-        : (touchBeepActive ? TOUCH_BEEP_AMPLITUDE : BEEP_AMPLITUDE);
+        ? SCREEN_CHANGE_BEEP_AMPLITUDE : BEEP_AMPLITUDE;
     const uint32_t phaseIncrement =
         (uint32_t)(((uint64_t)BEEP_FREQUENCY_HZ << 32) / AMP_SAMPLE_RATE);
 
@@ -556,7 +712,6 @@ void stop() {
     screenChangeBeepPending = false;
     screenChangeBeepActive = false;
     touchBeepPending = false;
-    touchBeepActive = false;
     Serial.println("[AZAN] Alarm stopped.");
 }
 
@@ -584,17 +739,12 @@ void playScreenChangeBeep() {
         Serial.println("[AZAN] Could not restart I2S output for screen-change beep.");
         return;
     }
-    out->SetGain(getScreenChangeBeepGain());
-    screenChangeGainReduced = true;
     screenChangeBeepPending = true;
 }
 
 void playTouchBeep() {
     if (!audioReady) {
-        if (!touchAudioWarningLogged) {
-            Serial.println("[AZAN] Touch feedback unavailable: I2S audio is not initialized.");
-            touchAudioWarningLogged = true;
-        }
+        Serial.println("[AZAN] Touch feedback unavailable: I2S audio is not initialized.");
         return;
     }
     if (playing || quranActive || quranStarting) return;

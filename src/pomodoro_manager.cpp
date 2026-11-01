@@ -137,17 +137,22 @@ void reset(PomodoroState& state) {
 }
 
 void pauseForAzan(PomodoroState& state) {
-    if (state.phase != POMODORO_IDLE && state.phase != POMODORO_PAUSED) {
-        state.savedPhase = state.phase;
-        state.pausedElapsedMs = millis() - state.phaseStartMs;
-        state.phase = POMODORO_PAUSED;
-        state.pausedByAzan = true;
-        Serial.println("[POMODORO] Paused for azan.");
+    if (state.phase == POMODORO_WAITING_FOR_BREAK ||
+        state.phase == POMODORO_IDLE ||
+        state.phase == POMODORO_PAUSED) {
+        return;
     }
+
+    state.savedPhase = state.phase;
+    state.pausedElapsedMs = millis() - state.phaseStartMs;
+    state.phase = POMODORO_PAUSED;
+    state.pausedByAzan = true;
+    Serial.println("[POMODORO] Paused for azan.");
 }
 
 void resumeFromAzan(PomodoroState& state) {
-    if (state.pausedByAzan && state.phase == POMODORO_PAUSED) {
+    if (state.pausedByAzan && state.phase == POMODORO_PAUSED &&
+        state.savedPhase != POMODORO_WAITING_FOR_BREAK) {
         state.phase = state.savedPhase;
         state.phaseStartMs = millis() - state.pausedElapsedMs;
         state.pausedByAzan = false;

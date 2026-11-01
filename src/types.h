@@ -43,6 +43,7 @@ struct NextPrayerInfo {
     int32_t     remainingSeconds;    // Seconds left to pray current prayer (window)
     bool        windowOpen;          // Is a prayer window currently open?
     PrayerName  currentPrayer;       // Which prayer window is currently open
+    PrayerTime  windowEndTime;       // Local time the current prayer window ends
 };
 
 struct ProhibitedWindow {
