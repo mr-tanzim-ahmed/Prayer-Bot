@@ -79,27 +79,108 @@ The firmware uses focused C++ managers for feature logic and separate modules fo
 ### Project layout and module boundaries
 
 ```text
-include/
-  core/                    Shared configuration, types, and local secrets
-  audio/                   Embedded audio assets
-  managers/                Public manager interfaces, grouped by responsibility
-    audio/                 Azan and voice/audio features
-    device/                Buttons, display, sensors, and I2C
-    diagnostics/           Logging and diagnostics
-    network/               Wi-Fi and weather services
-    prayer/                Prayer times and Islamic calendar
-    productivity/          Pomodoro timer and statistics
-    storage/               LittleFS settings, files, and caches
-    ui/                    Screen navigation and routing
-    web/                   Dashboard and HTTPS server interfaces
-  network/                 Outbound network clients and trust roots
-  screens/                 OLED screen interfaces
-  web/                     Dashboard assets
-src/
-  main.cpp                 Startup, task creation, and dependency wiring
-  managers/                Implementations mirroring include/managers/
-  screens/                 OLED screen implementations
-data/                      LittleFS upload files; local certificates stay untracked
+Prayer-Bot/
+|-- include/                         Public headers and interfaces
+|   |-- audio/
+|   |   `-- touch_beep_audio.h
+|   |-- core/
+|   |   |-- config.h
+|   |   |-- secrets.h.example
+|   |   `-- types.h
+|   |-- managers/                    Manager interfaces grouped by responsibility
+|   |   |-- audio/
+|   |   |   |-- azan_manager.h
+|   |   |   `-- voice_manager.h
+|   |   |-- device/
+|   |   |   |-- button_handler.h
+|   |   |   |-- compass_manager.h
+|   |   |   |-- display_manager.h
+|   |   |   |-- i2c_bus.h
+|   |   |   `-- shake_detector.h
+|   |   |-- diagnostics/
+|   |   |   `-- logger.h
+|   |   |-- network/
+|   |   |   |-- weather_manager.h
+|   |   |   `-- wifi_manager.h
+|   |   |-- prayer/
+|   |   |   |-- calendar_manager.h
+|   |   |   `-- prayer_manager.h
+|   |   |-- productivity/
+|   |   |   |-- pomodoro_manager.h
+|   |   |   `-- pomodoro_stats.h
+|   |   |-- storage/
+|   |   |   |-- cache_manager.h
+|   |   |   `-- storage_manager.h
+|   |   |-- ui/
+|   |   |   `-- screen_router.h
+|   |   `-- web/
+|   |       |-- https_server_manager.h
+|   |       `-- web_server_manager.h
+|   |-- network/
+|   |   `-- https_client.h
+|   |-- screens/                     OLED screen interfaces
+|   |   |-- all_prayers_screen.h
+|   |   |-- clock_calendar_screen.h
+|   |   |-- dhikr_screen.h
+|   |   |-- pomodoro_screen.h
+|   |   |-- prayer_focus_screen.h
+|   |   |-- qibla_screen.h
+|   |   |-- screen_ui.h
+|   |   |-- surah_screen.h
+|   |   |-- weather_icons.h
+|   |   `-- weather_screen.h
+|   `-- web/
+|       `-- dashboard_html.h
+|-- src/                              Firmware implementations
+|   |-- main.cpp                      Startup, task creation, and dependency wiring
+|   |-- managers/                     Implementations matching include/managers/
+|   |   |-- audio/
+|   |   |   |-- azan_manager.cpp
+|   |   |   `-- voice_manager.cpp
+|   |   |-- device/
+|   |   |   |-- button_handler.cpp
+|   |   |   |-- compass_manager.cpp
+|   |   |   |-- display_manager.cpp
+|   |   |   |-- i2c_bus.cpp
+|   |   |   `-- shake_detector.cpp
+|   |   |-- diagnostics/
+|   |   |   `-- logger.cpp
+|   |   |-- network/
+|   |   |   |-- weather_manager.cpp
+|   |   |   `-- wifi_manager.cpp
+|   |   |-- prayer/
+|   |   |   |-- calendar_manager.cpp
+|   |   |   `-- prayer_manager.cpp
+|   |   |-- productivity/
+|   |   |   |-- pomodoro_manager.cpp
+|   |   |   `-- pomodoro_stats.cpp
+|   |   |-- storage/
+|   |   |   |-- cache_manager.cpp
+|   |   |   `-- storage_manager.cpp
+|   |   |-- ui/
+|   |   |   `-- screen_router.cpp
+|   |   `-- web/
+|   |       |-- https_server_manager.cpp
+|   |       `-- web_server_manager.cpp
+|   `-- screens/                     OLED screen implementations
+|       |-- all_prayers_screen.cpp
+|       |-- clock_calendar_screen.cpp
+|       |-- dhikr_screen.cpp
+|       |-- pomodoro_screen.cpp
+|       |-- prayer_focus_screen.cpp
+|       |-- qibla_screen.cpp
+|       |-- surah_screen.cpp
+|       `-- weather_screen.cpp
+|-- data/                             LittleFS assets; local certificates/keys are ignored
+|   |-- beep_sound.mp3
+|   `-- PrayerBot_Arrow.svg
+|-- Prayer-Bot.ino                    Arduino IDE entry point
+|-- platformio.ini                    PlatformIO board and dependency configuration
+|-- README.md
+|-- SETUP_GUIDE.md
+|-- HARDWARE_CONNECTIONS.md
+|-- CIRCUIT.md
+`-- circuit_image.svg
 ```
 
 Shared state and screen IDs live in [`include/core/types.h`](include/core/types.h). Each manager's public interface belongs in `include/managers/<area>/`; its implementation belongs in the matching `src/managers/<area>/` folder. This keeps headers discoverable for DIY changes while allowing each domain to grow without a flat manager directory. `main.cpp` is the composition root: it initializes modules, passes shared settings, and creates FreeRTOS tasks. Screen modules own presentation, while managers own hardware access, feature behavior, or external services.
