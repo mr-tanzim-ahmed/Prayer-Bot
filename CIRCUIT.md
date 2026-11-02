@@ -2,7 +2,7 @@
 
 [📄 **README**](README.md) | [🔧 **Hardware Connections**](HARDWARE_CONNECTIONS.md) | [📐 **Circuit Diagram**](CIRCUIT.md)
 
-Prayer-Bot is built around a typical ESP32-WROOM-32 DevKit with a CH340 USB-C interface. The OLED display, MPU6050, and HMC5883L or QMC5883L compass share an I²C bus; the MAX98357A speaker amplifier and optional INMP441 microphone use separate I²S interfaces.
+Prayer-Bot is built around an ESP32 Dev Board with a CH340 USB-to-serial interface. The OLED display, MPU6050, and HMC5883L or QMC5883L compass share an I²C bus; the MAX98357A speaker amplifier and optional INMP441 microphone use separate I²S interfaces.
 
 ## Circuit diagram
 
@@ -38,7 +38,7 @@ The illustration is a wiring overview. Use the pin table below and [HARDWARE_CON
 
 ## Power and assembly notes
 
-- Power the ESP32 DevKit through USB-C or a regulated supply appropriate for the development board. Use its regulated 3.3 V rail for the logic modules listed above.
+- Power the ESP32 Dev Board through its USB connector or a regulated supply appropriate for the development board. Use its regulated 3.3 V rail for the logic modules listed above.
 - Connect all module grounds to a common ground. Do not connect the MAX98357A speaker output terminals to ground or to each other.
 - Keep I²C wires short. Use 3.3 V-compatible I²C pull-ups; many breakout boards already include them.
 - All three I²C devices use GPIO 21 (SDA) and GPIO 22 (SCL). The firmware initializes the OLED and MPU6050 and reads either supported compass chip for the Qibla screen.

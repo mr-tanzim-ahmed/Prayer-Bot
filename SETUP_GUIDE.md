@@ -27,7 +27,7 @@ This guide covers installing the tools, building and uploading the firmware from
 
 ### Board and hardware
 
-- ESP32-WROOM-32 DevKit with a USB data cable (some cables provide power only).
+- ESP32 Dev Board (CH340) with a USB data cable (some cables provide power only).
 - Display, touch sensor, motion sensor, amplifier, and speaker listed in the [hardware guide](HARDWARE_CONNECTIONS.md).
 - An INMP441 microphone only for voice selection on the device; dashboard voice input uses the phone or computer microphone.
 - An HMC5883L or QMC5883L compass is required for the Qibla screen.
@@ -82,7 +82,7 @@ pio run --target upload --upload-port COM5
 
 The serial log prints the setup dashboard address (`10.77.0.1`) and, after router setup, the home Wi-Fi address. HTTP is available on both interfaces; HTTPS is available on both when the HTTPS certificate files are installed and the listener starts.
 
-> **Flash layout:** The 4 MB ESP32-WROOM target uses a single 2 MB firmware slot and about 1.875 MB for LittleFS. This provides room for the current firmware and persistent files but does not support A/B OTA updates. Changing partition layouts changes the LittleFS offset; back up settings and Wi-Fi credentials, then re-upload filesystem contents.
+> **Flash layout:** The 4 MB ESP32 target uses a single 2 MB firmware slot and about 1.875 MB for LittleFS. This provides room for the current firmware and persistent files but does not support A/B OTA updates. Changing partition layouts changes the LittleFS offset; back up settings and Wi-Fi credentials, then re-upload filesystem contents.
 
 ## Touch feedback sound
 
@@ -159,6 +159,6 @@ Previously fetched prayer data may be available from cache, but the timetable re
 
 ### I use a different ESP32 board
 
-The included PlatformIO configuration targets an ESP32-WROOM-32 DevKit using the `esp32dev` profile. Verify flash size, pin availability, and voltage compatibility for your specific board before using it.
+The included PlatformIO configuration targets an ESP32 Dev Board (CH340) using the `esp32dev` profile. Verify flash size, pin availability, and voltage compatibility for your specific board before using it.
 
 For physical connections and sensor troubleshooting, see the [hardware guide](HARDWARE_CONNECTIONS.md).

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="760" viewBox="0 0 1000 760" role="img" aria-labelledby="title description">
   <title id="title">Prayer-Bot ESP32 DevKit wiring overview</title>
-  <desc id="description">ESP32-WROOM-32 DevKit pin map for OLED, MPU6050 and HMC5883L or QMC5883L Qibla compass on shared I2C, touch input, I2S amplifier, and microphone.</desc>
+  <desc id="description">ESP32 Dev Board (CH340) pin map for OLED, MPU6050 and HMC5883L or QMC5883L Qibla compass on shared I2C, touch input, I2S amplifier, and microphone.</desc>
   <style>
     text { font-family: Arial, sans-serif; fill: #18212f; }
     .title { font-size: 28px; font-weight: 700; }
@@ -15,11 +15,11 @@
     .light-warning { fill: #fbbf24; }
   </style>
   <rect width="1000" height="760" fill="#f3f6fa"/>
-  <text x="40" y="48" class="title">Prayer-Bot | ESP32 DevKit (CH340 USB-C)</text>
-  <text x="40" y="76" class="subtitle">Wiring overview for the ESP32-WROOM-32 DevKit. All modules share GND.</text>
+  <text x="40" y="48" class="title">Prayer-Bot | ESP32 Dev Board (CH340)</text>
+  <text x="40" y="76" class="subtitle">Wiring overview for the ESP32 Dev Board. All modules share GND.</text>
 
   <rect x="45" y="115" width="280" height="570" rx="18" fill="#18324d"/>
-  <text x="185" y="155" text-anchor="middle" class="heading light-text">ESP32-WROOM-32</text>
+  <text x="185" y="155" text-anchor="middle" class="heading light-text">ESP32 Dev Board</text>
   <text x="185" y="178" text-anchor="middle" class="small light-muted">DevKit board</text>
   <g>
     <rect x="65" y="210" width="112" height="34" rx="6" fill="#2563eb"/><text x="121" y="232" text-anchor="middle" class="pin">GPIO 21 SDA</text>
@@ -66,7 +66,7 @@
 
   <rect x="675" y="485" width="280" height="105" rx="14" class="card"/>
   <text x="700" y="520" class="heading">Power and grounding</text>
-  <text x="700" y="550" class="body">USB-C powers the DevKit</text>
+  <text x="700" y="550" class="body">USB powers the Dev Board</text>
   <text x="700" y="573" class="small">Connect all component GND pins together.</text>
 
   <text x="40" y="725" class="small">Check the actual compass IC and board voltage requirements before powering. GY-271/GY-273 labels can vary by seller.</text>

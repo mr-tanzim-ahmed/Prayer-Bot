@@ -2,7 +2,7 @@
 
 [📄 **README**](README.md) | [🔧 **Hardware Connections**](HARDWARE_CONNECTIONS.md) | [📐 **Circuit Diagram**](CIRCUIT.md) | [📜 **License**](LICENSE)
 
-This document describes the GPIO wiring between a typical **ESP32-WROOM-32 DevKit (CH340 USB-C)** and the peripheral modules used in the project.
+This document describes the GPIO wiring between an **ESP32 Dev Board (CH340)** and the peripheral modules used in the project.
 
 | Component | Component Pin | ESP32 Connection | Notes |
 |-----------|--------------|---------------------|-------|
@@ -30,7 +30,7 @@ This document describes the GPIO wiring between a typical **ESP32-WROOM-32 DevKi
 | | SD (data output) | **GPIO 18** | Audio data from mic to ESP32. |
 | | L/R | **GND** | Left‑channel selection. |
 | | VDD / GND | **3.3 V / GND** | Power the microphone. |
-| **Power Supply** | USB‑C / VIN | **5 V** | Provide 5 V via the board's USB‑C connector or a regulated supply. |
+| **Power Supply** | USB / VIN | **5 V** | Provide 5 V via the board's USB connector or a regulated supply. |
 | | 3V3 | **3.3 V** | Use only for modules rated for 3.3 V; keep the total load within the board regulator's rating. |
 | | GND | Ground | All components share this ground. |
 
@@ -49,7 +49,7 @@ The wiring pin assignments in the supplied diagnostic match the firmware: I²C S
 
 Mount the HMC5883L or QMC5883L flat, with its X axis toward the display's right edge and its Y axis toward the top edge. On first use, open the Qibla screen and rotate the device flat through a full 360° turn; a figure-eight motion helps expose compass hard-iron offsets. The calibration is stored in `/compass_cal.json`; long-press the touch sensor on the Qibla screen to recalibrate. Keep the compass away from the speaker, amplifier, motors, magnets, and ferrous metal. The bearing assumes zero magnetic declination, so it is an approximation; tilt, soft-iron distortion, and nearby magnetic interference can cause additional error. Firmware auto-detects HMC5883L (`0x1E`) and QMC5883L (`0x0D`) modules; other compass chips are not supported.
 
-The diagnostic's alternate OLED and MPU addresses are not supported by the current firmware configuration. Use OLED `0x3C` and MPU6050 `0x68` for the project firmware, or update and test the firmware before using modules configured at alternate addresses. The ESP32-WROOM-32 target has no PSRAM by default; dashboard audio uploads fall back to internal RAM and may be rejected if a sufficiently large contiguous block is unavailable. An I²C response or successful I²S setup does not prove a sensor's measurements are accurate or that speaker output is electrically safe.
+The diagnostic's alternate OLED and MPU addresses are not supported by the current firmware configuration. Use OLED `0x3C` and MPU6050 `0x68` for the project firmware, or update and test the firmware before using modules configured at alternate addresses. The ESP32 Dev Board target has no PSRAM by default; dashboard audio uploads fall back to internal RAM and may be rejected if a sufficiently large contiguous block is unavailable. An I²C response or successful I²S setup does not prove a sensor's measurements are accurate or that speaker output is electrically safe.
 
 The touch confirmation plays an MP3 embedded in program flash and sends it over I²S to the MAX98357A (BCLK GPIO 26, LRC GPIO 25, DIN GPIO 27), then to the speaker. No filesystem upload is needed for touch feedback. It is played at reduced gain and skipped while Quran audio is active; an Azan alarm interrupts playback.
 
@@ -98,6 +98,6 @@ If the amplifier or its wiring sparks, disconnect its power and the speaker; do 
 - **I2S Amplifier**: GPIO 26 (BCLK) / GPIO 25 (LRC) / GPIO 27 (DIN).
 - **I2S Microphone**: GPIO 16 (SCK) / GPIO 17 (WS) / GPIO 18 (SD).
 - **Touch Sensor**: GPIO 4 (single TTP223B).
-- **Power**: 5 V via USB‑C, 3.3 V regulator for logic.
+- **Power**: 5 V via the board's USB connector, 3.3 V regulator for logic.
 
 Follow this map when assembling your hardware on a breadboard or PCB. Firmware support is implemented for the OLED, MPU6050, HMC5883L, and QMC5883L compass.

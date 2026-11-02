@@ -4,7 +4,7 @@
 
 ### An open-source ESP32 prayer clock and Mumins Personal Assistant.
 
-**Board Specification:** Target hardware is **ESP32‑WROOM‑32 DevKit with CH340 USB‑C** interface.
+**Board Specification:** Target hardware is an **ESP32 Dev Board with a CH340 USB-to-serial interface**.
 
 Prayer-Bot brings prayer times, a Hijri calendar, weather, Quran audio, Dhikr, and Pomodoro focus sessions together in a DIY project you can build, understand, and customize.
 
@@ -193,7 +193,7 @@ These are the main parts used by the ESP32 prayer clock. The INMP441 microphone 
 
 | Part | Role | Required? |
 |---|---|---|
-| ESP32-WROOM-32 DevKit (CH340 USB-C) | Main controller, Wi-Fi, and storage | Yes |
+| ESP32 Dev Board (CH340) | Main controller, Wi-Fi, and storage | Yes |
 | 1.3-inch I²C SH1106 OLED | Device screens | Yes |
 | TTP223B capacitive touch sensor | Screen navigation and quick actions | Yes |
 | MPU6050 / GY-521 | Shake controls | Yes |
@@ -266,9 +266,9 @@ The OLED cycles through English transliterations and meanings; no Arabic font or
 
 ## 🧱 Firmware architecture and development notes
 
-- **Board:** PlatformIO uses the `esp32dev` profile for a typical ESP32-WROOM-32 DevKit. Board variants may differ in flash size and pin availability.
+- **Board:** PlatformIO uses the `esp32dev` profile for the ESP32 Dev Board (CH340). Board variants may differ in flash size and pin availability.
 - **Flash layout:** The 4 MB target uses `no_ota.csv`: one 2 MB firmware slot and about 1.875 MB for LittleFS. This preserves the current feature set but does not support A/B OTA updates. Changing from the default partition layout changes the LittleFS offset; back up settings and Wi-Fi credentials, then re-upload the LittleFS image after changing layouts.
-- **Memory:** The ESP32-WROOM-32 target has no PSRAM by default. Microphone I²S DMA buffers are sized for this target, and dashboard voice uploads use PSRAM when available with an internal-RAM fallback; very large uploads can still be rejected if the largest available memory block is too small.
+- **Memory:** The ESP32 Dev Board target has no PSRAM by default. Microphone I²S DMA buffers are sized for this target, and dashboard voice uploads use PSRAM when available with an internal-RAM fallback; very large uploads can still be rejected if the largest available memory block is too small.
 - **Framework and dependencies:** Arduino framework with dependency versions pinned in [`platformio.ini`](platformio.ini).
 - **Concurrency:** FreeRTOS tasks coordinate display rendering, networking, scheduling, audio, and voice features.
 - **Persistent data:** Settings, cached responses, and bounded Pomodoro history are stored in LittleFS. Prayer and weather cache files have expiry policies; interrupted atomic writes leave `.tmp` files that are cleaned at startup. Serial startup logs report filesystem usage. Back up device settings before replacing or erasing the filesystem.
