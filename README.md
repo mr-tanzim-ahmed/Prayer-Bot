@@ -2,18 +2,18 @@
 
 # Prayer-Bot
 
-### An open-source ESP32 prayer clock and Mumins Personal Assistant.
+### An open-source ESP32 prayer clock and personal assistant.
 
 **Board Specification:** Target hardware is an **ESP32 Dev Board with a CH340 USB-to-serial interface**.
 
-Prayer-Bot brings prayer times, a Hijri calendar, weather, Quran audio, Dhikr, and Pomodoro focus sessions together in a DIY project you can build, understand, and customize.
+Prayer-Bot brings prayer times, a Hijri calendar, weather, Quran audio, Dhikr, and Pomodoro focus sessions together in one DIY project. Build it, learn how it works, and make it your own.
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32-orange?logo=platformio)](https://platformio.org/)
 [![Version](https://img.shields.io/badge/version-1.0.1-blue)](https://github.com/mr-tanzim-ahmed/Prayer-Bot/releases/tag/v1.0.1)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2ea44f.svg)](LICENSE)
 [![Framework: Arduino](https://img.shields.io/badge/Framework-Arduino-00979D?logo=arduino&logoColor=white)](https://docs.platformio.org/en/latest/frameworks/arduino.html)
 
-[🚀 Setup guide](SETUP_GUIDE.md) · [✨ Features](#-features) · [🔧 Hardware guide](HARDWARE_CONNECTIONS.md) · [📐 Circuit diagram](CIRCUIT.md)
+[🚀 Build and setup guide](SETUP_GUIDE.md) · [🔧 Hardware and wiring](HARDWARE_CONNECTIONS.md) · [📐 Circuit diagram](CIRCUIT.md)
 
 <br>
 
@@ -25,9 +25,20 @@ Prayer-Bot brings prayer times, a Hijri calendar, weather, Quran audio, Dhikr, a
 
 ---
 
-## ✨ Features
+## Contents
 
-Prayer-Bot is a DIY **ESP32 prayer clock and Mumins Personal Assistant**. Use its OLED and touch sensor on your desk, or open its local web dashboard from a phone or computer on the same network.
+- [What Prayer-Bot can do](#what-prayer-bot-can-do)
+- [Build and set up your device](#build-and-set-up-your-device)
+- [Explore the firmware](#explore-the-firmware)
+- [Hardware and wiring](#hardware-and-wiring)
+- [Online services and API keys](#online-services-and-api-keys)
+- [Use the device controls](#use-the-device-controls)
+- [Technical notes for developers](#technical-notes-for-developers)
+- [Contribute](#contribute)
+
+## What Prayer-Bot can do
+
+Prayer-Bot is a DIY **ESP32 prayer clock and personal assistant**. Use the OLED and touch sensor on your desk, or open the local web dashboard from a phone or computer connected to the same network.
 
 | On the device | In the web dashboard | Built for developers |
 |---|---|---|
@@ -37,33 +48,50 @@ Prayer-Bot is a DIY **ESP32 prayer clock and Mumins Personal Assistant**. Use it
 | ⏱️ Pomodoro focus timer and Dhikr counter | 🎧 Quran Surah requests by voice or text | 🔌 Aladhan, OpenWeatherMap, Gemini, and MP3Quran |
 | 🔊 Azan notification tone and Quran audio | 🕹️ Screen, timer, Dhikr, and audio controls | 🔐 API keys stay on the device |
 
-**Eight OLED screens:** Prayer Focus · All Prayers · Clock & Calendar · Qibla · Weather · Pomodoro · Dhikr · Quran.
+The device has eight OLED screens: Prayer Focus, All Prayers, Clock & Calendar, Qibla, Weather, Pomodoro, Dhikr, and Quran.
 
-The Qibla screen shows only a large, smoothed arrow that points toward Makkah in real time; it does not display bearing or turn angles. With the default Dhaka coordinates it uses a 277.6° bearing; other dashboard locations use a bearing calculated from their latitude and longitude. Status guidance appears when the compass, location, or calibration is not ready. Set another area in the dashboard or use its permission-based device-location option to update the bearing. The screen uses an HMC5883L or QMC5883L compass. On first use, keep the device level and slowly rotate it through a full 360° turn; calibration is saved only after readings cover all directions. A figure-eight can help expose the sensor to different directions, but keep the module level while calibrating. Long-press the touch sensor on the Qibla screen to recalibrate. The bearing uses zero magnetic declination and is approximate; this firmware does not compensate for tilting the device. Keep the compass away from speakers, motors, magnets, and metal; magnetic interference, nearby electronics, or an incorrectly oriented module can make the direction inaccurate.
+<details>
+<summary><strong>Qibla screen: calibration and accuracy</strong></summary>
 
-Touch feedback decodes the embedded MP3 in flash and plays it over I2S at the configured device volume; no filesystem upload is needed for the sound. Short notification and prayer-alarm tones use a sine waveform with a brief fade to reduce the harshness and clicks of abrupt square-wave tones. Touch feedback is skipped during Quran playback and interrupted by the Azan alarm. When first testing the MAX98357A and speaker, start at a low device volume and raise it gradually; never connect either speaker terminal to ground.
+The Qibla screen uses an HMC5883L or QMC5883L compass and shows a smoothed arrow toward Makkah. It does not display a bearing or turn angle. At the default Dhaka coordinates, the calculated bearing is 277.6°; other locations use their configured latitude and longitude. The screen provides guidance if the compass, location, or calibration is not ready.
 
-The setup hotspot SSID is **`Prayer-Bot`** (password: **`12345678`**) at default IP **`http://10.77.0.1`**. Connecting from a smartphone or laptop automatically triggers a captive-portal prompt ("Sign in to network") that opens the dashboard immediately. The dashboard is also directly accessible in any browser at `http://10.77.0.1` (or `https://10.77.0.1` when certificates are installed). Once connected to home Wi-Fi, the router-side IP remains assigned by your router DHCP.
+On first use, keep the device level and slowly rotate it through a full 360° turn. Calibration is saved only after readings cover all directions. A figure-eight can help expose the sensor to different directions, but keep it level while calibrating. Long-press the touch sensor on the Qibla screen to recalibrate. The bearing uses zero magnetic declination and is approximate; the firmware does not compensate for tilting the device. Keep the compass away from speakers, motors, magnets, and metal, as interference or incorrect sensor orientation can reduce accuracy. You can set a different location in the dashboard or use its permission-based device-location option.
 
-While **All Prayers** is selected, the OLED shows the five daily prayers in clear rows, with each prayer name on the left and its time on the right, for 3 seconds. It then shows Sahari end (Fajr) and Iftar (Maghrib) for 2 seconds. This 5-second cycle repeats until you advance to another screen.
+</details>
 
-The dashboard prayer schedule also shows Sahari end and Iftar times, using the day's Fajr and Maghrib times.
+<details>
+<summary><strong>Audio behavior and safe testing</strong></summary>
 
-The OLED startup screen presents a centered “Assalamualaikum” greeting and its translation, sized to fit within the display frame.
+Touch feedback plays an MP3 embedded in program flash, so it does not need a filesystem upload. Short notification and prayer-alarm tones use a faded sine waveform. Touch feedback is skipped during Quran playback and interrupted by the Azan alarm.
 
-> **Audio note:** The Azan alert is a repeating notification tone. Recorded Adhan audio is not included. The Quran assistant identifies Surah requests; it does not provide Quran translation, tafsir, or free-form Quran-text search.
+When testing the MAX98357A and speaker, start at a low device volume and raise it gradually. Never connect either speaker output terminal to ground.
 
-## Get started
+</details>
 
-For the complete VS Code and PlatformIO walkthrough (extension installation, secrets setup, firmware build/upload, Wi-Fi provisioning, dashboard access, and troubleshooting), follow the **[Prayer-Bot Setup Guide](SETUP_GUIDE.md)**.
+<details>
+<summary><strong>First connection: setup Wi-Fi</strong></summary>
 
-Before powering the board, review the [hardware connections](HARDWARE_CONNECTIONS.md) and [circuit diagram](CIRCUIT.md). PlatformIO installs the dependencies listed in [`platformio.ini`](platformio.ini) during the first build.
+The setup hotspot is **`Prayer-Bot`** (password: **`12345678`**) at **`http://10.77.0.1`**. A phone or laptop may show a captive-portal prompt when it connects; if it does not, open that address in a browser. Use `https://10.77.0.1` only after installing dashboard certificates. After you connect the device to home Wi-Fi, its router-side address is assigned by DHCP.
 
-## 🧭 Where to start in the code
+</details>
 
-The firmware uses focused C++ managers for feature logic and separate modules for the OLED screens. If you are new to the codebase, start with `src/main.cpp` to see how the device starts up and coordinates its FreeRTOS tasks. For a feature change, begin in the matching manager or screen module:
+While **All Prayers** is selected, the OLED shows the five daily prayers in rows for 3 seconds, then Sahari end (Fajr) and Iftar (Maghrib) for 2 seconds. This 5-second cycle repeats until you choose another screen. The dashboard schedule also shows Sahari end and Iftar using that day's Fajr and Maghrib times.
 
-| If you want to change… | Start here |
+At startup, the OLED displays a centered “Assalamualaikum” greeting and its translation.
+
+> **Audio note:** The Azan alert is a repeating notification tone; recorded Adhan audio is not included. The Quran assistant identifies Surah requests, but does not provide translations, tafsir, or free-form Quran-text search.
+
+## Build and set up your device
+
+Follow the **[Prayer-Bot Setup Guide](SETUP_GUIDE.md)** for the complete walkthrough: install VS Code and PlatformIO, configure optional secrets, build and upload the firmware, connect to Wi-Fi, and open the dashboard.
+
+Before powering the board, review the [hardware connections](HARDWARE_CONNECTIONS.md) and [circuit diagram](CIRCUIT.md). PlatformIO installs the dependencies in [`platformio.ini`](platformio.ini) during the first build.
+
+## Explore the firmware
+
+The firmware groups feature logic into C++ managers and keeps OLED presentation in separate screen modules. If you are new to the code, start with [`src/main.cpp`](src/main.cpp) to see how the device starts and coordinates its FreeRTOS tasks. To change a feature, find its area below:
+
+| To work on… | Start with… |
 |---|---|
 | Startup, task scheduling, or module coordination | [`src/main.cpp`](src/main.cpp) |
 | Pins, defaults, timing, or API endpoints | [`include/core/config.h`](include/core/config.h) |
@@ -76,7 +104,10 @@ The firmware uses focused C++ managers for feature logic and separate modules fo
 | Dashboard routes or HTTPS listener | [`include/managers/web/`](include/managers/web/), [`src/managers/web/`](src/managers/web/) |
 | OLED presentation and screen routing | [`src/screens/`](src/screens/), [`include/screens/`](include/screens/), [`src/managers/ui/screen_router.cpp`](src/managers/ui/screen_router.cpp) |
 
-### Project layout and module boundaries
+### Project layout
+
+<details>
+<summary><strong>Browse the source tree</strong></summary>
 
 ```text
 Prayer-Bot/
@@ -183,13 +214,15 @@ Prayer-Bot/
 `-- circuit_image.svg
 ```
 
-Shared state and screen IDs live in [`include/core/types.h`](include/core/types.h). Each manager's public interface belongs in `include/managers/<area>/`; its implementation belongs in the matching `src/managers/<area>/` folder. This keeps headers discoverable for DIY changes while allowing each domain to grow without a flat manager directory. `main.cpp` is the composition root: it initializes modules, passes shared settings, and creates FreeRTOS tasks. Screen modules own presentation, while managers own hardware access, feature behavior, or external services.
+</details>
 
-Persistent application data should go through [`StorageManager`](src/managers/storage/storage_manager.cpp); cache freshness and retention belong to [`CacheManager`](src/managers/storage/cache_manager.cpp). Keep outbound HTTP clients in `include/network/`, dashboard assets in `include/web/`, and generated or private filesystem assets in the ignored `data/` directory. When adding a feature, put its interface and implementation in the same responsibility area, update the caller includes, and add or update the feature screen when needed. Keep dependencies explicit, avoid duplicating shared state or storage logic, and update this map whenever a public path changes.
+Shared state and screen IDs live in [`include/core/types.h`](include/core/types.h). Each manager's public interface is in `include/managers/<area>/`, with its implementation in the matching `src/managers/<area>/` folder. `main.cpp` connects and initializes the modules and creates FreeRTOS tasks. Screen modules handle presentation; managers handle hardware, feature behavior, and external services.
 
-## 🧰 Hardware components and wiring
+Use [`StorageManager`](src/managers/storage/storage_manager.cpp) for persistent application data and [`CacheManager`](src/managers/storage/cache_manager.cpp) for cache freshness and retention. Outbound HTTP clients live in `include/network/`, dashboard assets in `include/web/`, and generated or private filesystem assets in the ignored `data/` directory. When you add a feature, put its interface and implementation in the right area, update its callers, and add or update a screen when needed. Keep dependencies explicit and update this map when public paths change.
 
-These are the main parts used by the ESP32 prayer clock. The INMP441 microphone is optional; it is needed only for voice selection on the device itself. Browser voice input uses the phone or computer microphone.
+## Hardware and wiring
+
+Here are the main parts used by the ESP32 prayer clock. The INMP441 microphone is optional and is only needed for on-device voice selection. Browser voice input uses the microphone on your phone or computer.
 
 | Part | Role | Required? |
 |---|---|---|
@@ -202,7 +235,7 @@ These are the main parts used by the ESP32 prayer clock. The INMP441 microphone 
 | INMP441 I²S microphone | On-device Surah voice selection | Optional |
 
 <details>
-<summary><strong>GPIO pin map</strong></summary>
+<summary><strong>GPIO pin map and wiring notes</strong></summary>
 
 | Signal | ESP32 GPIO |
 |---|---:|
@@ -220,15 +253,15 @@ See [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) for full wiring notes and
 
 </details>
 
-## Services and API keys
+## Online services and API keys
 
-Prayer schedules use Aladhan and do not require a personal API key. Weather and air-quality features need an optional OpenWeatherMap key; Gemini recognition of Quran requests needs an optional Gemini key. Store optional keys in the local, Git-ignored `include/core/secrets.h` file. See the [Setup Guide](SETUP_GUIDE.md#api-keys) for safe key setup and service details.
+Prayer schedules come from Aladhan and do not need a personal API key. Weather and air-quality features use an optional OpenWeatherMap key; Quran request recognition uses an optional Gemini key. Keep optional keys in the local, Git-ignored `include/core/secrets.h` file. The [Setup Guide](SETUP_GUIDE.md#api-keys) explains how to add them safely.
 
-Prayer schedules are fetched as a monthly calendar and cached on-device. A network connection is needed for the first fetch and later month refreshes; this is not a preloaded offline timetable. Weather and prayer data refresh when online. Default location: Dhaka, Bangladesh (23.8103, 90.4125), `Asia/Dhaka` (UTC+6).
+Prayer schedules are fetched as a monthly calendar and cached on the device. You need a network connection for the first fetch and when a new month is loaded; the timetable is not preloaded for offline use. Weather and prayer data refresh when the device is online. The default location is Dhaka, Bangladesh (23.8103, 90.4125), in `Asia/Dhaka` (UTC+6).
 
-## 🎛️ Touch, shake, and dashboard controls
+## Use the device controls
 
-Use the touch sensor for everyday controls, or use the dashboard when your phone or computer is on the same network as the device.
+Use the touch sensor for everyday actions, or open the dashboard from a phone or computer on the same network as the device.
 
 | What you do | What happens |
 |---|---|
@@ -239,7 +272,7 @@ Use the touch sensor for everyday controls, or use the dashboard when your phone
 | Dashboard controls | Select screens, control timer and Dhikr, and manage Quran playback |
 
 <details>
-<summary><strong>Pomodoro behavior and settings</strong></summary>
+<summary><strong>Pomodoro timer: defaults and behavior</strong></summary>
 
 - Defaults: **25-minute focus**, **5-minute short break**, **15-minute long break** after **4** focus cycles.
 - The touch-started break delay is configurable from **2 to 5 minutes**.
@@ -250,7 +283,7 @@ Use the touch sensor for everyday controls, or use the dashboard when your phone
 </details>
 
 <details>
-<summary><strong>Dhikr phrases</strong></summary>
+<summary><strong>Dhikr counter: phrases and meanings</strong></summary>
 
 | Phrase | Meaning |
 |---|---|
@@ -260,11 +293,11 @@ Use the touch sensor for everyday controls, or use the dashboard when your phone
 | Allahu Akbar | Allah is the Greatest |
 | Astaghfirullah | I seek Allah’s forgiveness |
 
-The OLED cycles through English transliterations and meanings; no Arabic font or image assets are required.
+The OLED cycles through English transliterations and meanings, so no Arabic font or image assets are needed.
 
 </details>
 
-## 🧱 Firmware architecture and development notes
+## Technical notes for developers
 
 - **Board:** PlatformIO uses the `esp32dev` profile for the ESP32 Dev Board (CH340). Board variants may differ in flash size and pin availability.
 - **Flash layout:** The 4 MB target uses `no_ota.csv`: one 2 MB firmware slot and about 1.875 MB for LittleFS. This preserves the current feature set but does not support A/B OTA updates. Changing from the default partition layout changes the LittleFS offset; back up settings and Wi-Fi credentials, then re-upload the LittleFS image after changing layouts.
@@ -274,13 +307,9 @@ The OLED cycles through English transliterations and meanings; no Arabic font or
 - **Persistent data:** Settings, cached responses, and bounded Pomodoro history are stored in LittleFS. Prayer and weather cache files have expiry policies; interrupted atomic writes leave `.tmp` files that are cleaned at startup. Serial startup logs report filesystem usage. Back up device settings before replacing or erasing the filesystem.
 - **JSON and web requests:** ArduinoJson handles service responses. Dashboard request bodies are size-limited and validated before settings are applied.
 
-## Setup help
+## Contribute
 
-For VS Code/PlatformIO installation, firmware upload, Wi-Fi, HTTPS, location configuration, and troubleshooting, see the **[Setup Guide](SETUP_GUIDE.md)**. For wiring and sensor checks, see [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md).
-
-## 🤝 Contributing
-
-Have an idea, found a bug, or want to improve the ESP32 prayer clock? Issues and pull requests are welcome. Before submitting a change, keep feature logic in the responsible manager or screen, follow the existing pin and configuration conventions, and update the README or wiring documentation when behavior changes.
+Have an idea, found a bug, or want to improve the project? Issues and pull requests are welcome. Keep feature logic in its responsible manager or screen, follow the existing pin and configuration conventions, and update the README or wiring guide when behavior changes.
 
 ---
 
