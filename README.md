@@ -15,11 +15,13 @@ Prayer-Bot brings prayer times, a Hijri calendar, weather, Quran audio, Dhikr, a
 
 [🚀 Build and setup guide](SETUP_GUIDE.md) · [🔧 Hardware and wiring](HARDWARE_CONNECTIONS.md) · [📐 Circuit diagram](CIRCUIT.md)
 
+**[Open the interactive circuit simulation in Cirkit Designer](https://app.cirkitdesigner.com/project/8c737eb1-cfbb-4785-aa51-3c7f796c5155)**
+
 <br>
 
-<a href="CIRCUIT.md"><img src="circuit_image.svg" width="420" alt="Prayer-Bot circuit overview"></a>
+<a href="CIRCUIT.md"><img src="circuit_image.png" width="420" alt="Prayer-Bot ESP32 prayer clock circuit with OLED, sensors, audio, battery, LM2596S buck converter, and TP4056 charger"></a>
 
-<sub>ESP32 prayer clock with OLED display, touch controls, motion sensing, and audio · <a href="CIRCUIT.md">Explore the circuit and wiring</a></sub>
+<sub>A DIY ESP32 prayer clock with an OLED display, touch controls, compass, motion sensing, and audio · <a href="CIRCUIT.md">See the circuit diagram and wiring guide</a></sub>
 
 </div>
 
@@ -211,7 +213,7 @@ Prayer-Bot/
 |-- SETUP_GUIDE.md
 |-- HARDWARE_CONNECTIONS.md
 |-- CIRCUIT.md
-`-- circuit_image.svg
+`-- circuit_image.png
 ```
 
 </details>
@@ -222,7 +224,7 @@ Use [`StorageManager`](src/managers/storage/storage_manager.cpp) for persistent 
 
 ## Hardware and wiring
 
-Here are the main parts used by the ESP32 prayer clock. The INMP441 microphone is optional and is only needed for on-device voice selection. Browser voice input uses the microphone on your phone or computer.
+This ESP32 prayer clock brings together a display, touch input, sensors, and audio in one build. The circuit diagram shows the overall hardware layout, including the LM2596S adjustable buck converter and TP4056 battery charger. The INMP441 microphone is optional and only needed for on-device voice selection; browser voice input uses the microphone on your phone or computer.
 
 | Part | Role | Required? |
 |---|---|---|
@@ -233,6 +235,8 @@ Here are the main parts used by the ESP32 prayer clock. The INMP441 microphone i
 | HMC5883L or QMC5883L compass (GY-271 / GY-273 boards) | Qibla screen compass direction and bearing | Required for Qibla; optional for other features |
 | MAX98357A I²S amplifier + speaker | Alerts and Quran audio | Yes for device audio |
 | INMP441 I²S microphone | On-device Surah voice selection | Optional |
+| LM2596S adjustable buck converter | Regulates a suitable higher-voltage DC input for the power setup | Used in this build's power setup |
+| TP4056 charging module | Charges a compatible single-cell Li-ion/LiPo battery | Used in this build's power setup |
 
 <details>
 <summary><strong>GPIO pin map and wiring notes</strong></summary>
@@ -246,6 +250,10 @@ Here are the main parts used by the ESP32 prayer clock. The INMP441 microphone i
 | INMP441 SCK / WS / SD | 16 / 17 / 18 |
 
 The OLED, MPU6050, and optional compass share an I²C bus; the MAX98357A amplifier and INMP441 microphone use separate I²S connections. Use 3.3 V-compatible logic and connect the modules to a common ground. **Do not connect either speaker output terminal to ground.** If the amplifier or wiring sparks, disconnect power to the amplifier and speaker and do not reconnect them until the cause has been found; leaving SD disconnected does not make a short safe. Check the voltage requirements printed on your specific breakout boards before applying power.
+
+The LM2596S is a step-down converter only: its input must be higher than its set output. A TP4056 charges a single-cell battery below 5 V, so it cannot feed the LM2596S to create a 5 V ESP32 supply. Use a suitable boost/boost-buck converter for that battery-powered arrangement, or a higher-voltage source for the LM2596S. Set and verify converter output with a multimeter before connecting the board. A basic TP4056 is not a load-sharing power supply; verify the exact board's protection and charging instructions, and do not connect USB and external power together unless the ESP32 board supports it.
+
+The [Prayer-Bot circuit diagram](CIRCUIT.md) is a visual overview, not a substitute for checking each board's pin labels, voltage limits, or protection circuitry. Use the wiring table in [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) for the firmware GPIO connections.
 
 The compass driver supports HMC5883L sensors at I²C address `0x1E` and QMC5883L sensors at `0x0D`, auto-detecting which chip is fitted. The sensor is expected to be mounted flat with its X axis toward the display's right edge and Y axis toward the top edge. The firmware checks the HMC5883L identity or verifies QMC5883L configuration, rejects overflow or stale readings, retries sensor communication, and requests a full-turn calibration before showing the arrow. Calibration corrects hard-iron offsets, but does not correct soft-iron distortion, tilt, or local magnetic declination. The displayed true-north bearing is therefore approximate, not guaranteed to be within a particular percentage or degree error. The firmware also expects the OLED at `0x3C` and MPU6050 at `0x68`; unlike the supplied diagnostic, it does not try alternate addresses.
 

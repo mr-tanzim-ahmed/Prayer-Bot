@@ -2,7 +2,7 @@
 
 [📄 **README**](README.md) | [🔧 **Hardware Connections**](HARDWARE_CONNECTIONS.md) | [📐 **Circuit Diagram**](CIRCUIT.md) | [📜 **License**](LICENSE)
 
-This document describes the GPIO wiring between an **ESP32 Dev Board (CH340)** and the peripheral modules used in the project.
+Use this guide to wire the ESP32 Dev Board (CH340), sensors, display, and audio modules in the Prayer-Bot prayer clock. The project also uses an LM2596S adjustable buck converter and a TP4056 battery charging module. See the [circuit diagram](CIRCUIT.md) for a visual overview; the table below is the firmware GPIO reference.
 
 | Component | Component Pin | ESP32 Connection | Notes |
 |-----------|--------------|---------------------|-------|
@@ -33,6 +33,11 @@ This document describes the GPIO wiring between an **ESP32 Dev Board (CH340)** a
 | **Power Supply** | USB / VIN | **5 V** | Provide 5 V via the board's USB connector or a regulated supply. |
 | | 3V3 | **3.3 V** | Use only for modules rated for 3.3 V; keep the total load within the board regulator's rating. |
 | | GND | Ground | All components share this ground. |
+| **LM2596S adjustable buck converter** | IN+ / IN− | Suitable higher-voltage DC source / common ground | Step-down converter only; input must exceed the selected output voltage. |
+| | OUT+ / OUT− | Regulated power rail / common ground | Set and verify the output with a multimeter before connecting the ESP32 or peripherals. |
+| **TP4056 charging module** | IN+ / IN− | Regulated 5 V charger input / common ground | Charges one compatible single-cell Li-ion/LiPo battery; confirm the exact module's input and battery requirements. |
+| | B+ / B− | Battery + / battery − | Observe polarity and use a compatible battery. |
+| | OUT+ / OUT− (if fitted) | Protected battery output on supported versions | Output and protection depend on the exact module; some boards do not include protection or load sharing. |
 
 The wiring pin assignments in the supplied diagnostic match the firmware: I²C SDA/SCL are GPIO 21/22; touch is GPIO 4; INMP441 is GPIO 16/17/18; and MAX98357A is GPIO 26/25/27. This confirms pin-map consistency only, not that physical wiring or modules are working.
 
@@ -63,6 +68,9 @@ If the amplifier or its wiring sparks, disconnect its power and the speaker; do 
 - The firmware debounces the touch sensor in software.
 - The touch input is read as a digital signal; use the TTP223B's default active-HIGH output mode.
 - Shake detection uses the **MPU6050 accelerometer** on the shared I2C bus – no separate vibration sensor is needed.
+- The LM2596S is a step-down converter, not a boost converter. A TP4056 charges a single-cell battery whose voltage is below 5 V, so that battery cannot power a regulated 5 V rail through the LM2596S. Use a suitable boost/boost-buck solution for that battery-powered arrangement, or feed the LM2596S from a source above the required output.
+- Set the LM2596S output with a multimeter before connecting the load, and only use an output voltage accepted by the specific ESP32 board or peripheral. Avoid connecting USB and an external supply together unless the board explicitly supports it.
+- A basic TP4056 module is a charger, not a power-path controller. Do not assume its battery output can safely power the device while charging; check the exact module documentation and battery protection. Do not connect a bare battery directly to the ESP32.
 
 ### Visual Summary (ASCII schematic)
 ```

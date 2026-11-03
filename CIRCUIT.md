@@ -2,13 +2,13 @@
 
 [📄 **README**](README.md) | [🔧 **Hardware Connections**](HARDWARE_CONNECTIONS.md) | [📐 **Circuit Diagram**](CIRCUIT.md)
 
-Prayer-Bot is built around an ESP32 Dev Board with a CH340 USB-to-serial interface. The OLED display, MPU6050, and HMC5883L or QMC5883L compass share an I²C bus; the MAX98357A speaker amplifier and optional INMP441 microphone use separate I²S interfaces.
+Build a DIY ESP32 prayer clock with this circuit diagram and wiring guide. The project uses an ESP32 Dev Board (CH340), an OLED display, touch controls, motion and compass sensors, and audio modules. Its power setup also includes an LM2596S adjustable buck converter and a TP4056 single-cell battery charging module.
 
-## Circuit diagram
+## ESP32 prayer clock circuit diagram
 
-[![Prayer-Bot circuit diagram](circuit_image.svg)](HARDWARE_CONNECTIONS.md)
+[![Prayer-Bot ESP32 prayer clock circuit diagram showing the controller, OLED, sensors, audio modules, battery, LM2596S buck converter, and TP4056 charger](circuit_image.png)](circuit_image.png)
 
-The illustration is a wiring overview. Use the pin table below and [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) as the detailed connection reference. Firmware pin assignments are defined in `include/core/config.h`.
+This visual overview shows how the main Prayer-Bot modules fit together, including the battery charging and voltage-conversion parts. For exact ESP32 GPIO assignments, use the pin table below and the detailed [hardware connections guide](HARDWARE_CONNECTIONS.md); firmware pin numbers are defined in `include/core/config.h`. Check the markings and ratings on your specific boards before connecting power, since module layouts and protection features can vary.
 
 ## Pin and signal map
 
@@ -35,6 +35,11 @@ The illustration is a wiring overview. Use the pin table below and [HARDWARE_CON
 | INMP441 microphone (optional) | SD | GPIO 18 | Microphone data into ESP32 |
 | INMP441 microphone (optional) | L/R | GND | Select left channel |
 | INMP441 microphone (optional) | VDD / GND | 3.3 V / GND | Do not power the microphone from 5 V |
+| LM2596S adjustable buck converter | IN+ / IN− | Suitable higher-voltage DC source / common ground | Step-down only; input must exceed the selected output |
+| LM2596S adjustable buck converter | OUT+ / OUT− | Regulated power rail / common ground | Verify the output with a multimeter before connecting a load |
+| TP4056 charging module | IN+ / IN− | Regulated 5 V input / common ground | Single-cell Li-ion/LiPo charger; check your module's specifications |
+| TP4056 charging module | B+ / B− | Compatible battery + / battery − | Observe polarity; battery protection depends on module version |
+| TP4056 charging module | OUT+ / OUT− (if fitted) | Protected battery output on supported versions | Not present or protected on every TP4056 board |
 
 ## Power and assembly notes
 
@@ -45,6 +50,8 @@ The illustration is a wiring overview. Use the pin table below and [HARDWARE_CON
 - Mount the HMC5883L or QMC5883L flat, with X toward the display's right edge and Y toward its top edge. Rotate through a full turn on the Qibla screen to calibrate. The bearing uses zero magnetic declination and is approximate.
 - The optional INMP441 is required for voice capture on the device. Dashboard voice input instead uses the phone or computer browser microphone.
 - The firmware assigns the microphone to I²S port 0 and the amplifier to I²S port 1. Do not interchange their GPIO wiring.
+- The LM2596S only steps voltage down. A single-cell battery charged by the TP4056 is below 5 V, so it cannot supply a regulated 5 V output through the LM2596S; use an appropriate boost/boost-buck converter or a higher-voltage input source.
+- Set and meter the LM2596S output before connecting the ESP32. A basic TP4056 is a charger, not a load-sharing power supply; verify the exact module's protection and operating instructions before powering a load while charging. Do not connect USB and external power simultaneously unless the ESP32 board supports it.
 - The GPIO assignments here match the firmware and [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md). Confirm the silkscreen and voltage limits of your exact breakout boards before powering them.
 
 See [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) for additional assembly guidance and the full wiring table.

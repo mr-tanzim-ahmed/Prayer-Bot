@@ -31,8 +31,9 @@ This guide covers installing the tools, building and uploading the firmware from
 - Display, touch sensor, motion sensor, amplifier, and speaker listed in the [hardware guide](HARDWARE_CONNECTIONS.md).
 - An INMP441 microphone only for voice selection on the device; dashboard voice input uses the phone or computer microphone.
 - An HMC5883L or QMC5883L compass is required for the Qibla screen.
+- This build's power setup also uses an LM2596S adjustable step-down converter and a TP4056 single-cell battery charging module.
 
-Review the [hardware connections](HARDWARE_CONNECTIONS.md) before powering the board. In particular, never connect either MAX98357A speaker output to ground.
+Review the [hardware connections](HARDWARE_CONNECTIONS.md) and [Prayer-Bot circuit diagram](CIRCUIT.md) before powering the board. In particular, never connect either MAX98357A speaker output to ground. The LM2596S cannot boost the TP4056's single-cell battery voltage to 5 V; check the power guidance and your exact module versions before wiring or charging.
 
 ## Install VS Code and PlatformIO
 
