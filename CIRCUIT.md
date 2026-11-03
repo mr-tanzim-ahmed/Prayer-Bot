@@ -6,7 +6,7 @@ Build a DIY ESP32 prayer clock with this circuit diagram and wiring guide. The p
 
 ## ESP32 prayer clock circuit diagram
 
-[![Prayer-Bot ESP32 prayer clock circuit diagram showing the controller, OLED, sensors, audio modules, battery, LM2596S buck converter, and TP4056 charger](circuit_image.png)](circuit_image.png)
+[![Prayer-Bot ESP32 prayer clock circuit diagram showing the controller, OLED, sensors, audio modules, battery, LM2596S buck converter, and TP4056 charger](circuit_image.svg)](circuit_image.svg)
 
 This visual overview shows how the main Prayer-Bot modules fit together, including the battery charging and voltage-conversion parts. For exact ESP32 GPIO assignments, use the pin table below and the detailed [hardware connections guide](HARDWARE_CONNECTIONS.md); firmware pin numbers are defined in `include/core/config.h`. Check the markings and ratings on your specific boards before connecting power, since module layouts and protection features can vary.
 

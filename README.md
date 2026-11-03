@@ -19,7 +19,7 @@ Prayer-Bot brings prayer times, a Hijri calendar, weather, Quran audio, Dhikr, a
 
 <br>
 
-<a href="CIRCUIT.md"><img src="circuit_image.png" width="420" alt="Prayer-Bot ESP32 prayer clock circuit with OLED, sensors, audio, battery, LM2596S buck converter, and TP4056 charger"></a>
+<a href="CIRCUIT.md"><img src="circuit_image.svg" width="420" alt="Prayer-Bot ESP32 prayer clock circuit with OLED, sensors, audio, battery, LM2596S buck converter, and TP4056 charger"></a>
 
 <sub>A DIY ESP32 prayer clock with an OLED display, touch controls, compass, motion sensing, and audio · <a href="CIRCUIT.md">See the circuit diagram and wiring guide</a></sub>
 
@@ -212,7 +212,7 @@ Prayer-Bot/
 |-- SETUP_GUIDE.md
 |-- HARDWARE_CONNECTIONS.md
 |-- CIRCUIT.md
-`-- circuit_image.png
+`-- circuit_image.svg
 ```
 
 </details>
