@@ -51,10 +51,10 @@ Download or clone the repository. In VS Code, select **File → Open Folder…**
 Open the VS Code integrated terminal with **Terminal → New Terminal** and create the local secrets file from the example if it does not already exist:
 
 ```powershell
-if (-not (Test-Path include\core\secrets.h)) { Copy-Item include\core\secrets.h.example include\core\secrets.h }
+if (-not (Test-Path src\secrets.h)) { Copy-Item src\secrets.h.example src\secrets.h }
 ```
 
-Open `include\core\secrets.h` in the Explorer. Add API keys if you want weather/air-quality data (OpenWeatherMap) or Quran request recognition (Gemini). Prayer times do not require your own API key. Keep the file private: Git ignores `secrets.h`, so do not force-add or share it. If the file already exists, preserve your current keys; do not overwrite it.
+Open `src\secrets.h` in the Explorer. Add API keys if you want weather/air-quality data (OpenWeatherMap) or Quran request recognition (Gemini). Prayer times do not require your own API key. To connect automatically on first boot, optionally set `DEFAULT_STA_SSID` and `DEFAULT_STA_PASSWORD` there; otherwise, configure Wi-Fi from the setup dashboard. Keep the file private: Git ignores `src\secrets.h`, so do not force-add or share it. If the file already exists, preserve your current keys; do not overwrite it.
 
 ## Build, upload, and monitor
 
@@ -91,7 +91,7 @@ Touch feedback uses an MP3 embedded in program flash and plays through the MAX98
 
 ## Optional: configure dashboard HTTPS
 
-HTTPS is optional. The dashboard can use HTTP if HTTPS has not been configured or cannot start. HTTPS is needed for browser features that require a secure context, including device geolocation and direct microphone recording.
+The dashboard serves both HTTP on port 80 and HTTPS on port 443. HTTP remains available if HTTPS has not been configured or cannot start. HTTPS is needed for browser features that require a secure context, including device geolocation and direct microphone recording.
 
 The HTTPS server reads `data/https_certificate.pem` and `data/https_private_key.pem` from LittleFS. If you do not already have a certificate pair, create a local self-signed pair with OpenSSL. Replace the example router IP with the device's current address:
 
@@ -99,21 +99,22 @@ The HTTPS server reads `data/https_certificate.pem` and `data/https_private_key.
 openssl req -x509 -newkey rsa:2048 -noenc -keyout data\https_private_key.pem -out data\https_certificate.pem -days 3650 -subj "/CN=Prayer-Bot" -addext "subjectAltName=DNS:Prayer-Bot,DNS:prayer-bot.local,IP:10.77.0.1,IP:192.168.1.104"
 ```
 
-Upload the filesystem image, which includes the certificate pair:
+Upload the firmware and filesystem so the device runs the HTTPS server and has the certificate pair in LittleFS:
 
 ```powershell
+pio run --target upload
 pio run --target uploadfs
 ```
 
-Repeat the filesystem upload whenever you replace the certificate pair. **Never commit or share the private key.** Browsers may show a warning for a self-signed certificate; the certificate must match the dashboard address you use. HTTPS encrypts traffic but does not add dashboard authentication, so use the device only on a trusted local network.
+Open `http://10.77.0.1/` or `https://10.77.0.1/` while connected to the setup Wi-Fi. On your router network, use the device's current IP with either `http://` or `https://`. Repeat the filesystem upload whenever you replace the certificate pair. **Never commit or share the private key.** Browsers may show a warning for a self-signed certificate; the certificate must match the dashboard address you use. HTTPS encrypts traffic but does not add dashboard authentication, so use the device only on a trusted local network.
 
 The trusted root certificates in [`include/network/https_client.h`](include/network/https_client.h) are used for outbound HTTPS API requests made by the ESP32. They are separate from the dashboard's certificate files.
 
 ## Connect Prayer-Bot to Wi-Fi
 
-1. Power on the ESP32. On your phone or computer, select **Prayer-Bot** in the Wi-Fi list and connect with password **`12345678`**. If prompted, choose to stay connected despite there being no internet.
+1. Power on the ESP32. The device starts the visible **Prayer-Bot** setup access point on 2.4 GHz, even if it also tries previously saved router credentials. Select **Prayer-Bot** in your phone or computer's Wi-Fi list and connect with password **`12345678`**. If prompted, choose to stay connected despite there being no internet.
 2. Tap the captive-portal notification. The ESP32 serves the dashboard for common phone/OS captive-network checks; whether a notification opens automatically is controlled by the phone. If it does not appear, stay connected to **Prayer-Bot** and open **http://10.77.0.1/** in a browser (use HTTP, not HTTPS).
-3. Enter the SSID and password of a **2.4 GHz** router or phone hotspot, then select **Connect to Wi-Fi**.
+3. Enter or scan for your router's SSID, enter its password, and select **Connect to Wi-Fi**. The ESP32 supports **2.4 GHz Wi-Fi only**; use a 2.4 GHz network with WPA2-Personal (AES) or an open network. A 5 GHz-only network or WPA3-only security will not connect.
 4. The device verifies the router connection and saves the credentials. This can take up to 35 seconds; it restarts after successful setup.
 5. Find the home Wi-Fi address in Serial Monitor or your router's connected-device list. Connect your browser device to the same network and open that address.
 
@@ -142,13 +143,15 @@ The firmware uses:
 | [Google Gemini](https://aistudio.google.com/) | Recognizes typed or spoken Surah and Azan-notification requests | Yes |
 | [MP3Quran v3](https://www.mp3quran.net/eng/api) | Reciter metadata and Quran audio sources | No |
 
-Add the optional keys to `include\core\secrets.h`, then rebuild and upload the firmware. The keys are compiled into the device and are not shown or editable in the dashboard. Never commit, screenshot, or share API keys. If a key is exposed, revoke it with its provider and create a replacement.
+Add the optional keys to `src\secrets.h`, then rebuild and upload the firmware. The keys are compiled into the device and are not shown or editable in the dashboard. Never commit, screenshot, or share API keys. If a key is exposed, revoke it with its provider and create a replacement.
 
 ## Troubleshooting
 
 ### The setup page did not open
 
-Stay connected to the **Prayer-Bot** Wi-Fi even if the phone reports no internet, then open **http://10.77.0.1/** manually.
+If **Prayer-Bot** does not appear in the Wi-Fi list, power-cycle the ESP32 and check its startup messages in the Serial Monitor at **115200 baud**. A successful setup AP prints `[WiFi] AP started: Prayer-Bot` and `[WiFi] AP IP: 10.77.0.1`; `[WiFi] Failed to start visible setup access point` means the AP did not start. If those messages are absent, upload the firmware to the ESP32 and restart it. Keep the board powered and close to the phone while scanning; the setup AP is a 2.4 GHz network.
+
+Once connected, stay on the **Prayer-Bot** Wi-Fi even if the phone reports no internet, then open **http://10.77.0.1/** manually.
 
 ### The dashboard is unreachable after connecting to the router
 

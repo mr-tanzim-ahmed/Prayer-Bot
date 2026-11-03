@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <driver/i2s.h>
-#include "secrets.h"
+#include "../../src/secrets.h"
 
 // ============================================================
 // PRAYER-BOT CONFIGURATION
@@ -85,8 +85,12 @@
 #define AP_SSID               "Prayer-Bot"
 #define AP_PASSWORD           "12345678"
 #define SETUP_AP_IP           "10.77.0.1"
-#define DEFAULT_STA_SSID      "Firefly"
-#define DEFAULT_STA_PASSWORD  "QWErty123456"
+#ifndef DEFAULT_STA_SSID
+#define DEFAULT_STA_SSID      ""
+#endif
+#ifndef DEFAULT_STA_PASSWORD
+#define DEFAULT_STA_PASSWORD  ""
+#endif
 #define WEB_SERVER_PORT       80
 #define WEB_SERVER_HTTPS_PORT 443
 #define NTP_SERVER            "pool.ntp.org"

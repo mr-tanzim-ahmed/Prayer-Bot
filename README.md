@@ -117,7 +117,6 @@ Prayer-Bot/
 |   |   `-- touch_beep_audio.h
 |   |-- core/
 |   |   |-- config.h
-|   |   |-- secrets.h.example
 |   |   `-- types.h
 |   |-- managers/                    Manager interfaces grouped by responsibility
 |   |   |-- audio/
@@ -164,6 +163,7 @@ Prayer-Bot/
 |   `-- web/
 |       `-- dashboard_html.h
 |-- src/                              Firmware implementations
+|   |-- secrets.h.example             Local secrets template
 |   |-- main.cpp                      Startup, task creation, and dependency wiring
 |   |-- managers/                     Implementations matching include/managers/
 |   |   |-- audio/
@@ -262,7 +262,7 @@ See [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) for full wiring notes and
 
 ## 🌐 Online services and API keys
 
-Prayer schedules come from Aladhan and do not need a personal API key. Weather and air-quality features use an optional OpenWeatherMap key; Quran request recognition uses an optional Gemini key. Keep optional keys in the local, Git-ignored `include/core/secrets.h` file. The [Setup Guide](SETUP_GUIDE.md#api-keys) explains how to add them safely.
+Prayer schedules come from Aladhan and do not need a personal API key. Weather and air-quality features use an optional OpenWeatherMap key; Quran request recognition uses an optional Gemini key. Keep optional keys in the local, Git-ignored `src/secrets.h` file. The [Setup Guide](SETUP_GUIDE.md#api-keys) explains how to add them safely.
 
 Prayer schedules are fetched as a monthly calendar and cached on the device. You need a network connection for the first fetch and when a new month is loaded; the timetable is not preloaded for offline use. Weather and prayer data refresh when the device is online. The default location is Dhaka, Bangladesh (23.8103, 90.4125), in `Asia/Dhaka` (UTC+6).
 

@@ -108,7 +108,9 @@ bool init(const Settings& settings) {
 }
 
 void startAP() {
-    WiFi.mode(WIFI_AP_STA);
+    if (!WiFi.mode(WIFI_AP_STA)) {
+        Serial.println("[WiFi] Could not enable access-point and station mode.");
+    }
     WiFi.setSleep(false);
     WiFi.setAutoReconnect(false);
     WiFi.disconnect(false, false);
@@ -123,9 +125,10 @@ void startAP() {
     }
 
     const char* pass = (strlen(AP_PASSWORD) >= 8) ? AP_PASSWORD : nullptr;
-    apMode = WiFi.softAP(AP_SSID, pass);
+    apMode = WiFi.softAP(AP_SSID, pass, 1, false, 4);
     if (!apMode) {
-        Serial.println("[WiFi] Failed to start setup access point.");
+        Serial.printf("[WiFi] Failed to start visible setup access point (SSID: %s).\n",
+                      AP_SSID);
         return;
     }
 
@@ -141,6 +144,8 @@ void startAP() {
     const IPAddress apAddress = WiFi.softAPIP();
     Serial.print("[WiFi] AP IP: ");
     Serial.println(apAddress);
+    Serial.printf("[WiFi] Setup access point is visible on 2.4 GHz channel %u.\n",
+                  WiFi.channel());
     if (apAddress != setupAddress) {
         Serial.printf("[WiFi] Setup AP did not use %s; retrying static IP configuration.\n",
                       SETUP_AP_IP);

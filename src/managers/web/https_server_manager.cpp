@@ -271,7 +271,7 @@ bool init() {
     config.prvtkey_pem = reinterpret_cast<const uint8_t*>(privateKeyPem.c_str());
     config.prvtkey_len = privateKeyPem.length() + 1;
     config.httpd.uri_match_fn = httpd_uri_match_wildcard;
-    config.httpd.max_uri_handlers = 2;
+    config.httpd.max_uri_handlers = 3;
     config.httpd.max_open_sockets = 2;
     config.httpd.recv_wait_timeout = PROXY_TIMEOUT_MS / 1000;
     config.httpd.send_wait_timeout = PROXY_TIMEOUT_MS / 1000;
@@ -285,6 +285,7 @@ bool init() {
     }
     result = registerProxyRoute(httpsServer, HTTP_GET);
     if (result == ESP_OK) result = registerProxyRoute(httpsServer, HTTP_POST);
+    if (result == ESP_OK) result = registerProxyRoute(httpsServer, HTTP_HEAD);
     if (result != ESP_OK) {
         Serial.printf("[HTTPS] Could not register dashboard routes: %s\n",
                       esp_err_to_name(result));
