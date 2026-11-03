@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <U8g2lib.h>
-#include "core/config.h"
+#include <prayer_bot_config.h>
 
 // ============================================================
 //  DISPLAY MANAGER

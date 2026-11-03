@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <driver/i2s.h>
-#include "../../src/secrets.h"
+#include "secrets.h"
 
 // ============================================================
 // PRAYER-BOT CONFIGURATION

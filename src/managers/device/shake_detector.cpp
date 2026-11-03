@@ -1,5 +1,5 @@
 #include "managers/device/shake_detector.h"
-#include "core/config.h"
+#include <prayer_bot_config.h>
 #include <Wire.h>
 #include "managers/device/i2c_bus.h"
 

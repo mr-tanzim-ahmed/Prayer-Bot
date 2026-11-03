@@ -51,10 +51,10 @@ Download or clone the repository. In VS Code, select **File → Open Folder…**
 Open the VS Code integrated terminal with **Terminal → New Terminal** and create the local secrets file from the example if it does not already exist:
 
 ```powershell
-if (-not (Test-Path src\secrets.h)) { Copy-Item src\secrets.h.example src\secrets.h }
+if (-not (Test-Path configuration\secrets.h)) { Copy-Item configuration\secrets.h.example configuration\secrets.h }
 ```
 
-Open `src\secrets.h` in the Explorer. Add API keys if you want weather/air-quality data (OpenWeatherMap) or Quran request recognition (Gemini). Prayer times do not require your own API key. To connect automatically on first boot, optionally set `DEFAULT_STA_SSID` and `DEFAULT_STA_PASSWORD` there; otherwise, configure Wi-Fi from the setup dashboard. Keep the file private: Git ignores `src\secrets.h`, so do not force-add or share it. If the file already exists, preserve your current keys; do not overwrite it.
+Open `configuration\secrets.h` in the Explorer. Add API keys if you want weather/air-quality data (OpenWeatherMap) or Quran request recognition (Gemini). Prayer times do not require your own API key. Wi-Fi credentials are optional; you can choose a network from the setup dashboard instead. Keep the file private: Git ignores `configuration\secrets.h`, so do not force-add or share it. If the file already exists, preserve your current keys; do not overwrite it.
 
 ## Build, upload, and monitor
 
@@ -114,13 +114,16 @@ The trusted root certificates in [`include/network/https_client.h`](include/netw
 
 1. Power on the ESP32. The device starts the visible **Prayer-Bot** setup access point on 2.4 GHz, even if it also tries previously saved router credentials. Select **Prayer-Bot** in your phone or computer's Wi-Fi list and connect with password **`12345678`**. If prompted, choose to stay connected despite there being no internet.
 2. Tap the captive-portal notification. The ESP32 serves the dashboard for common phone/OS captive-network checks; whether a notification opens automatically is controlled by the phone. If it does not appear, stay connected to **Prayer-Bot** and open **http://10.77.0.1/** in a browser (use HTTP, not HTTPS).
-3. Enter or scan for your router's SSID, enter its password, and select **Connect to Wi-Fi**. The ESP32 supports **2.4 GHz Wi-Fi only**; use a 2.4 GHz network with WPA2-Personal (AES) or an open network. A 5 GHz-only network or WPA3-only security will not connect.
-4. The device verifies the router connection and saves the credentials. This can take up to 35 seconds; it restarts after successful setup.
-5. Find the home Wi-Fi address in Serial Monitor or your router's connected-device list. Connect your browser device to the same network and open that address.
+3. Scan for and select any nearby compatible Wi-Fi network, or enter its SSID manually. Enter its password, then select **Connect to Wi-Fi**. This works with routers and device hotspots; the ESP32 hardware supports **2.4 GHz Wi-Fi only**, and WPA2-Personal (AES) is recommended. WPA3-only or enterprise networks may not be compatible.
+   - **Android hotspot:** Keep the hotspot on and discoverable; enable its 2.4 GHz band and WPA2-Personal security when those options are available.
+   - **iPhone Personal Hotspot:** Enable **Settings → Personal Hotspot → Maximize Compatibility** if available, then use the iPhone's displayed Wi-Fi password.
+   - If the device providing the hotspot cannot stay connected to Prayer-Bot's setup Wi-Fi at the same time, use a second phone or computer to open the setup dashboard while that device shares its connection.
+4. The device verifies the Wi-Fi connection and saves the credentials. This can take up to 35 seconds; it restarts after successful setup. If the attempt fails, the setup hotspot stays available so you can check the SSID/password or try another compatible router or phone hotspot.
+5. Find the assigned address in Serial Monitor or the connected network's client list. Connect your browser device to the same Wi-Fi network and open that address.
 
-The setup hotspot remains active while the device connects to the router. Phones may ask whether to remain connected to this no-internet network. Use the password 12345678 to join the hotspot, and enter your home router details in the dashboard.
+The setup hotspot remains active while the device connects to Wi-Fi. Phones may ask whether to remain connected to this no-internet network. Use the password 12345678 to join the hotspot, and enter the chosen network details in the dashboard.
 
-The setup hotspot uses `http://10.77.0.1` (or `https://10.77.0.1` when HTTPS is configured). HTTP and HTTPS are both served by the device; HTTPS may show a self-signed-certificate warning. The home Wi-Fi address is assigned by your router's DHCP and can change. To make it stable, create a DHCP reservation in the router; changing the ESP32's home-network address to a 10.x IP without matching router configuration would make it unreachable. Some phones cannot access devices connected to their own hotspot; if you cannot reach the dashboard, try another device on that network.
+The setup hotspot uses `http://10.77.0.1` (or `https://10.77.0.1` when HTTPS is configured). HTTP and HTTPS are both served by the device; HTTPS may show a self-signed-certificate warning. The address on the selected Wi-Fi network is assigned by that network's DHCP and can change. Some phones cannot access a device connected to their own hotspot; if you cannot reach the dashboard, try another device on that network.
 
 ## Set location and use the dashboard
 
@@ -143,7 +146,7 @@ The firmware uses:
 | [Google Gemini](https://aistudio.google.com/) | Recognizes typed or spoken Surah and Azan-notification requests | Yes |
 | [MP3Quran v3](https://www.mp3quran.net/eng/api) | Reciter metadata and Quran audio sources | No |
 
-Add the optional keys to `src\secrets.h`, then rebuild and upload the firmware. The keys are compiled into the device and are not shown or editable in the dashboard. Never commit, screenshot, or share API keys. If a key is exposed, revoke it with its provider and create a replacement.
+Add the optional keys to `configuration\secrets.h`, then rebuild and upload the firmware. The keys are compiled into the device and are not shown or editable in the dashboard. Never commit, screenshot, or share API keys. If a key is exposed, revoke it with its provider and create a replacement.
 
 ## Troubleshooting
 

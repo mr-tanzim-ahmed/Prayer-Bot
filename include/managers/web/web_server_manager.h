@@ -21,6 +21,9 @@ namespace WebServerManager {
 
     // Print the dashboard URLs for the active Wi-Fi interfaces
     void logDashboardAddresses();
+
+    // Apply one queued dashboard control from the display task.
+    void processDashboardControl();
 }
 
 #endif // WEB_SERVER_MANAGER_H

@@ -1,5 +1,5 @@
 #include "managers/productivity/pomodoro_manager.h"
-#include "core/config.h"
+#include <prayer_bot_config.h>
 
 // ============================================================
 //  POMODORO MANAGER IMPLEMENTATION

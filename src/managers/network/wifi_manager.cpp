@@ -1,5 +1,5 @@
 #include "managers/network/wifi_manager.h"
-#include "core/config.h"
+#include <prayer_bot_config.h>
 #include "managers/storage/storage_manager.h"
 #include <ArduinoJson.h>
 #include <DNSServer.h>
@@ -25,6 +25,7 @@ namespace {
     bool pendingCredentialSave = false;
     bool restartWhenConnected = false;
     bool connectionAttemptFailed = false;
+    bool userConnectionAttempt = false;
 
     bool stationHasRouterLease() {
         if (WiFi.status() != WL_CONNECTED) return false;
@@ -95,6 +96,7 @@ bool init(const Settings& settings) {
     connectionAttemptFailed = false;
     connectionStartedMs = millis();
     connectionPending = true;
+    userConnectionAttempt = false;
     if (WiFi.begin(ssid.c_str(), pass.c_str()) == WL_CONNECT_FAILED) {
         Serial.println("[WiFi] Could not start the saved network connection.");
         connectionPending = false;
@@ -108,9 +110,7 @@ bool init(const Settings& settings) {
 }
 
 void startAP() {
-    if (!WiFi.mode(WIFI_AP_STA)) {
-        Serial.println("[WiFi] Could not enable access-point and station mode.");
-    }
+    WiFi.mode(WIFI_AP_STA);
     WiFi.setSleep(false);
     WiFi.setAutoReconnect(false);
     WiFi.disconnect(false, false);
@@ -125,10 +125,9 @@ void startAP() {
     }
 
     const char* pass = (strlen(AP_PASSWORD) >= 8) ? AP_PASSWORD : nullptr;
-    apMode = WiFi.softAP(AP_SSID, pass, 1, false, 4);
+    apMode = WiFi.softAP(AP_SSID, pass);
     if (!apMode) {
-        Serial.printf("[WiFi] Failed to start visible setup access point (SSID: %s).\n",
-                      AP_SSID);
+        Serial.println("[WiFi] Failed to start setup access point.");
         return;
     }
 
@@ -144,8 +143,6 @@ void startAP() {
     const IPAddress apAddress = WiFi.softAPIP();
     Serial.print("[WiFi] AP IP: ");
     Serial.println(apAddress);
-    Serial.printf("[WiFi] Setup access point is visible on 2.4 GHz channel %u.\n",
-                  WiFi.channel());
     if (apAddress != setupAddress) {
         Serial.printf("[WiFi] Setup AP did not use %s; retrying static IP configuration.\n",
                       SETUP_AP_IP);
@@ -231,6 +228,7 @@ bool connectToNetwork(const String& ssid, const String& password) {
     restartWhenConnected = false;
     connectionPending = false;
     pendingCredentialSave = false;
+    userConnectionAttempt = true;
     pendingSSID = "";
     pendingPassword = "";
     WiFi.disconnect(false, false);
@@ -260,6 +258,7 @@ bool shouldRestartAfterConnection() {
 
 bool reconnect() {
     if (stationHasRouterLease()) return true;
+    if (userConnectionAttempt && connectionAttemptFailed) return false;
     if (storedSSID.isEmpty()) {
 #ifdef DEFAULT_STA_SSID
         if (strlen(DEFAULT_STA_SSID) > 0) {
@@ -289,6 +288,7 @@ bool reconnect() {
     connectionAttemptFailed = false;
     connectionStartedMs = millis();
     connectionPending = true;
+    userConnectionAttempt = false;
     if (WiFi.begin(storedSSID.c_str(), storedPassword.c_str()) == WL_CONNECT_FAILED) {
         Serial.println("[WiFi] Reconnect attempt could not start.");
         connectionPending = false;
@@ -336,6 +336,7 @@ void abortConnection() {
         Serial.println("[WiFi] Aborting active connection attempt for scan.");
         connectionPending = false;
         pendingCredentialSave = false;
+        userConnectionAttempt = false;
         pendingSSID = "";
         pendingPassword = "";
         restartWhenConnected = false;
@@ -369,6 +370,7 @@ bool isConnecting() {
             pendingSSID = "";
             pendingPassword = "";
             pendingCredentialSave = false;
+            userConnectionAttempt = false;
             Serial.println("[WiFi] Connected credentials saved and verified.");
         }
         connectionPending = false;
@@ -385,6 +387,9 @@ bool isConnecting() {
         pendingSSID = "";
         pendingPassword = "";
         restartWhenConnected = false;
+        if (userConnectionAttempt) {
+            Serial.println("[WiFi] New network connection failed; keeping setup available for another network.");
+        }
         connectionAttemptFailed = true;
         Serial.println("[WiFi] Connection attempt timed out.");
         return false;

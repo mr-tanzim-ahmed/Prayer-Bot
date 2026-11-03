@@ -16,7 +16,7 @@ Prayer-Bot.code-workspace
 *.map
 
 # Local credentials and editor/OS files
-/src/secrets.h
+/configuration/secrets.h
 .DS_Store
 Thumbs.db
 *.swp

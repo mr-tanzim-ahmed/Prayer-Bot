@@ -72,7 +72,7 @@ When testing the MAX98357A and speaker, start at a low device volume and raise i
 <details>
 <summary><strong>📶 First connection: setup Wi-Fi</strong> <kbd>▸ VIEW DETAILS</kbd></summary>
 
-The setup hotspot is **`Prayer-Bot`** (password: **`12345678`**) at **`http://10.77.0.1`**. A phone or laptop may show a captive-portal prompt when it connects; if it does not, open that address in a browser. Use `https://10.77.0.1` only after installing dashboard certificates. After you connect the device to home Wi-Fi, its router-side address is assigned by DHCP.
+The setup hotspot is **`Prayer-Bot`** (password: **`12345678`**) at **`http://10.77.0.1`**. A phone or laptop may show a captive-portal prompt when it connects; if it does not, open that address in a browser. Use `https://10.77.0.1` only after installing dashboard certificates. From the dashboard, connect the ESP32 to any compatible 2.4 GHz Wi-Fi network, including a router or phone hotspot.
 
 </details>
 
@@ -95,7 +95,7 @@ The firmware groups feature logic into C++ managers and keeps OLED presentation 
 | To work on… | Start with… |
 |---|---|
 | Startup, task scheduling, or module coordination | [`src/main.cpp`](src/main.cpp) |
-| Pins, defaults, timing, or API endpoints | [`include/core/config.h`](include/core/config.h) |
+| Pins, defaults, timing, or API endpoints | [`configuration/prayer_bot_config.h`](configuration/prayer_bot_config.h) |
 | Prayer schedules and prohibited-time windows | [`include/managers/prayer/prayer_manager.h`](include/managers/prayer/prayer_manager.h), [`src/managers/prayer/prayer_manager.cpp`](src/managers/prayer/prayer_manager.cpp) |
 | Device inputs, sensors, display, and I²C | [`include/managers/device/`](include/managers/device/), [`src/managers/device/`](src/managers/device/) |
 | Voice recognition, Quran playback, audio output, and notification tones | [`include/managers/audio/azan_manager.h`](include/managers/audio/azan_manager.h), [`src/managers/audio/azan_manager.cpp`](src/managers/audio/azan_manager.cpp), [`include/audio/touch_beep_audio.h`](include/audio/touch_beep_audio.h) |
@@ -116,7 +116,6 @@ Prayer-Bot/
 |   |-- audio/
 |   |   `-- touch_beep_audio.h
 |   |-- core/
-|   |   |-- config.h
 |   |   `-- types.h
 |   |-- managers/                    Manager interfaces grouped by responsibility
 |   |   |-- audio/
@@ -162,8 +161,10 @@ Prayer-Bot/
 |   |   `-- weather_screen.h
 |   `-- web/
 |       `-- dashboard_html.h
+|-- configuration/                    Application config and local secrets template
+|   |-- prayer_bot_config.h
+|   `-- secrets.h.example
 |-- src/                              Firmware implementations
-|   |-- secrets.h.example             Local secrets template
 |   |-- main.cpp                      Startup, task creation, and dependency wiring
 |   |-- managers/                     Implementations matching include/managers/
 |   |   |-- audio/
@@ -256,13 +257,13 @@ The [Prayer-Bot circuit diagram](CIRCUIT.md) is a visual overview, not a substit
 
 The compass driver supports HMC5883L sensors at I²C address `0x1E` and QMC5883L sensors at `0x0D`, auto-detecting which chip is fitted. The sensor is expected to be mounted flat with its X axis toward the display's right edge and Y axis toward the top edge. The firmware checks the HMC5883L identity or verifies QMC5883L configuration, rejects overflow or stale readings, retries sensor communication, and requests a full-turn calibration before showing the arrow. Calibration corrects hard-iron offsets, but does not correct soft-iron distortion, tilt, or local magnetic declination. The displayed true-north bearing is therefore approximate, not guaranteed to be within a particular percentage or degree error. The firmware also expects the OLED at `0x3C` and MPU6050 at `0x68`; unlike the supplied diagnostic, it does not try alternate addresses.
 
-See [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) for full wiring notes and [CIRCUIT.md](CIRCUIT.md) for the illustrated connection reference. Pin assignments are defined in [`include/core/config.h`](include/core/config.h).
+See [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) for full wiring notes and [CIRCUIT.md](CIRCUIT.md) for the illustrated connection reference. Pin assignments are defined in [`configuration/prayer_bot_config.h`](configuration/prayer_bot_config.h).
 
 </details>
 
 ## 🌐 Online services and API keys
 
-Prayer schedules come from Aladhan and do not need a personal API key. Weather and air-quality features use an optional OpenWeatherMap key; Quran request recognition uses an optional Gemini key. Keep optional keys in the local, Git-ignored `src/secrets.h` file. The [Setup Guide](SETUP_GUIDE.md#api-keys) explains how to add them safely.
+Prayer schedules come from Aladhan and do not need a personal API key. Weather and air-quality features use an optional OpenWeatherMap key; Quran request recognition uses an optional Gemini key. Keep optional keys in the local, Git-ignored `configuration/secrets.h` file. The [Setup Guide](SETUP_GUIDE.md#api-keys) explains how to add them safely.
 
 Prayer schedules are fetched as a monthly calendar and cached on the device. You need a network connection for the first fetch and when a new month is loaded; the timetable is not preloaded for offline use. Weather and prayer data refresh when the device is online. The default location is Dhaka, Bangladesh (23.8103, 90.4125), in `Asia/Dhaka` (UTC+6).
 

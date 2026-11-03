@@ -1,5 +1,5 @@
 #include "managers/web/web_server_manager.h"
-#include "core/config.h"
+#include <prayer_bot_config.h>
 #include "web/dashboard_html.h"
 #include "managers/storage/storage_manager.h"
 #include "managers/prayer/prayer_manager.h"
@@ -23,6 +23,7 @@
 #include <new>
 #include <stdlib.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 #include <freertos/semphr.h>
 
 extern volatile bool g_locationRefreshRequested;
@@ -45,6 +46,17 @@ namespace {
     Settings* settingsRef = nullptr;
     constexpr size_t MAX_REQUEST_BODY_BYTES = 2048;
     constexpr size_t MAX_DASHBOARD_AUDIO_BYTES = 256 * 1024;
+    constexpr UBaseType_t DASHBOARD_CONTROL_QUEUE_LENGTH = 12;
+
+    struct DashboardControlCommand {
+        int8_t screen;
+        uint8_t pomodoro;
+        bool countDhikr;
+        bool stopAzan;
+        bool playAzan;
+    };
+
+    QueueHandle_t dashboardControlQueue = nullptr;
 
     void sendDashboard(AsyncWebServerRequest* request) {
         AsyncWebServerResponse* response = request->beginResponse_P(
@@ -368,10 +380,24 @@ void init(Settings& settings) {
     if (server) {
         server->end();
         delete server;
+        server = nullptr;
     }
+    serverRunning = false;
 
     settingsRef = &settings;
-    server = new AsyncWebServer(WEB_SERVER_PORT);
+    if (!dashboardControlQueue) {
+        dashboardControlQueue = xQueueCreate(
+            DASHBOARD_CONTROL_QUEUE_LENGTH, sizeof(DashboardControlCommand));
+    }
+    if (!dashboardControlQueue) {
+        Serial.println("[WEB] Could not allocate the dashboard command queue; controls will report unavailable.");
+    }
+
+    server = new (std::nothrow) AsyncWebServer(WEB_SERVER_PORT);
+    if (!server) {
+        Serial.println("[WEB] Could not allocate the HTTP server.");
+        return;
+    }
 
     server->on("/", HTTP_GET, sendDashboard);
     static const char* const captivePortalPaths[] = {
@@ -732,6 +758,45 @@ void init(Settings& settings) {
             const bool stopAzan = !stopAzanValue.isUnbound() && stopAzanValue.as<bool>();
             const bool playAzan = !playAzanValue.isUnbound() && playAzanValue.as<bool>();
             const bool hasQuranAction = !quranActionValue.isUnbound();
+            if (stopAzan && playAzan) {
+                request->send(400, "application/json", "{\"error\":\"Stop and play Azan cannot be requested together.\"}");
+                return;
+            }
+
+            const char* quranAction = hasQuranAction
+                ? quranActionValue.as<const char*>()
+                : "";
+            const bool quranPlay = strcmp(quranAction, "play") == 0;
+            const bool quranStop = strcmp(quranAction, "stop") == 0;
+            const bool quranNext = strcmp(quranAction, "next") == 0;
+            const bool quranPrev = strcmp(quranAction, "prev") == 0;
+            if (hasQuranAction &&
+                !quranPlay && !quranStop && !quranNext && !quranPrev) {
+                request->send(400, "application/json", "{\"error\":\"Unknown Quran action.\"}");
+                return;
+            }
+            if (!quranSurahValue.isUnbound() && !quranPlay) {
+                request->send(400, "application/json", "{\"error\":\"A Surah number is valid only with the Quran play action.\"}");
+                return;
+            }
+            int surahNumber = 0;
+            if (quranPlay) {
+                surahNumber = quranSurahValue.is<int>()
+                    ? quranSurahValue.as<int>()
+                    : VoiceManager::getPlayingSurah();
+                if (surahNumber < 1 || surahNumber > TOTAL_SURAHS) {
+                    request->send(400, "application/json", "{\"error\":\"Choose a Surah number from 1 to 114.\"}");
+                    return;
+                }
+                if (WiFi.status() != WL_CONNECTED) {
+                    request->send(503, "application/json", "{\"error\":\"Connect Prayer-Bot to Wi-Fi before playing Quran audio.\"}");
+                    return;
+                }
+            } else if ((quranNext || quranPrev) && WiFi.status() != WL_CONNECTED) {
+                request->send(503, "application/json", "{\"error\":\"Connect Prayer-Bot to Wi-Fi before playing Quran audio.\"}");
+                return;
+            }
+
             const bool hasCommand = screen >= 0 || pomodoroCommand != 0 ||
                                     countDhikr || stopAzan || playAzan ||
                                     hasQuranAction;
@@ -740,24 +805,38 @@ void init(Settings& settings) {
                 return;
             }
 
-            if (screen >= 0) g_webScreenRequest = (int8_t)screen;
-            if (pomodoroCommand != 0) g_webPomodoroRequest = pomodoroCommand;
-            if (countDhikr) g_webDhikrRequest = 1;
-            if (stopAzan) g_azanStopRequested = true;
-            if (playAzan) g_webAzanStartRequested = true;
-            if (hasQuranAction) {
-                const char* qAct = quranActionValue.as<const char*>();
-                if (strcmp(qAct, "play") == 0) {
-                    int sNum = quranSurahValue.is<int>() ? quranSurahValue.as<int>() : VoiceManager::getPlayingSurah();
-                    VoiceManager::playSurah(sNum);
-                    g_webScreenRequest = SYS_SCREEN_QURAN;
-                } else if (strcmp(qAct, "stop") == 0) {
-                    VoiceManager::stopPlayback();
-                } else if (strcmp(qAct, "next") == 0) {
-                    VoiceManager::nextSurah();
-                } else if (strcmp(qAct, "prev") == 0) {
-                    VoiceManager::prevSurah();
+            const bool hasQueuedControl = screen >= 0 || pomodoroCommand != 0 ||
+                                          countDhikr || stopAzan || playAzan;
+            if (hasQueuedControl) {
+                if (!dashboardControlQueue) {
+                    request->send(503, "application/json", "{\"error\":\"Dashboard controls are temporarily unavailable.\"}");
+                    return;
                 }
+                DashboardControlCommand command{
+                    static_cast<int8_t>(screen),
+                    pomodoroCommand,
+                    countDhikr,
+                    stopAzan,
+                    playAzan
+                };
+                if (xQueueSend(dashboardControlQueue, &command, 0) != pdTRUE) {
+                    request->send(503, "application/json", "{\"error\":\"Dashboard command queue is full. Wait a moment and try again.\"}");
+                    return;
+                }
+            }
+
+            if (quranPlay) {
+                if (!VoiceManager::playSurah(surahNumber)) {
+                    request->send(503, "application/json", "{\"error\":\"Could not queue Quran playback. Check Wi-Fi and audio output.\"}");
+                    return;
+                }
+                g_webScreenRequest = SYS_SCREEN_QURAN;
+            } else if (quranStop) {
+                VoiceManager::stopPlayback();
+            } else if (quranNext) {
+                VoiceManager::nextSurah();
+            } else if (quranPrev) {
+                VoiceManager::prevSurah();
             }
             request->send(200, "application/json", "{\"status\":\"queued\"}");
         });
@@ -782,7 +861,7 @@ void init(Settings& settings) {
                 return;
             }
             if (WiFi.status() != WL_CONNECTED) {
-                request->send(503, "application/json", "{\"error\":\"Not connected to router Wi-Fi. Connect Wi-Fi for Gemini voice recognition.\"}");
+                request->send(503, "application/json", "{\"error\":\"Not connected to Wi-Fi. Connect to a network with internet for Gemini voice recognition.\"}");
                 return;
             }
             uint32_t requestId = 0;
@@ -972,7 +1051,7 @@ void init(Settings& settings) {
                                        strcmp(action, "next") == 0 ||
                                        strcmp(action, "prev") == 0;
             if (needsInternet && WiFi.status() != WL_CONNECTED) {
-                request->send(503, "application/json", "{\"error\":\"Not connected to router Wi-Fi. Connect Wi-Fi to play Quran audio.\"}");
+                request->send(503, "application/json", "{\"error\":\"Not connected to Wi-Fi. Connect to a network with internet to play Quran audio.\"}");
                 return;
             }
             if (strcmp(action, "play") == 0) {
@@ -1059,10 +1138,16 @@ void init(Settings& settings) {
                 network["rssi"] = WiFi.RSSI(i);
                 network["secured"] = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
             }
-            String response;
-            serializeJson(doc, response);
+            AsyncResponseStream* response = request->beginResponseStream("application/json");
+            if (!response) {
+                WiFi.scanDelete();
+                request->send(503, "application/json",
+                              "{\"error\":\"Not enough memory to return the Wi-Fi scan.\"}");
+                return;
+            }
+            serializeJson(doc, *response);
             WiFi.scanDelete();
-            request->send(200, "application/json", response);
+            request->send(response);
         });
 
     server->on("/api/wifi", HTTP_POST,
@@ -1106,7 +1191,7 @@ void init(Settings& settings) {
                 return;
             }
             WifiManager::restartAfterConnection();
-            request->send(200, "application/json", "{\"status\":\"connecting\",\"message\":\"Testing the router connection and DHCP address. Credentials will be saved only after the router lease is valid, then the device will restart.\"}");
+            request->send(200, "application/json", "{\"status\":\"connecting\",\"message\":\"Testing the Wi-Fi connection and DHCP address. Credentials will be saved only after a network lease is valid, then the device will restart.\"}");
         });
 
     server->onNotFound([](AsyncWebServerRequest* request) {
@@ -1144,6 +1229,19 @@ void init(Settings& settings) {
 void logDashboardAddresses() {
     if (!serverRunning) return;
     printDashboardAddresses();
+}
+
+void processDashboardControl() {
+    if (!dashboardControlQueue) return;
+
+    DashboardControlCommand command{};
+    if (xQueueReceive(dashboardControlQueue, &command, 0) != pdTRUE) return;
+
+    if (command.screen >= 0) g_webScreenRequest = command.screen;
+    if (command.pomodoro != 0) g_webPomodoroRequest = command.pomodoro;
+    if (command.countDhikr) g_webDhikrRequest = 1;
+    if (command.stopAzan) g_azanStopRequested = true;
+    if (command.playAzan) g_webAzanStartRequested = true;
 }
 
 void stop() {

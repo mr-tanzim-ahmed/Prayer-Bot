@@ -1,5 +1,5 @@
 #include "screens/surah_screen.h"
-#include "core/config.h"
+#include <prayer_bot_config.h>
 #include "managers/device/display_manager.h"
 #include "managers/audio/voice_manager.h"
 #include "screens/screen_ui.h"

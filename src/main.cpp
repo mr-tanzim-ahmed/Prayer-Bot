@@ -2,7 +2,7 @@
 #include <WiFi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
-#include "core/config.h"
+#include <prayer_bot_config.h>
 #include "core/types.h"
 
 // Device and audio services
@@ -272,6 +272,7 @@ void taskDisplay(void* param) {
         // Handle button presses
         ButtonHandler::update();
         WifiManager::processCaptivePortal();
+        WebServerManager::processDashboardControl();
         int8_t webScreenRequest = g_webScreenRequest;
         g_webScreenRequest = -1;
         if (webScreenRequest >= 0 && webScreenRequest < SYS_SCREEN_COUNT) {

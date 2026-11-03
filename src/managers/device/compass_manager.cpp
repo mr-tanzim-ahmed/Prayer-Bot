@@ -1,5 +1,5 @@
 #include "managers/device/compass_manager.h"
-#include "core/config.h"
+#include <prayer_bot_config.h>
 #include "managers/device/i2c_bus.h"
 #include "managers/storage/storage_manager.h"
 #include <ArduinoJson.h>

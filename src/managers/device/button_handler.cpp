@@ -1,5 +1,5 @@
 #include "managers/device/button_handler.h"
-#include "core/config.h"
+#include <prayer_bot_config.h>
 
 // ============================================================
 //  BUTTON HANDLER IMPLEMENTATION (CAPACITIVE TOUCH)

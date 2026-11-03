@@ -1,5 +1,5 @@
 #include "managers/prayer/calendar_manager.h"
-#include "core/config.h"
+#include <prayer_bot_config.h>
 #include "managers/storage/storage_manager.h"
 #include <ArduinoJson.h>
 #include <time.h>

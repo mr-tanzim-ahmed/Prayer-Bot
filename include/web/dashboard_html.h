@@ -1029,19 +1029,20 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   <!-- Hidden legacy details for selector compatibility -->
   <details class="module-menu" id="modulesMenu" hidden><nav><a href="#overview">Overview</a><a href="#settings">Settings</a></nav></details>
 
-  <!-- Router Disconnected Notice -->
+  <!-- Wi-Fi Disconnected Notice -->
   <aside id="onlineOfflineNotice" class="online-notice" role="status" aria-live="polite" hidden>
     <span style="font-size:1.3rem">⚠️</span>
-    <div>Router Wi-Fi is not connected. Internet features (online prayer sync, weather, and Quran audio) are unavailable. Connect to your 2.4 GHz home Wi-Fi below; offline Azan beep, Pomodoro, and Dhikr remain active.</div>
+    <div>Prayer-Bot is not connected to a Wi-Fi network. Choose any compatible 2.4 GHz router or phone hotspot below. Online services also require that network to have internet access; offline Azan beep, Pomodoro, and Dhikr remain available.</div>
   </aside>
 
   <!-- Wi-Fi Setup Section -->
   <section id="wifiSetup" class="card wide" style="margin-bottom:24px">
     <h2><span>📶</span> Wi-Fi Connection Setup</h2>
-    <p>Connect Prayer-Bot to your home router. Credentials are saved to the device only after the router connection and DHCP address are verified.</p>
+    <p>Choose any compatible 2.4 GHz Wi-Fi network: a router, Android/iPhone hotspot, or another device's hotspot. Credentials are saved only after the connection and DHCP address are verified.</p>
     <div class="hint" style="margin-bottom:18px;line-height:1.6">
-      <strong>Requirements:</strong> 2.4 GHz Wi-Fi only (5 GHz-only SSIDs cannot be used).<br>
-      Join the <strong id="setupApNameLabel">Prayer-Bot</strong> hotspot (password: <strong>12345678</strong>). Your phone should open this setup page automatically; if it does not, open <strong>http://10.77.0.1</strong> in a browser. The dashboard remains here while you enter your router details.
+      <strong>Requirements:</strong> the ESP32 uses 2.4 GHz Wi-Fi (5 GHz-only networks are not supported). WPA2-Personal is recommended; compatibility with WPA3-only or enterprise networks depends on the network and firmware.<br>
+      For a phone hotspot, enable its 2.4 GHz compatibility/band and WPA2 setting when available. On iPhone, turn on <strong>Settings → Personal Hotspot → Maximize Compatibility</strong> if available.<br>
+      Join the <strong id="setupApNameLabel">Prayer-Bot</strong> setup hotspot (password: <strong>12345678</strong>). If the hotspot phone cannot stay connected to Prayer-Bot Wi-Fi while sharing, use a second phone or computer to open this page.
     </div>
 
     <div class="fields">
@@ -1050,11 +1051,11 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         <div class="input-with-button">
           <button id="scanWifi" class="primary" type="button" onclick="scanWifiNetworks()">🔍 Scan nearby networks</button>
         </div>
-        <small class="hint">Select a scanned network to fill its name, or enter an SSID manually.</small>
+        <small class="hint">Scan and select any nearby Wi-Fi network or hotspot, or enter its SSID manually.</small>
       </div>
       <div class="field">
         <label for="wifiSsid"><span class="wifi-step-badge">2</span> Wi-Fi network name (SSID)</label>
-        <input id="wifiSsid" maxlength="32" autocomplete="username" placeholder="e.g. Firefly" required>
+        <input id="wifiSsid" maxlength="32" autocomplete="username" placeholder="Enter Wi-Fi or hotspot name" required>
       </div>
       <div class="field" style="grid-column:span 2">
         <label for="wifiPass"><span class="wifi-step-badge">3</span> Wi-Fi password</label>
@@ -1062,7 +1063,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
           <input id="wifiPass" type="password" maxlength="63" autocomplete="off" placeholder="Enter Wi-Fi password (blank if open)">
           <button type="button" onclick="togglePasswordVisibility('wifiPass', this)" style="flex:0 0 auto" aria-label="Toggle password view">👁 Show</button>
         </div>
-        <small class="hint">WPA2/WPA3 password. For open router networks, leave this blank.</small>
+        <small class="hint">Enter the network password. Leave blank only for an open network; WPA2-Personal is recommended.</small>
       </div>
     </div>
 
@@ -1090,7 +1091,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
           <div class="hero-stat"><span>Hijri Date</span><strong id="hijri">—</strong></div>
           <div class="hero-stat"><span>Islamic Event</span><strong id="event">—</strong></div>
           <div class="hero-stat"><span>Alarm Status</span><strong id="azanStatus">—</strong></div>
-          <div class="hero-stat"><span>Home IP</span><strong id="homeIp">—</strong></div>
+          <div class="hero-stat"><span>Home Wi-Fi IP</span><strong><a id="homeIpLink" href="#">—</a></strong></div>
         </div>
       </div>
     </article>
@@ -1100,7 +1101,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <h2><span>📊</span> Device &amp; Connection Status</h2>
       <div class="stats">
         <div class="stat"><span>Connection</span><strong id="network">Loading…</strong></div>
-        <div class="stat"><span>Dashboard IP</span><strong><a id="ipLink" href="#"><span id="ip">—</span></a></strong></div>
+        <div class="stat"><span>Current Dashboard IP (HTTP)</span><strong><a id="ipLink" href="#"><span id="ip">—</span></a></strong></div>
         <div class="stat"><span>Prayer Sync API</span><strong id="prayerApiStatus">Aladhan Live</strong></div>
         <div class="stat"><span>Weather Location</span><strong id="overviewCity">Dhaka</strong></div>
       </div>
@@ -1489,7 +1490,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   function openWifiSetup() {
     byId('wifiSetup').hidden = false;
     byId('continueWifi').hidden = true;
-    byId('wifiMessage').textContent = 'Ready to connect to your 2.4 GHz router.';
+    byId('wifiMessage').textContent = 'Ready to connect to any compatible 2.4 GHz Wi-Fi network.';
     byId('wifiMessage').classList.remove('error');
     if (!dashboardReady) {
       byId('dashboardContent').hidden = true;
@@ -1529,16 +1530,21 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     return data;
   }
 
-  function setOnlineAvailability(connected) {
+  function setOnlineAvailability(connected, connecting = false) {
     routerWifiConnected = Boolean(connected);
     const notice = byId('onlineOfflineNotice');
     notice.hidden = routerWifiConnected;
+    if (!routerWifiConnected) {
+      notice.lastElementChild.textContent = connecting
+        ? 'Prayer-Bot is trying to connect. Online services will be available after the connection succeeds. Use a compatible 2.4 GHz router or phone hotspot; WPA2-Personal is recommended.'
+        : 'Prayer-Bot is not connected to a Wi-Fi network. Choose any compatible 2.4 GHz router or phone hotspot below. Online services also require that network to have internet access; offline Azan beep, Pomodoro, and Dhikr remain available.';
+    }
     
     const badge = byId('headerStatusBadge');
     const netShort = byId('networkShort');
     if (routerWifiConnected) {
       badge.className = 'badge badge-online';
-      netShort.textContent = 'Online';
+      netShort.textContent = 'Wi-Fi';
     } else {
       badge.className = 'badge badge-warn';
       netShort.textContent = 'Hotspot AP';
@@ -1556,14 +1562,14 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       audio.pause();
       audio.removeAttribute('src');
       audio.load();
-      put('quranStreamStatus', 'Stopped: router Wi-Fi is disconnected.');
+      put('quranStreamStatus', 'Stopped: Wi-Fi is disconnected.');
     }
   }
 
   async function ensureRouterConnection() {
     const status = await api('/api/status');
-    setOnlineAvailability(status.network?.connected);
-    if (!routerWifiConnected) throw new Error('Not connected to router Wi-Fi. Connect Wi-Fi and try again.');
+    setOnlineAvailability(status.network?.connected, status.network?.connecting);
+    if (!routerWifiConnected) throw new Error('Not connected to Wi-Fi. Connect to a network with internet and try again.');
   }
 
   async function syncDeviceClock() {
@@ -1591,22 +1597,27 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   async function loadStatus() {
     const s = await api('/api/status');
-    setOnlineAvailability(s.network?.connected);
-    put('network', s.network.connected ? 'Connected to Router' : 'Device Hotspot Mode');
+    setOnlineAvailability(s.network?.connected, s.network?.connecting);
+    put('network', s.network.connected ? 'Connected to Wi-Fi' : (s.network.connecting ? 'Connecting to Wi-Fi' : 'Device Hotspot Mode'));
     put('ip', s.network.ip);
-    byId('ipLink').href = `${window.location.protocol}//${s.network.ip}/`;
-    put('homeIp', s.network.homeIp || 'Not connected to home network');
+    const currentIp = s.network.ip || '';
+    byId('ipLink').href = currentIp ? `http://${currentIp}/` : '#';
+    const homeIp = s.network.homeIp || '';
+    const homeIpLink = byId('homeIpLink');
+    homeIpLink.textContent = homeIp || 'Not connected';
+    homeIpLink.href = homeIp ? `http://${homeIp}/` : '#';
+    homeIpLink.setAttribute('aria-disabled', String(!homeIp));
 
     if (!dashboardReady && wifiSubmitted) {
       if (s.network.connectionFailed) {
         wifiSubmitted = false;
-        byId('wifiMessage').textContent = 'Could not connect. Check network name and password, then try again.';
+        byId('wifiMessage').textContent = 'Could not connect to that network. Check its name/password and 2.4 GHz or WPA2 compatibility, or try another router or phone hotspot.';
         byId('wifiMessage').classList.add('error');
         byId('continueWifi').hidden = true;
         byId('connectWifi').disabled = false;
       } else if (s.network.restarting) {
         wifiSubmitted = false;
-        byId('wifiMessage').textContent = `Connected! Device is restarting. Assigned IP: ${s.network.homeIp || 'check your router'}.`;
+        byId('wifiMessage').textContent = `Connected! Device is restarting. Assigned IP: ${s.network.homeIp || 'check your Wi-Fi network'}.`;
         byId('wifiMessage').classList.remove('error');
         byId('continueWifi').hidden = true;
         byId('connectWifi').disabled = true;
@@ -1614,20 +1625,20 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         byId('wifiPass').type = 'password';
       } else if (s.network.connected && !s.network.connecting) {
         wifiSubmitted = false;
-        byId('wifiMessage').textContent = 'Router Wi-Fi connected! Select "Next" to open the dashboard.';
+        byId('wifiMessage').textContent = 'Wi-Fi connected! Select "Next" to open the dashboard.';
         byId('wifiMessage').classList.remove('error');
         byId('continueWifi').hidden = false;
         byId('connectWifi').disabled = false;
         byId('wifiPass').value = '';
         byId('wifiPass').type = 'password';
       } else if (s.network.connecting) {
-        byId('wifiMessage').textContent = 'Connecting to router Wi-Fi…';
+        byId('wifiMessage').textContent = 'Connecting to Wi-Fi…';
         byId('wifiMessage').classList.remove('error');
       } else {
         wifiSubmitted = false;
         byId('wifiMessage').textContent = s.network.authFailed
           ? 'Wi-Fi authentication failed. Check password.'
-          : 'Could not connect. Ensure network is 2.4 GHz.';
+          : 'Could not connect. Check the network name/password and its Wi-Fi band/security compatibility.';
         byId('wifiMessage').classList.add('error');
         byId('connectWifi').disabled = false;
       }
@@ -1920,10 +1931,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     });
   }
 
+  let weeklyStatsCache = null;
+  let weeklyChartResizeTimer = 0;
   async function loadWeeklyStats() {
     try {
       const stats = await api('/api/stats');
       if (!Array.isArray(stats.week) || stats.week.length !== 7) throw new Error('Invalid statistics');
+      weeklyStatsCache = stats;
       put('weeklyStarted', stats.totalStarted);
       put('weeklyCompleted', stats.totalCompleted);
       put('weeklyFocus', `${stats.totalFocusMinutes} min`);
@@ -2555,7 +2569,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     try {
       await api('/api/wifi', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ssid, pass: password }) });
       wifiSubmitted = true;
-      byId('wifiMessage').textContent = 'Connecting to Wi-Fi router… waiting for verification.';
+      byId('wifiMessage').textContent = 'Connecting to Wi-Fi or hotspot… waiting for verification.';
       byId('wifiMessage').classList.remove('error');
     } catch(e) {
       byId('wifiMessage').textContent = e.message;
@@ -2614,17 +2628,17 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
           byId('wifiSsid').value = n.ssid;
           byId('wifiPass').value = '';
           byId('wifiPass').focus();
-          msg.textContent = 'Network selected. Enter the router password and tap Connect.';
+          msg.textContent = 'Network selected. Enter its password and tap Connect.';
           msg.classList.remove('error');
           closeWifiScan();
         });
         list.append(choice);
       }
       if (sorted.length) {
-        setScanStatus(`Found ${sorted.length} network${sorted.length === 1 ? '' : 's'}. Choose your router.`, false);
+        setScanStatus(`Found ${sorted.length} network${sorted.length === 1 ? '' : 's'}. Choose a Wi-Fi network or hotspot.`, false);
         msg.textContent = `Found ${sorted.length} network${sorted.length === 1 ? '' : 's'}.`;
       } else {
-        setScanStatus('No networks found. Move closer to the router and scan again.', false);
+        setScanStatus('No networks found. Enable the hotspot, move closer, and scan again.', false);
         msg.textContent = 'No networks found. Try scanning again.';
       }
     } catch(e) {
@@ -2642,20 +2656,26 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   refreshAll();
   loadWeeklyStats();
 
-  // Adaptive polling: fast (3s) until live prayer sync, then regular (5s)
+  // Use one status poller; check provisioning attempts more frequently.
   let prayerReady = false;
   async function pollStatus() {
-    try { prayerReady = await loadStatus(); } catch(e) {}
-    setTimeout(pollStatus, prayerReady ? 5000 : 3000);
+    try {
+      prayerReady = await loadStatus();
+    } catch(e) {
+      if (wifiSubmitted) {
+        byId('wifiMessage').textContent = 'Waiting for Prayer-Bot to reconnect…';
+      }
+    }
+    setTimeout(pollStatus, wifiSubmitted ? 2000 : prayerReady ? 5000 : 3000);
   }
   setTimeout(pollStatus, 3000);
   setInterval(() => loadWeeklyStats(), 30000);
-  setInterval(() => {
-    if (wifiSubmitted) loadStatus().catch(() => {
-      byId('wifiMessage').textContent = 'Prayer-Bot is connecting to router… check router IP shortly.';
-    });
-  }, 2000);
-  window.addEventListener('resize', () => loadWeeklyStats());
+  window.addEventListener('resize', () => {
+    clearTimeout(weeklyChartResizeTimer);
+    weeklyChartResizeTimer = window.setTimeout(() => {
+      if (weeklyStatsCache) drawWeeklyChart(weeklyStatsCache.week);
+    }, 150);
+  });
 </script>
 </body>
 </html>

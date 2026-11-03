@@ -1,5 +1,5 @@
 #include "managers/network/weather_manager.h"
-#include "core/config.h"
+#include <prayer_bot_config.h>
 #include "network/https_client.h"
 #include "managers/storage/storage_manager.h"
 #include <WiFi.h>

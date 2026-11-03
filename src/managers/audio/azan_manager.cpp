@@ -1,5 +1,5 @@
 #include "managers/audio/azan_manager.h"
-#include "core/config.h"
+#include <prayer_bot_config.h>
 #include "network/https_client.h"
 #include <ArduinoJson.h>
 #include <AudioFileSource.h>

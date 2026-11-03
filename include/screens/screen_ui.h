@@ -2,7 +2,7 @@
 #define SCREEN_UI_H
 
 #include <U8g2lib.h>
-#include "core/config.h"
+#include <prayer_bot_config.h>
 
 namespace ScreenUI {
 

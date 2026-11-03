@@ -1,5 +1,5 @@
 #include "managers/storage/cache_manager.h"
-#include "core/config.h"
+#include <prayer_bot_config.h>
 #include "managers/storage/storage_manager.h"
 #include <LittleFS.h>
 #include <ArduinoJson.h>

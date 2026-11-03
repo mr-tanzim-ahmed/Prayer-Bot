@@ -2,7 +2,7 @@
 #include "managers/device/display_manager.h"
 #include "managers/network/weather_manager.h"
 #include "screens/weather_icons.h"
-#include "core/config.h"
+#include <prayer_bot_config.h>
 #include "screens/screen_ui.h"
 
 namespace {
