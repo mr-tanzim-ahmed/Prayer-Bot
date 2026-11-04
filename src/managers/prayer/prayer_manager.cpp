@@ -49,34 +49,38 @@ namespace {
         return pt.hour * 60 + pt.minute;
     }
 
-    int currentTimeMinutes() {
-        struct tm t;
-        if (!getLocalTime(&t, 50)) return -1;
-        return t.tm_hour * 60 + t.tm_min;
-    }
-
     int currentDay() {
         struct tm t;
-        if (!getLocalTime(&t, 50)) return -1;
+        if (!getLocalTime(&t, 0)) return -1;
         return t.tm_mday;
     }
 
-    int currentMonth() {
-        struct tm t;
-        if (!getLocalTime(&t, 50)) return -1;
-        return t.tm_mon + 1;
+    void getTodayPrayersForDay(int day, DailyPrayers& prayers) {
+        if (day >= 1 && day <= cachedDaysCount &&
+            cachedPrayers[day - 1].fajr.hour > 0) {
+            prayers = cachedPrayers[day - 1];
+        } else if (hasTodayPrayers && singleTodayPrayers.fajr.hour > 0) {
+            prayers = singleTodayPrayers;
+        } else {
+            prayers = defaultDhakaPrayers;
+        }
+
+        if (prayers.fajr.hour == 0 && prayers.fajr.minute == 0)
+            prayers.fajr = defaultDhakaPrayers.fajr;
+        if (prayers.sunrise.hour == 0 && prayers.sunrise.minute == 0)
+            prayers.sunrise = defaultDhakaPrayers.sunrise;
+        if (prayers.dhuhr.hour == 0 && prayers.dhuhr.minute == 0)
+            prayers.dhuhr = defaultDhakaPrayers.dhuhr;
+        if (prayers.asr.hour == 0 && prayers.asr.minute == 0)
+            prayers.asr = defaultDhakaPrayers.asr;
+        if (prayers.maghrib.hour == 0 && prayers.maghrib.minute == 0)
+            prayers.maghrib = defaultDhakaPrayers.maghrib;
+        if (prayers.isha.hour == 0 && prayers.isha.minute == 0)
+            prayers.isha = defaultDhakaPrayers.isha;
     }
 
-    int currentYear() {
-        struct tm t;
-        if (!getLocalTime(&t, 50)) return -1;
-        return t.tm_year + 1900;
-    }
-
-    int currentSeconds() {
-        struct tm t;
-        if (!getLocalTime(&t, 50)) return -1;
-        return t.tm_hour * 3600 + t.tm_min * 60 + t.tm_sec;
+    int currentSeconds(const struct tm& time) {
+        return time.tm_hour * 3600 + time.tm_min * 60 + time.tm_sec;
     }
 
     bool fetchTodayTimings(const Settings& settings) {
@@ -174,7 +178,9 @@ namespace {
             Serial.printf("[PRAYER] Synced device clock from Aladhan API timestamp: %u\n", ts);
         }
 
-        const int day = data["date"]["gregorian"]["day"] | (currentDay() > 0 ? currentDay() : 1);
+        const int localDay = currentDay();
+        const int day = data["date"]["gregorian"]["day"] |
+            (localDay > 0 ? localDay : 1);
         if (day >= 1 && day <= 31) {
             cachedPrayers[day - 1] = fetched;
             if (cachedDaysCount < day) cachedDaysCount = day;
@@ -293,28 +299,15 @@ bool refresh(const Settings& settings) {
 }
 
 void getTodayPrayers(DailyPrayers& prayers) {
-    const int day = currentDay();
-    if (day >= 1 && day <= cachedDaysCount && cachedPrayers[day - 1].fajr.hour > 0) {
-        prayers = cachedPrayers[day - 1];
-    } else if (hasTodayPrayers && singleTodayPrayers.fajr.hour > 0) {
-        prayers = singleTodayPrayers;
-    } else {
-        prayers = defaultDhakaPrayers;
-    }
-
-    // Safeguard: Ensure no prayer time is ever 00:00
-    if (prayers.fajr.hour == 0 && prayers.fajr.minute == 0)       prayers.fajr    = defaultDhakaPrayers.fajr;
-    if (prayers.sunrise.hour == 0 && prayers.sunrise.minute == 0) prayers.sunrise = defaultDhakaPrayers.sunrise;
-    if (prayers.dhuhr.hour == 0 && prayers.dhuhr.minute == 0)     prayers.dhuhr   = defaultDhakaPrayers.dhuhr;
-    if (prayers.asr.hour == 0 && prayers.asr.minute == 0)         prayers.asr     = defaultDhakaPrayers.asr;
-    if (prayers.maghrib.hour == 0 && prayers.maghrib.minute == 0) prayers.maghrib = defaultDhakaPrayers.maghrib;
-    if (prayers.isha.hour == 0 && prayers.isha.minute == 0)       prayers.isha    = defaultDhakaPrayers.isha;
+    getTodayPrayersForDay(currentDay(), prayers);
 }
 
 void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited,
                       const Settings& settings) {
+    struct tm currentTime = {};
+    const bool timeValid = getLocalTime(&currentTime, 0);
     DailyPrayers today;
-    getTodayPrayers(today);
+    getTodayPrayersForDay(timeValid ? currentTime.tm_mday : -1, today);
 
     // Safeguards for prohibited-time window offsets (defaults: 15, 10, 15)
     const uint8_t sOff = settings.sunriseOffset > 0 ? settings.sunriseOffset : DEFAULT_SUNRISE_OFFSET;
@@ -348,8 +341,9 @@ void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited,
     prohibited.beforeSunset.endHour     = today.maghrib.hour;
     prohibited.beforeSunset.endMinute   = today.maghrib.minute;
 
-    const int nowMin = currentTimeMinutes();
-    const int nowSec = currentSeconds();
+    const int nowMin = timeValid
+        ? currentTime.tm_hour * 60 + currentTime.tm_min : -1;
+    const int nowSec = timeValid ? currentSeconds(currentTime) : -1;
 
     if (nowMin >= 0) {
         prohibited.afterSunrise.active = (nowMin >= sunriseMin && nowMin < afterSunriseEnd);
@@ -461,7 +455,7 @@ void updateNextPrayer(NextPrayerInfo& next, ProhibitedTimes& prohibited,
 
 bool isAzanTime(const DailyPrayers& prayers) {
     struct tm t;
-    if (!getLocalTime(&t, 50)) return false;
+    if (!getLocalTime(&t, 0)) return false;
 
     const int nowMin = t.tm_hour * 60 + t.tm_min;
     const int day = t.tm_mday;

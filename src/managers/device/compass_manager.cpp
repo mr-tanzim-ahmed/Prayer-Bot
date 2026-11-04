@@ -35,7 +35,8 @@ namespace {
     constexpr uint8_t CALIBRATION_DIRECTION_MASK =
         (1U << CALIBRATION_DIRECTION_COUNT) - 1U;
     constexpr uint8_t CALIBRATION_FORMAT_VERSION = 2;
-    constexpr uint32_t SENSOR_POLL_INTERVAL_MS = 50;
+    constexpr uint32_t HMC5883L_POLL_INTERVAL_MS = 50;
+    constexpr uint32_t QMC5883L_POLL_INTERVAL_MS = 20;
     constexpr uint32_t SENSOR_RETRY_MS = 5000;
     constexpr uint32_t SENSOR_STALE_MS = 1500;
     constexpr char CALIBRATION_PATH[] = "/compass_cal.json";
@@ -244,7 +245,7 @@ namespace {
             return;
         }
 
-        float heading = atan2f(correctedX, correctedY) * 180.0f / PI;
+        float heading = atan2f(-correctedX, correctedY) * 180.0f / PI;
         if (!isfinite(heading)) {
             headingValid = false;
             return;
@@ -326,7 +327,9 @@ void update() {
         if (now - lastInitAttemptMs >= SENSOR_RETRY_MS) init();
         return;
     }
-    if (now - lastReadAttemptMs < SENSOR_POLL_INTERVAL_MS) return;
+    const uint32_t pollIntervalMs = sensorType == SensorType::QMC5883L
+        ? QMC5883L_POLL_INTERVAL_MS : HMC5883L_POLL_INTERVAL_MS;
+    if (now - lastReadAttemptMs < pollIntervalMs) return;
     lastReadAttemptMs = now;
 
     int16_t x, y, z;

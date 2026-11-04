@@ -11,7 +11,7 @@ namespace {
     constexpr float RADIANS_TO_DEGREES = 57.2957795131f;
     constexpr float DHAKA_LATITUDE_TOLERANCE = 0.001f;
     constexpr float DHAKA_LONGITUDE_TOLERANCE = 0.001f;
-    constexpr float HEADING_FILTER_TIME_CONSTANT_MS = 250.0f;
+    constexpr float HEADING_FILTER_TIME_CONSTANT_MS = 100.0f;
 
     bool headingFilterInitialized = false;
     float filteredHeadingDegrees = 0.0f;

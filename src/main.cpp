@@ -362,8 +362,11 @@ void taskDisplay(void* param) {
 
         // Refresh Qiblah more often so compass movement feels immediate.
         const unsigned long now = millis();
+        if (g_currentScreen == SYS_SCREEN_QIBLA) {
+            CompassManager::update();
+        }
         const unsigned long screenUpdateInterval =
-            g_currentScreen == SYS_SCREEN_QIBLA ? 50UL : 100UL;
+            g_currentScreen == SYS_SCREEN_QIBLA ? 40UL : 100UL;
         if (now - lastScreenUpdateMs >= screenUpdateInterval) {
             lastScreenUpdateMs = now;
             ScreenRouter::update(g_currentScreen);
@@ -376,7 +379,9 @@ void taskDisplay(void* param) {
             changeScreen(SYS_SCREEN_PRAYER_FOCUS);
         }
 
-        vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(50));
+        const uint32_t displayTaskIntervalMs =
+            g_currentScreen == SYS_SCREEN_QIBLA ? 20U : 50U;
+        vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(displayTaskIntervalMs));
     }
 }
 

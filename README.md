@@ -54,7 +54,7 @@ The device has eight OLED screens: Prayer Focus, All Prayers, Clock & Calendar, 
 <details>
 <summary><strong>🧭 Qibla screen: calibration and accuracy</strong> <kbd>▸ VIEW DETAILS</kbd></summary>
 
-The Qibla screen uses an HMC5883L or QMC5883L compass and shows a smoothed arrow toward Makkah. It does not display a bearing or turn angle. At the default Dhaka coordinates, the calculated bearing is 277.6°; other locations use their configured latitude and longitude. The screen provides guidance if the compass, location, or calibration is not ready.
+The Qibla screen uses an HMC5883L or QMC5883L compass and shows a smoothed arrow toward Makkah as the device rotates. On Qibla, the display refreshes up to 25 times per second, with faster sampling for QMC5883L sensors. It does not display a bearing or turn angle. At the default Dhaka coordinates, the calculated bearing is 277.6°; other locations use their configured latitude and longitude. The screen provides guidance if the compass, location, or calibration is not ready.
 
 On first use, keep the device level and slowly rotate it through a full 360° turn. Calibration is saved only after readings cover all directions. A figure-eight can help expose the sensor to different directions, but keep it level while calibrating. Long-press the touch sensor on the Qibla screen to recalibrate. The bearing uses zero magnetic declination and is approximate; the firmware does not compensate for tilting the device. Keep the compass away from speakers, motors, magnets, and metal, as interference or incorrect sensor orientation can reduce accuracy. You can set a different location in the dashboard or use its permission-based device-location option.
 
