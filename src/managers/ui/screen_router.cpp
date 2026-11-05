@@ -38,7 +38,7 @@ namespace {
     bool allPrayersViewInitialized = false;
     bool azanOverlayDisplayed = false;
     constexpr unsigned long PRAYER_CURRENT_PAGE_MS = 4000UL;
-    constexpr unsigned long PRAYER_NEXT_PAGE_MS = 3000UL;
+    constexpr unsigned long PRAYER_NEXT_PAGE_MS = 4000UL;
     constexpr unsigned long PRAYER_PAGE_CYCLE_MS =
         PRAYER_CURRENT_PAGE_MS + PRAYER_NEXT_PAGE_MS;
     bool pomodoroViewInitialized = false;

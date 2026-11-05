@@ -92,7 +92,6 @@
 #define DEFAULT_STA_PASSWORD  ""
 #endif
 #define WEB_SERVER_PORT       80
-#define WEB_SERVER_HTTPS_PORT 443
 #define NTP_SERVER            "pool.ntp.org"
 
 // ------------------------------------------------------------

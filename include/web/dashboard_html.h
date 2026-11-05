@@ -13,40 +13,45 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%230f766e'/></svg>">
   <style>
     :root {
-      --primary: #0f766e;
-      --primary-dark: #064e3b;
-      --primary-hover: #047857;
-      --primary-soft: #ecfdf5;
-      --accent: #d97706;
-      --accent-soft: #fef3c7;
-      --bg: #f8fafc;
+      --primary: #0f806f;
+      --primary-dark: #075448;
+      --primary-hover: #0d927d;
+      --primary-soft: #e8f7f1;
+      --accent: #c47b20;
+      --accent-soft: #fff4df;
+      --bg: #f4f8f6;
       --panel: #ffffff;
-      --panel-subtle: #f1f5f9;
-      --line: #e2e8f0;
-      --line-hover: #cbd5e1;
-      --text: #0f172a;
-      --text-muted: #64748b;
-      --warn: #d97706;
-      --warn-soft: #fffbeb;
-      --bad: #dc2626;
-      --bad-soft: #fef2f2;
-      --good: #16a34a;
-      --good-soft: #f0fdf4;
-      --radius: 16px;
-      --radius-sm: 10px;
-      --radius-lg: 22px;
-      --shadow-sm: 0 1px 3px rgba(15,23,42,0.06);
-      --shadow: 0 4px 14px rgba(15,118,110,0.07);
-      --shadow-lg: 0 12px 28px rgba(15,23,42,0.1);
+      --panel-subtle: #f6faf8;
+      --line: #dfeae5;
+      --line-hover: #b7d2c7;
+      --text: #142a25;
+      --text-muted: #60766e;
+      --warn: #a85b12;
+      --warn-soft: #fff6e8;
+      --bad: #c03935;
+      --bad-soft: #fff0ef;
+      --good: #15805c;
+      --good-soft: #eaf8f0;
+      --radius: 18px;
+      --radius-sm: 12px;
+      --radius-lg: 26px;
+      --shadow-sm: 0 2px 8px rgba(20,54,43,0.05);
+      --shadow: 0 8px 26px rgba(20,70,53,0.065);
+      --shadow-lg: 0 18px 48px rgba(20,54,43,0.14);
+      --ease-out: cubic-bezier(0.2, 0.75, 0.25, 1);
     }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
     body {
       margin: 0;
-      background: var(--bg);
+      background:
+        radial-gradient(ellipse at 8% 0%, rgba(181, 229, 208, 0.36), transparent 34rem),
+        radial-gradient(ellipse at 96% 18%, rgba(244, 218, 172, 0.2), transparent 32rem),
+        linear-gradient(180deg, #f8fbf9 0%, var(--bg) 42rem, #f5f8f7 100%);
       color: var(--text);
       font: 15px/1.55 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
     }
     a { color: var(--primary); text-decoration: none; }
     a:hover { text-decoration: underline; }
@@ -56,18 +61,18 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       position: sticky;
       top: 0;
       z-index: 100;
-      background: rgba(255, 255, 255, 0.78);
-      backdrop-filter: blur(18px) saturate(150%);
-      -webkit-backdrop-filter: blur(18px) saturate(150%);
-      border-bottom: 1px solid var(--line);
-      box-shadow: var(--shadow-sm);
-      transition: background 0.2s ease, box-shadow 0.2s ease;
+      background: rgba(248, 252, 250, 0.86);
+      backdrop-filter: blur(20px) saturate(155%);
+      -webkit-backdrop-filter: blur(20px) saturate(155%);
+      border-bottom: 1px solid rgba(200, 222, 211, 0.76);
+      box-shadow: 0 4px 20px rgba(20, 54, 43, 0.045);
+      transition: background 0.28s var(--ease-out), box-shadow 0.28s var(--ease-out);
     }
     .app-bar.is-scrolled {
-      background: rgba(255, 255, 255, 0.68);
-      -webkit-backdrop-filter: blur(24px) saturate(180%);
-      backdrop-filter: blur(24px) saturate(180%);
-      box-shadow: 0 8px 26px rgba(15, 23, 42, 0.12);
+      background: rgba(248, 252, 250, 0.94);
+      -webkit-backdrop-filter: blur(24px) saturate(185%);
+      backdrop-filter: blur(24px) saturate(185%);
+      box-shadow: 0 10px 28px rgba(20, 54, 43, 0.1);
     }
     .app-bar-inner {
       max-width: 1140px;
@@ -87,18 +92,20 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       width: 42px;
       height: 42px;
       border-radius: 12px;
-      background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+      background:
+        linear-gradient(145deg, rgba(255,255,255,.2), transparent 58%),
+        linear-gradient(135deg, #064a40, #15917a);
       color: #fff;
       display: grid;
       place-items: center;
-      box-shadow: 0 3px 10px rgba(15, 118, 110, 0.3);
+      box-shadow: 0 5px 14px rgba(7, 84, 72, 0.24), inset 0 1px 0 rgba(255,255,255,.28);
     }
     .brand-icon svg { width: 24px; height: 24px; fill: currentColor; }
     .brand-title {
       font-size: 1.35rem;
       font-weight: 750;
       letter-spacing: -0.03em;
-      color: var(--primary-dark);
+      color: #075448;
       margin: 0;
       line-height: 1.2;
     }
@@ -136,50 +143,60 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       padding: 8px 14px;
       min-height: 40px;
       border-radius: 20px;
-      background: var(--panel-subtle);
-      border: 1px solid var(--line);
-      color: var(--text);
+      background: rgba(255,255,255,.68);
+      border: 1px solid rgba(213, 230, 221, .9);
+      color: #38564b;
       font-size: 0.84rem;
       font-weight: 600;
       white-space: nowrap;
-      transition: all 0.15s ease;
+      transition: color .22s var(--ease-out), background .22s var(--ease-out), border-color .22s var(--ease-out), box-shadow .22s var(--ease-out), transform .22s var(--ease-out);
       cursor: pointer;
     }
     .nav-pill:hover, .nav-pill:focus-visible {
-      background: var(--primary-soft);
-      border-color: var(--primary);
+      background: #e8f7f1;
+      border-color: #9dcdb8;
       color: var(--primary-dark);
+      transform: translateY(-1px);
       text-decoration: none;
     }
     .nav-pill.active {
-      background: var(--primary);
+      background: linear-gradient(135deg, #138773, #075448);
       color: #fff;
-      border-color: var(--primary);
+      border-color: transparent;
+      box-shadow: 0 4px 12px rgba(7, 84, 72, .2), inset 0 1px 0 rgba(255,255,255,.22);
     }
     
     /* Layout */
     main {
       max-width: 1140px;
       margin: auto;
-      padding: 24px 20px 80px;
+      padding: 30px 20px 88px;
     }
     .grid {
       display: grid;
       grid-template-columns: repeat(12, minmax(0, 1fr));
-      gap: 12px;
+      gap: 16px;
     }
     .card {
       min-width: 0;
       background: var(--panel);
-      border: 1px solid var(--line);
+      border: 1px solid rgba(219, 232, 225, .92);
       border-radius: var(--radius);
-      padding: 16px;
+      padding: 20px;
       box-shadow: var(--shadow);
       position: relative;
+      transition: border-color .28s var(--ease-out), box-shadow .28s var(--ease-out), transform .28s var(--ease-out);
+    }
+    @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+      .grid > .card:not(.hero-banner):hover {
+        border-color: #c8ddd2;
+        box-shadow: 0 14px 34px rgba(20, 70, 53, .09);
+        transform: translateY(-2px);
+      }
     }
     .wide { grid-column: span 12; }
     .grid > .card:not(.wide) { grid-column: span 6; }
-    [id] { scroll-margin-top: 130px; }
+    [id] { scroll-margin-top: 148px; }
     
     /* Typography & Headers */
     h2 {
@@ -233,11 +250,14 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     
     /* Hero Next Prayer Banner */
     .hero-banner {
-      background: linear-gradient(135deg, #064e3b 0%, #0f766e 65%, #115e59 100%);
+      background:
+        radial-gradient(ellipse at 88% 0%, rgba(230, 188, 111, .24), transparent 34%),
+        radial-gradient(ellipse at 8% 100%, rgba(37, 173, 137, .2), transparent 42%),
+        linear-gradient(120deg, #073b35 0%, #0b6256 52%, #137564 100%);
       color: #fff;
       border: none;
       padding: 18px 20px;
-      box-shadow: 0 10px 30px rgba(6, 78, 59, 0.22);
+      box-shadow: 0 18px 42px rgba(7, 70, 57, 0.22), inset 0 1px 0 rgba(255,255,255,.16);
       border-radius: var(--radius-lg);
       position: relative;
       overflow: hidden;
@@ -253,6 +273,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       background: radial-gradient(circle, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0) 70%);
       pointer-events: none;
     }
+    .hero-banner::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(115deg, transparent 38%, rgba(255,255,255,.045) 58%, transparent 78%);
+      pointer-events: none;
+    }
     .hero-grid {
       display: grid;
       grid-template-columns: 1.4fr 1fr;
@@ -265,7 +292,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       font-size: 0.85rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      color: #a7f3d0;
+      color: #b4ead4;
       font-weight: 700;
       margin-bottom: 6px;
     }
@@ -289,18 +316,19 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       border-radius: 20px;
       font-size: 0.95rem;
       font-weight: 650;
-      color: #fef08a;
+      color: #ffe2a2;
     }
     .hero-stats {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
-      background: rgba(0, 0, 0, 0.15);
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(4, 43, 38, 0.28);
+      border: 1px solid rgba(255, 255, 255, 0.18);
       border-radius: 14px;
-      padding: 16px;
+      padding: 18px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
     }
-    .hero-stat span { display: block; font-size: 0.75rem; color: #a7f3d0; font-weight: 600; text-transform: uppercase; }
+    .hero-stat span { display: block; font-size: 0.72rem; color: #b4ead4; font-weight: 650; text-transform: uppercase; letter-spacing: .045em; }
     .hero-stat strong { display: block; font-size: 1.05rem; font-weight: 700; color: #fff; margin-top: 2px; }
     
     /* Prayer Cards Grid */
@@ -311,23 +339,24 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       margin-top: 8px;
     }
     .prayer-card {
-      background: var(--panel-subtle);
-      border: 1.5px solid var(--line);
+      background: linear-gradient(155deg, #fff 0%, #f5faf7 100%);
+      border: 1px solid var(--line);
       border-radius: 14px;
       padding: 12px 8px;
       text-align: center;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: transform .24s var(--ease-out), box-shadow .24s var(--ease-out), border-color .24s var(--ease-out), background .24s var(--ease-out);
       position: relative;
+      overflow: hidden;
     }
     .prayer-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(15,118,110,0.1);
+      transform: translateY(-3px);
+      box-shadow: 0 10px 22px rgba(15,118,110,0.11);
       border-color: var(--primary);
     }
     .prayer-card.active-prayer {
-      background: var(--primary-soft);
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.18);
+      background: linear-gradient(150deg, #eaf8f1 0%, #dff3ea 100%);
+      border-color: #66ae91;
+      box-shadow: 0 5px 18px rgba(15, 118, 110, 0.1), inset 0 0 0 1px rgba(255,255,255,.72);
     }
     .prayer-icon {
       font-size: 1.5rem;
@@ -513,7 +542,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       color: var(--text);
       font: inherit;
       font-size: 16px; /* Prevents auto-zoom on iOS */
-      transition: border-color 0.15s, box-shadow 0.15s;
+      transition: border-color .2s var(--ease-out), box-shadow .2s var(--ease-out), background .2s var(--ease-out);
     }
     input:focus, select:focus, button:focus-visible, a:focus-visible {
       outline: 3px solid rgba(15, 118, 110, 0.25);
@@ -581,17 +610,18 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     }
     button:active { transform: translateY(1px) scale(0.985); }
     button.primary {
-      background: linear-gradient(180deg, rgba(255,255,255,0.28), transparent 48%),
-                  linear-gradient(135deg, #0f766e, #064e3b);
+      background: linear-gradient(180deg, rgba(255,255,255,.24), transparent 58%),
+                  linear-gradient(135deg, #15947e, #075448);
       color: #ffffff;
       border-color: rgba(255,255,255,0.28);
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.32),
-                  0 5px 14px rgba(15, 118, 110, 0.24);
+                  0 7px 18px rgba(15, 118, 110, 0.24);
     }
     button.primary:hover {
-      background: linear-gradient(180deg, rgba(255,255,255,0.34), transparent 48%),
-                  linear-gradient(135deg, #15968a, #065f46);
+      background: linear-gradient(180deg, rgba(255,255,255,.3), transparent 58%),
+                  linear-gradient(135deg, #20a58e, #086452);
       border-color: var(--primary-hover);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.38), 0 9px 22px rgba(15, 118, 110, .28);
     }
     button.accent {
       background: linear-gradient(180deg, rgba(255,255,255,0.28), transparent 48%),
@@ -602,9 +632,10 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
                   0 4px 12px rgba(180,83,9,0.2);
     }
     button.accent:hover {
-      background: #b45309;
+      background: linear-gradient(135deg, #d18a2e, #a95512);
     }
     button:disabled { opacity: 0.55; cursor: wait; }
+    button:disabled:active { transform: none; }
     .actions {
       display: flex;
       gap: 10px;
@@ -653,8 +684,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       margin: 14px 0;
       padding: 10px 14px;
       border-radius: 10px;
-      background: var(--primary-soft);
-      border: 1px solid #bbf7d0;
+      background: linear-gradient(110deg, #edf9f2, #e5f6ee);
+      border: 1px solid #c8e8d6;
       color: var(--primary-dark);
       font-weight: 650;
       display: flex;
@@ -740,8 +771,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       align-items: center;
       gap: 16px;
       padding: 18px;
-      background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
-      border: 1px solid #bbf7d0;
+      background: linear-gradient(135deg, #eff9f3, #e4f6ed);
+      border: 1px solid #c8e8d6;
       border-radius: 16px;
     }
     .voice-orb {
@@ -801,11 +832,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       display: grid;
       gap: 12px;
       padding: 18px;
-      border: 1px solid #c7d2fe;
+      border: 1px solid rgba(176, 202, 189, .78);
       border-radius: 20px;
       background:
-        radial-gradient(circle at 95% 0%, rgba(196, 181, 253, .42), transparent 38%),
-        linear-gradient(135deg, #f5f3ff, #eff6ff 58%, #ecfdf5);
+        radial-gradient(circle at 95% 0%, rgba(232, 194, 126, .28), transparent 34%),
+        radial-gradient(circle at 4% 100%, rgba(115, 199, 157, .2), transparent 38%),
+        linear-gradient(135deg, #f1f8f3, #edf7f2 54%, #fdf7e9);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.78);
     }
     .assistant-heading { display: flex; align-items: center; gap: 14px; }
     .assistant-heading .voice-orb { flex: 0 0 auto; }
@@ -817,9 +850,10 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       min-height: 42px;
       padding: 10px 12px;
       border-radius: 12px;
-      background: rgba(255, 255, 255, .76);
+      background: rgba(255, 255, 255, .82);
       color: var(--text);
       line-height: 1.45;
+      border: 1px solid rgba(255,255,255,.78);
     }
     .assistant-result.error { color: var(--bad); }
     
@@ -830,12 +864,14 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       font-size: 1.15rem;
       font-weight: 800;
       border-radius: 16px;
-      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      background: linear-gradient(135deg, #1a9b83 0%, #0b705f 52%, #064a40 100%);
       color: #fff;
       border: none;
-      box-shadow: 0 4px 14px rgba(15, 118, 110, 0.28);
+      box-shadow: 0 8px 20px rgba(15, 118, 110, 0.24), inset 0 1px 0 rgba(255,255,255,.22);
+      transition: transform .2s var(--ease-out), box-shadow .2s var(--ease-out), filter .2s var(--ease-out);
     }
-    .dhikr-button:active { transform: scale(0.98); }
+    .dhikr-button:hover { filter: brightness(1.05); box-shadow: 0 11px 26px rgba(15, 118, 110, .29), inset 0 1px 0 rgba(255,255,255,.25); }
+    .dhikr-button:active { transform: scale(0.985); }
     .chart-wrap {
       position: relative;
       width: 100%;
@@ -905,11 +941,11 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       margin: 12px auto 0;
       max-width: 560px;
       padding: 10px 12px;
-      background: rgba(255, 255, 255, 0.86);
-      backdrop-filter: blur(18px) saturate(1.35);
-      -webkit-backdrop-filter: blur(18px) saturate(1.35);
-      border: 1px solid rgba(255,255,255,0.72);
-      border-radius: 16px;
+      background: rgba(250, 253, 251, 0.9);
+      backdrop-filter: blur(20px) saturate(1.45);
+      -webkit-backdrop-filter: blur(20px) saturate(1.45);
+      border: 1px solid rgba(209, 229, 218, 0.9);
+      border-radius: 18px;
       box-shadow: var(--shadow-lg);
     }
     .savebar button { width: 100%; min-height: 48px; }
@@ -926,10 +962,10 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     .online-notice {
       margin: 0 0 18px;
       padding: 14px 18px;
-      border: 1px solid #fed7aa;
+      border: 1px solid #f3d9b8;
       border-radius: 12px;
-      background: #fff7ed;
-      color: #9a3412;
+      background: linear-gradient(110deg, #fff8ec, #fff3e7);
+      color: #85430f;
       font-weight: 650;
       display: flex;
       align-items: center;
@@ -941,6 +977,16 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     
     /* Legacy module-menu compatibility container */
     .module-menu { display: none; }
+
+    @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+      button:not(.primary):not(.accent):not(.dhikr-button):not(:disabled):hover {
+        transform: translateY(-1px);
+        box-shadow: 0 7px 18px rgba(20, 54, 43, .1);
+      }
+      button.primary:hover, button.accent:hover, .dhikr-button:hover {
+        transform: translateY(-2px);
+      }
+    }
 
     /* Responsive Queries */
     @media (max-width: 960px) {
@@ -1203,8 +1249,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
     <!-- Al-Quran Audio Player -->
     <article class="card" id="quran-player">
-      <h2><span>✨</span> Gemini Quran Assistant</h2>
-      <p class="hint">Find a Surah by voice or text, then listen on this phone or Prayer-Bot. Gemini interprets your request through Prayer-Bot; your API key never enters this dashboard.</p>
+      <h2><span>✨</span> Quran Assistant</h2>
+      <p class="hint">Find a Surah by voice or text, then listen on this phone or Prayer-Bot. Common Surah names and numbers are matched locally; flexible requests use Gemini 3.8 Flash through the device, so the API key is not exposed to the browser.</p>
 
       <div class="assistant-panel">
         <div class="assistant-heading">
@@ -1212,7 +1258,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"></path></svg>
           </div>
           <div>
-            <div class="assistant-greeting">Tap the microphone and speak. Prayer-Bot sends your request to Gemini.</div>
+            <div class="assistant-greeting">Tap the microphone and speak. Browser speech recognition works without a Gemini key; flexible requests are handled by Gemini 3.8 Flash on Prayer-Bot.</div>
             <div class="voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
           </div>
         </div>
@@ -1224,7 +1270,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         </div>
         <div class="assistant-search">
           <input id="assistantQuery" type="search" maxlength="120" placeholder="Try “Play Surah Al-Kahf”" aria-label="Ask the Quran assistant">
-          <button id="assistantAskButton" type="button" data-requires-wifi onclick="submitAssistantQuery()">Ask Gemini</button>
+          <button id="assistantAskButton" type="button" data-requires-wifi onclick="submitAssistantQuery()">Ask</button>
         </div>
         <div class="assistant-examples">Try: “Play Surah Ar-Rahman”, “Find Ya-Sin”, or “Play the Azan alarm”. The Azan action plays the device's notification tone, not a recorded call to prayer.</div>
       </div>
@@ -1240,7 +1286,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <div class="field">
         <label for="quranSurahSelect">Select Surah (1 to 114)</label>
         <select id="quranSurahSelect" data-requires-wifi>
-          <option value="1">1. Al-Fatiha</option>
+          <option value="">Choose a Surah</option>
         </select>
       </div>
       <div class="actions quran-actions" style="margin-top:12px">
@@ -1356,7 +1402,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
           </div>
           <div class="field" style="grid-column:span 2">
             <button id="useDeviceLocation" type="button" class="secondary" onclick="useDeviceLocation()">📍 Use device location</button>
-            <p class="hint">Requires browser location permission and a secure HTTPS page. Confirm the city/area label, then save.</p>
+            <p class="hint">Requires browser location permission and a secure page. The device serves HTTP; enter coordinates manually or use a secure proxy.</p>
           </div>
           <div class="field"><label for="city">City Name</label><input id="city" maxlength="63" required></div>
           <div class="field"><label for="timezone">Timezone Label</label><input id="timezone" maxlength="39" placeholder="Asia/Dhaka" required></div>
@@ -1817,7 +1863,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   async function useDeviceLocation() {
     if (!window.isSecureContext) {
-      message('Device location requires a secure HTTPS page. Open the dashboard using its HTTPS address.', true);
+      message('Device location requires a secure browser page. Enter coordinates manually or use a secure HTTPS proxy.', true);
       return;
     }
     if (!navigator.geolocation) {
@@ -2038,10 +2084,11 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     const sel = byId('quranSurahSelect');
     if (!sel) return;
     sel.replaceChildren();
+    sel.add(new Option('Choose a Surah', ''));
     surahs.forEach((name, i) => {
       sel.add(new Option(`${i + 1}. ${name}`, i + 1));
     });
-    sel.value = 1;
+    sel.value = '';
   }
 
   let browserRecognition = null;
@@ -2089,6 +2136,30 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     });
   }
 
+  function initializeSectionNavigation() {
+    const links = [...document.querySelectorAll('.nav-bar .nav-pill[href^="#"]')];
+    const targets = links
+      .map(link => byId(link.hash.slice(1)))
+      .filter(Boolean);
+    if (!('IntersectionObserver' in window)) return;
+
+    const observer = new IntersectionObserver(entries => {
+      const current = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (!current) return;
+
+      links.forEach(link => {
+        const active = link.hash === `#${current.target.id}`;
+        link.classList.toggle('active', active);
+        if (active) link.setAttribute('aria-current', 'location');
+        else link.removeAttribute('aria-current');
+      });
+    }, { rootMargin: '-148px 0px -68% 0px', threshold: 0 });
+
+    targets.forEach(target => observer.observe(target));
+  }
+
   function initializeScrollHeader() {
     const header = document.querySelector('.app-bar');
     let updatePending = false;
@@ -2133,6 +2204,23 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       if (padded.includes(` ${normalizeSurahSpeech(name)} `)) return number;
     }
     return 0;
+  }
+
+  function findLocalAssistantCommand(transcript) {
+    const surahNumber = findSpokenSurah(transcript);
+    if (surahNumber) return { intent: 'surah', number: surahNumber };
+
+    const spoken = normalizeSurahSpeech(transcript);
+    const numberedSurah = spoken.match(/\b(?:surah|chapter)\s+(?:number\s+)?(\d{1,3})\b/);
+    if (numberedSurah) {
+      const number = Number(numberedSurah[1]);
+      if (number >= 1 && number <= surahs.length)
+        return { intent: 'surah', number };
+    }
+
+    const asksForAzan = /\b(?:play|start|trigger|turn on)\b.*\b(?:azan|adhan)\b|\b(?:azan|adhan)\s+(?:alarm|tone)\b/.test(spoken);
+    if (asksForAzan) return { intent: 'azan' };
+    return null;
   }
 
   async function chooseSurah(number) {
@@ -2195,7 +2283,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       }
       if (result.status === 'error') throw new Error(result.error || 'Gemini could not understand that request.');
       if (result.status === 'unknown') throw new Error('Recognition request expired.');
-      if (attempt % 4 === 0) setBrowserVoiceState(true, 'Gemini is identifying your request…');
+      if (attempt % 4 === 0) setBrowserVoiceState(true, 'Gemini 3.8 Flash is identifying your request…');
     }
     throw new Error('Gemini recognition timed out.');
   }
@@ -2257,21 +2345,23 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   async function handleCapturedAudio(blob, attempt) {
     if (!blob || blob.size === 0) throw new Error('No audio was captured. Tap the microphone and try again.');
     if (blob.size > 256 * 1024) throw new Error('Recording is too large. Keep it under 6 seconds and try again.');
-    setBrowserVoiceState(true, 'Sending your recording to Gemini…');
+    setBrowserVoiceState(true, 'Sending your recording to Gemini 3.8 Flash…');
     const command = await recognizeAudioWithGemini(blob);
     await runAssistantCommand(command, attempt);
   }
 
   async function handleAssistantQuery(transcript, attempt) {
     if (!transcript.trim()) throw new Error('Please say or type a Surah name or an Azan request.');
-    setBrowserVoiceState(true, 'Gemini is understanding your request…');
-    let command;
-    try {
-      command = await recognizeTranscriptWithGemini(transcript);
-    } catch(geminiError) {
-      const localNumber = findSpokenSurah(transcript);
-      if (!localNumber) throw geminiError;
-      command = { intent: 'surah', number: localNumber };
+    let command = findLocalAssistantCommand(transcript);
+    if (command) {
+      setBrowserVoiceState(true, 'Matched your request on Prayer-Bot…');
+    } else {
+      setBrowserVoiceState(true, 'Trying optional Gemini 3.8 Flash recognition…');
+      try {
+        command = await recognizeTranscriptWithGemini(transcript);
+      } catch(error) {
+        throw new Error(`${error.message} Try a Surah name/number or configure an optional Gemini key.`);
+      }
     }
     await runAssistantCommand(command, attempt);
   }
@@ -2369,13 +2459,14 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     voiceCaptureError = '';
     voiceCapturedTranscript = '';
 
+    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+      setBrowserVoiceState(true, 'Starting browser speech recognition…');
+      startBrowserRecognition(attempt);
+      return;
+    }
+
     if (!window.isSecureContext) {
-      if (window.SpeechRecognition || window.webkitSpeechRecognition) {
-        setBrowserVoiceState(true, 'Starting browser speech recognition… Gemini will interpret the transcript.');
-        startBrowserRecognition(attempt);
-        return;
-      }
-      setBrowserVoiceState(false, 'This browser blocks microphone access on HTTP. Type your request here, or open the HTTPS address for audio recording.', true);
+      setBrowserVoiceState(false, 'Direct recording requires a secure page. Use browser speech recognition or type your request, or connect through a secure HTTPS proxy.', true);
       return;
     }
 
@@ -2440,7 +2531,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         voicePermissionPending = false;
         releaseBrowserAudioStream();
         if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
-          setBrowserVoiceState(false, 'Allow microphone access in Safari, then try again over HTTPS.', true);
+          setBrowserVoiceState(false, 'Allow microphone access in Safari and open the dashboard through a secure HTTPS page.', true);
           return;
         }
         if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) {
@@ -2450,11 +2541,6 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       }
     }
 
-    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
-      setBrowserVoiceState(true, 'Starting browser speech recognition…');
-      startBrowserRecognition(attempt);
-      return;
-    }
     setBrowserVoiceState(false, 'Voice input is not supported by this browser. Type your request instead.', true);
   }
 
@@ -2505,7 +2591,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   async function playQuran() {
     const sel = byId('quranSurahSelect');
-    const surah = Number(sel?.value) || 1;
+    const surah = Number(sel?.value);
     try {
       await chooseSurah(surah);
       message(`Playing Surah ${surah}: ${surahs[surah - 1] || ''}.`);
@@ -2651,6 +2737,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   }
 
   initializeSectionReveals();
+  initializeSectionNavigation();
   initializeScrollHeader();
   initQuranDropdown();
   refreshAll();

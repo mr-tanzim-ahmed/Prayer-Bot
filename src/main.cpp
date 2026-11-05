@@ -366,7 +366,7 @@ void taskDisplay(void* param) {
             CompassManager::update();
         }
         const unsigned long screenUpdateInterval =
-            g_currentScreen == SYS_SCREEN_QIBLA ? 40UL : 100UL;
+            g_currentScreen == SYS_SCREEN_QIBLA ? 30UL : 100UL;
         if (now - lastScreenUpdateMs >= screenUpdateInterval) {
             lastScreenUpdateMs = now;
             ScreenRouter::update(g_currentScreen);

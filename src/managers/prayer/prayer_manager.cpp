@@ -126,15 +126,9 @@ namespace {
         for (const char* field : timeFields)
             day["timings"][field] = true;
 
-        String payload = http.getString();
-        http.end();
-        if (payload.isEmpty()) {
-            Serial.println("[PRAYER] Calendar backup response was empty.");
-            return false;
-        }
         const DeserializationError error = deserializeJson(
-            document, payload, DeserializationOption::Filter(filter));
-        payload = "";
+            document, http.getStream(), DeserializationOption::Filter(filter));
+        http.end();
         if (error || !document["data"].is<JsonArray>()) {
             Serial.printf("[PRAYER] Invalid calendar backup response: %s\n",
                           error ? error.c_str() : "data is not an array");
@@ -379,15 +373,9 @@ namespace {
         };
         for (const char* field : filteredTimeFields)
             filteredData["timings"][field] = true;
-        String payload = http.getString();
-        http.end();
-        if (payload.isEmpty()) {
-            Serial.println("[PRAYER] Empty response payload from Aladhan API.");
-            return false;
-        }
         DeserializationError err = deserializeJson(
-            doc, payload, DeserializationOption::Filter(filter));
-        payload = "";
+            doc, http.getStream(), DeserializationOption::Filter(filter));
+        http.end();
         if (err) {
             Serial.printf("[PRAYER] JSON error: %s\n", err.c_str());
             return false;

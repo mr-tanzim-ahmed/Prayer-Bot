@@ -9,6 +9,7 @@ Prayer-Bot.code-workspace
 /data/*
 !/data/.gitkeep
 !/data/PrayerBot_Arrow.svg
+!/data/beep_sound.mp3
 
 # Firmware build artifacts
 *.bin

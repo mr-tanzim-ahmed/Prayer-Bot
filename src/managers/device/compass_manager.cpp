@@ -32,10 +32,9 @@ namespace {
     constexpr uint16_t CALIBRATION_MIN_SAMPLES = 80;
     constexpr int16_t CALIBRATION_MIN_AXIS_SPAN = 100;
     constexpr uint8_t CALIBRATION_DIRECTION_COUNT = 8;
-    constexpr uint8_t CALIBRATION_DIRECTION_MASK =
-        (1U << CALIBRATION_DIRECTION_COUNT) - 1U;
+    constexpr uint8_t CALIBRATION_MIN_DIRECTIONS = 6;
     constexpr uint8_t CALIBRATION_FORMAT_VERSION = 3;
-    constexpr uint32_t HMC5883L_POLL_INTERVAL_MS = 50;
+    constexpr uint32_t HMC5883L_POLL_INTERVAL_MS = 20;
     constexpr uint32_t QMC5883L_POLL_INTERVAL_MS = 20;
     constexpr uint32_t SENSOR_RETRY_MS = 5000;
     constexpr uint32_t SENSOR_STALE_MS = 1500;
@@ -101,7 +100,7 @@ namespace {
         uint8_t id[3] = {};
         if (readRegisters(HMC5883L_ADDRESS, REG_ID_A, id, sizeof(id)) &&
             id[0] == 'H' && id[1] == '4' && id[2] == '3') {
-            if (!writeRegister(HMC5883L_ADDRESS, REG_CONFIG_A, 0x70) ||
+            if (!writeRegister(HMC5883L_ADDRESS, REG_CONFIG_A, 0x58) ||
                 !writeRegister(HMC5883L_ADDRESS, REG_CONFIG_B, 0x20) ||
                 !writeRegister(HMC5883L_ADDRESS, REG_MODE, 0x00)) {
                 Serial.println("[COMPASS] HMC5883L configuration failed.");
@@ -248,15 +247,21 @@ namespace {
         if (direction < CALIBRATION_DIRECTION_COUNT) {
             calibrationDirections |= static_cast<uint8_t>(1U << direction);
         }
-        if (calibrationDirections != CALIBRATION_DIRECTION_MASK) return;
+        uint8_t coveredDirections = calibrationDirections;
+        uint8_t directionCount = 0;
+        while (coveredDirections != 0) {
+            directionCount += coveredDirections & 1U;
+            coveredDirections >>= 1;
+        }
+        if (directionCount < CALIBRATION_MIN_DIRECTIONS) return;
 
         offsetX = candidateOffsetX;
         offsetY = candidateOffsetY;
         scaleX = candidateScaleX;
         scaleY = candidateScaleY;
         calibrated = true;
-        Serial.printf("[COMPASS] Hard/soft-iron calibration complete (X %.3f, Y %.3f).\n",
-                      scaleX, scaleY);
+        Serial.printf("[COMPASS] Hard/soft-iron calibration complete with %u/8 direction coverage (X %.3f, Y %.3f).\n",
+                      static_cast<unsigned>(directionCount), scaleX, scaleY);
         saveCalibration();
     }
 
@@ -402,7 +407,7 @@ bool resetCalibration() {
     scaleX = 1.0f;
     scaleY = 1.0f;
     headingValid = false;
-    Serial.println("[COMPASS] Calibration reset; rotate the device flat through 360 degrees.");
+    Serial.println("[COMPASS] Calibration reset; keep the device level and slowly turn it through about 270 degrees, away from metal and magnets.");
     return true;
 }
 

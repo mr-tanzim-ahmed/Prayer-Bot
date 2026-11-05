@@ -10,7 +10,6 @@ This guide covers installing the tools, building and uploading the firmware from
 - [Install VS Code and PlatformIO](#install-vs-code-and-platformio)
 - [Get the project and configure secrets](#get-the-project-and-configure-secrets)
 - [Build, upload, and monitor](#build-upload-and-monitor)
-- [Optional: configure dashboard HTTPS](#optional-configure-dashboard-https)
 - [Connect Prayer-Bot to Wi-Fi](#connect-prayer-bot-to-wi-fi)
 - [Set location and use the dashboard](#set-location-and-use-the-dashboard)
 - [Troubleshooting](#troubleshooting)
@@ -23,7 +22,6 @@ This guide covers installing the tools, building and uploading the firmware from
 - [Visual Studio Code](https://code.visualstudio.com/).
 - The **PlatformIO IDE** VS Code extension.
 - An internet connection for the first build and for online device features.
-- [OpenSSL](https://www.openssl.org/) only if you want to create a self-signed HTTPS certificate.
 
 ### Board and hardware
 
@@ -54,7 +52,7 @@ Open the VS Code integrated terminal with **Terminal → New Terminal** and crea
 if (-not (Test-Path configuration\secrets.h)) { Copy-Item configuration\secrets.h.example configuration\secrets.h }
 ```
 
-Open `configuration\secrets.h` in the Explorer. Add API keys if you want weather/air-quality data (OpenWeatherMap) or Quran request recognition (Gemini). Prayer times do not require your own API key. Wi-Fi credentials are optional; you can choose a network from the setup dashboard instead. Keep the file private: Git ignores `configuration\secrets.h`, so do not force-add or share it. If the file already exists, preserve your current keys; do not overwrite it.
+Open `configuration\secrets.h` in the Explorer. Add an API key if you want weather/air-quality data (OpenWeatherMap). Gemini is optional: common Surah names and numbers can be handled without it in the dashboard, while flexible requests and the on-device microphone recognizer use Gemini. Prayer times do not require your own API key. Wi-Fi credentials are optional; you can choose a network from the setup dashboard instead. Keep the file private: Git ignores `configuration\secrets.h`, so do not force-add or share it. If the file already exists, preserve your current keys; do not overwrite it.
 
 ## Build, upload, and monitor
 
@@ -81,34 +79,15 @@ When multiple boards are connected, select the correct port in PlatformIO or spe
 pio run --target upload --upload-port COM5
 ```
 
-The serial log prints the setup dashboard address (`10.77.0.1`) and, after router setup, the home Wi-Fi address. HTTP is available on both interfaces; HTTPS is available on both when the HTTPS certificate files are installed and the listener starts.
+The serial log prints the HTTP setup dashboard address (`10.77.0.1`) and, after router setup, the home Wi-Fi address.
 
 > **Flash layout:** The 4 MB ESP32 target uses a single 2 MB firmware slot and about 1.875 MB for LittleFS. This provides room for the current firmware and persistent files but does not support A/B OTA updates. Changing partition layouts changes the LittleFS offset; back up settings and Wi-Fi credentials, then re-upload filesystem contents.
 
 ## Touch feedback sound
 
-Touch feedback uses an MP3 embedded in program flash and plays through the MAX98357A I²S amplifier. The sound is included in the firmware, so no filesystem upload is needed for touch feedback.
+Touching the sensor plays an MP3 through the MAX98357A I²S amplifier. The sound is embedded in program flash and also retained as `data/beep_sound.mp3` for inspection and standalone testing; the firmware does not need a filesystem upload for touch feedback.
 
-## Optional: configure dashboard HTTPS
-
-The dashboard serves both HTTP on port 80 and HTTPS on port 443. HTTP remains available if HTTPS has not been configured or cannot start. HTTPS is needed for browser features that require a secure context, including device geolocation and direct microphone recording.
-
-The HTTPS server reads `data/https_certificate.pem` and `data/https_private_key.pem` from LittleFS. If you do not already have a certificate pair, create a local self-signed pair with OpenSSL. Replace the example router IP with the device's current address:
-
-```powershell
-openssl req -x509 -newkey rsa:2048 -noenc -keyout data\https_private_key.pem -out data\https_certificate.pem -days 3650 -subj "/CN=Prayer-Bot" -addext "subjectAltName=DNS:Prayer-Bot,DNS:prayer-bot.local,IP:10.77.0.1,IP:192.168.1.104"
-```
-
-Upload the firmware and filesystem so the device runs the HTTPS server and has the certificate pair in LittleFS:
-
-```powershell
-pio run --target upload
-pio run --target uploadfs
-```
-
-Open `http://10.77.0.1/` or `https://10.77.0.1/` while connected to the setup Wi-Fi. On your router network, use the device's current IP with either `http://` or `https://`. Repeat the filesystem upload whenever you replace the certificate pair. **Never commit or share the private key.** Browsers may show a warning for a self-signed certificate; the certificate must match the dashboard address you use. HTTPS encrypts traffic but does not add dashboard authentication, so use the device only on a trusted local network.
-
-The trusted root certificates in [`include/network/https_client.h`](include/network/https_client.h) are used for outbound HTTPS API requests made by the ESP32. They are separate from the dashboard's certificate files.
+The dashboard runs over HTTP on port 80. Browser geolocation and direct microphone recording require a secure browser context; use manual location entry and supported browser speech recognition, or put the device behind a trusted HTTPS reverse proxy if those features are needed. The firmware's trusted root certificates in [`include/network/https_client.h`](include/network/https_client.h) are still required for secure outbound API requests.
 
 ## Connect Prayer-Bot to Wi-Fi
 
@@ -123,17 +102,17 @@ The trusted root certificates in [`include/network/https_client.h`](include/netw
 
 The setup hotspot remains active while the device connects to Wi-Fi. Phones may ask whether to remain connected to this no-internet network. Use the password 12345678 to join the hotspot, and enter the chosen network details in the dashboard.
 
-The setup hotspot uses `http://10.77.0.1` (or `https://10.77.0.1` when HTTPS is configured). HTTP and HTTPS are both served by the device; HTTPS may show a self-signed-certificate warning. The address on the selected Wi-Fi network is assigned by that network's DHCP and can change. Some phones cannot access a device connected to their own hotspot; if you cannot reach the dashboard, try another device on that network.
+The setup hotspot serves the dashboard at `http://10.77.0.1`. The address on the selected Wi-Fi network is assigned by that network's DHCP and can change. Some phones cannot access a device connected to their own hotspot; if you cannot reach the dashboard, try another device on that network.
 
 ## Set location and use the dashboard
 
 The dashboard offers device status, prayer times, prohibited-time windows, Hijri date, weather/AQI, screen selection, Pomodoro controls/history, Dhikr, Quran audio, Wi-Fi setup, and device preferences.
 
-Dhaka is the default location. In **Device Preferences & Coordinates**, choose a preset or enter the city/area, coordinates, timezone, and UTC offset manually. The optional **Use device location** button requests permission from the browser and fills in coordinates and timezone. It requires HTTPS and the browser/device location service. Review the city/area label before saving; the LAN address alone cannot identify your geographic area, and the dashboard does not reverse-geocode coordinates. Saved coordinates are used for prayer times and, when configured, weather.
+Dhaka is the default location. In **Device Preferences & Coordinates**, choose a preset or enter the city/area, coordinates, timezone, and UTC offset manually. The optional **Use device location** button requests permission from the browser and fills in coordinates and timezone. It requires a secure browser context and the browser/device location service; the device's HTTP dashboard does not provide one. Review the city/area label before saving; the LAN address alone cannot identify your geographic area, and the dashboard does not reverse-geocode coordinates. Saved coordinates are used for prayer times and, when configured, weather.
 
-Browser location and direct microphone recording need a secure HTTPS page. Accept the self-signed certificate warning if using a locally generated certificate; if you stay on HTTP, enter location manually and use text-based requests or supported browser speech recognition instead of direct recording.
+Browser location and direct microphone recording need a secure page. The device serves HTTP only; enter location manually and use supported browser speech recognition or text requests, or access the dashboard through a trusted HTTPS reverse proxy.
 
-Typed Gemini requests work over HTTP or HTTPS. For direct audio recording, open HTTPS, allow microphone access, record for up to six seconds, then stop and send. The firmware forwards the recording to Gemini and does not store it. Phone browsers may require tapping the visible audio controls to start Quran playback.
+Common Surah names/numbers and explicit Azan alarm requests work without Gemini in the dashboard. Flexible dashboard requests and on-device microphone recognition use the optional Gemini API key (Gemini 3.8 Flash). The firmware proxies text and inline Base64 audio to Google's Interactions API over HTTPS; the browser never receives the API key, and requests set `store: false`. Device audio is a short 16 kHz mono WAV. This is push-to-talk command recognition, not Gemini Live conversation. Direct browser audio recording is available when you access the dashboard through a secure page. Phone browsers may require tapping the visible audio controls to start Quran playback.
 
 ## API keys
 
@@ -143,7 +122,7 @@ The firmware uses:
 |---|---|---|
 | [Aladhan](https://aladhan.com/prayer-times-api) | Prayer timetable for the configured location and calculation method | No |
 | [OpenWeatherMap](https://openweathermap.org/api) | Weather and air-pollution readings | Yes |
-| [Google Gemini](https://aistudio.google.com/) | Recognizes typed or spoken Surah and Azan-notification requests | Yes |
+| [Google Gemini](https://aistudio.google.com/) | Optional recognition for flexible requests and direct audio recordings | No |
 | [MP3Quran v3](https://www.mp3quran.net/eng/api) | Reciter metadata and Quran audio sources | No |
 
 Add the optional keys to `configuration\secrets.h`, then rebuild and upload the firmware. The keys are compiled into the device and are not shown or editable in the dashboard. Never commit, screenshot, or share API keys. If a key is exposed, revoke it with its provider and create a replacement.
@@ -158,7 +137,7 @@ Once connected, stay on the **Prayer-Bot** Wi-Fi even if the phone reports no in
 
 ### The dashboard is unreachable after connecting to the router
 
-Check Serial Monitor or your router's client list for the current IP. Confirm the browser device is on the same network. The router-assigned IP may change after reconnecting; create a DHCP reservation in your router to keep it stable. If the device IP is 192.168.1.104, use `http://192.168.1.104/` or `https://192.168.1.104/` (HTTPS requires a matching certificate SAN and may show a trust warning). While connected directly to Prayer-Bot Wi-Fi, use `http://10.77.0.1/` or `https://10.77.0.1/`.
+Check Serial Monitor or your router's client list for the current IP. Confirm the browser device is on the same network. The router-assigned IP may change after reconnecting; create a DHCP reservation in your router to keep it stable. Open `http://<device-ip>/` on your router network, or `http://10.77.0.1/` while connected directly to Prayer-Bot Wi-Fi.
 
 ### Prayer times or Quran audio are unavailable offline
 

@@ -11,7 +11,6 @@
 #include "managers/network/wifi_manager.h"
 #include "managers/audio/voice_manager.h"
 #include "managers/audio/azan_manager.h"
-#include "managers/web/https_server_manager.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
@@ -46,6 +45,8 @@ namespace {
     Settings* settingsRef = nullptr;
     constexpr size_t MAX_REQUEST_BODY_BYTES = 2048;
     constexpr size_t MAX_DASHBOARD_AUDIO_BYTES = 256 * 1024;
+    constexpr size_t MAX_INTERNAL_DASHBOARD_AUDIO_BYTES = 64 * 1024;
+    constexpr size_t MIN_INTERNAL_AUDIO_HEADROOM_BYTES = 64 * 1024;
     constexpr UBaseType_t DASHBOARD_CONTROL_QUEUE_LENGTH = 12;
 
     struct DashboardControlCommand {
@@ -87,18 +88,6 @@ namespace {
             Serial.println("[WEB] Dashboard (home Wi-Fi): address will appear after Wi-Fi connects.");
         }
 
-        if (HttpsServerManager::isRunning()) {
-            if (hasAccessPoint) {
-                Serial.print("[WEB] Secure dashboard (Prayer-Bot Wi-Fi): https://");
-                Serial.print(WiFi.softAPIP());
-                Serial.println("/");
-            }
-            if (hasRouterConnection) {
-                Serial.print("[WEB] Secure dashboard (home Wi-Fi): https://");
-                Serial.print(WiFi.localIP());
-                Serial.println("/");
-            }
-        }
     }
 
     struct DashboardAudioUpload {
@@ -376,7 +365,6 @@ extern volatile bool g_webAzanStartRequested;
 namespace WebServerManager {
 
 void init(Settings& settings) {
-    HttpsServerManager::stop();
     if (server) {
         server->end();
         delete server;
@@ -621,7 +609,7 @@ void init(Settings& settings) {
         next["countdown"] = formatDuration(g_nextPrayer.countdownSeconds);
         JsonObject quran = doc["quran"].to<JsonObject>();
         const uint8_t curSurah = VoiceManager::getPlayingSurah();
-        quran["surah"] = VoiceManager::getSurahName(curSurah);
+        quran["surah"] = curSurah ? VoiceManager::getSurahName(curSurah) : "";
         quran["surahNumber"] = curSurah;
         quran["status"] = VoiceManager::getStatusText();
         quran["playing"] = AzanManager::isQuranPlaying();
@@ -906,8 +894,19 @@ void init(Settings& settings) {
                 upload->data = static_cast<uint8_t*>(
                     heap_caps_malloc(total, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
                 if (!upload->data) {
-                    upload->data = static_cast<uint8_t*>(
-                        heap_caps_malloc(total, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+                    constexpr uint32_t internalMemoryCaps =
+                        MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+                    const size_t freeInternalBytes =
+                        heap_caps_get_free_size(internalMemoryCaps);
+                    const size_t largestInternalBlock =
+                        heap_caps_get_largest_free_block(internalMemoryCaps);
+                    if (total <= MAX_INTERNAL_DASHBOARD_AUDIO_BYTES &&
+                        largestInternalBlock >= total &&
+                        freeInternalBytes >=
+                            total + MIN_INTERNAL_AUDIO_HEADROOM_BYTES) {
+                        upload->data = static_cast<uint8_t*>(
+                            heap_caps_malloc(total, internalMemoryCaps));
+                    }
                 }
                 if (!upload->data) {
                     const size_t largestInternalBlock = heap_caps_get_largest_free_block(
@@ -1009,7 +1008,7 @@ void init(Settings& settings) {
         JsonDocument doc;
         const uint8_t cur = VoiceManager::getPlayingSurah();
         doc["surah"] = cur;
-        doc["name"] = VoiceManager::getSurahName(cur);
+        doc["name"] = cur ? VoiceManager::getSurahName(cur) : "";
         doc["playing"] = AzanManager::isQuranPlaying();
         doc["status"] = VoiceManager::getStatusText();
         AsyncResponseStream* response = request->beginResponseStream("application/json");
@@ -1216,11 +1215,6 @@ void init(Settings& settings) {
         MDNS.addService("http", "tcp", WEB_SERVER_PORT);
         Serial.println("[WEB] Dashboard hostname: prayer-bot.local");
     }
-    if (!HttpsServerManager::init()) {
-        Serial.println("[WEB] HTTPS could not start; the HTTP dashboard remains available.");
-    } else if (mdnsStarted) {
-        MDNS.addService("https", "tcp", WEB_SERVER_HTTPS_PORT);
-    }
     if (!mdnsStarted && WiFi.status() == WL_CONNECTED) {
         Serial.println("[WEB] Could not start mDNS; use the device IP address.");
     }
@@ -1247,7 +1241,6 @@ void processDashboardControl() {
 }
 
 void stop() {
-    HttpsServerManager::stop();
     if (server) {
         server->end();
         serverRunning = false;

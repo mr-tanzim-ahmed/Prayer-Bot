@@ -61,28 +61,40 @@ namespace {
                 String header = client.readStringUntil('\n');
                 header.trim();
                 if (header.isEmpty()) break;
-                if (header.startsWith("Content-Length:")) {
+                String normalizedHeader = header;
+                normalizedHeader.toLowerCase();
+                if (normalizedHeader.startsWith("content-length:")) {
                     size = static_cast<uint32_t>(header.substring(15).toInt());
-                } else if (header.equalsIgnoreCase("Transfer-Encoding: chunked")) {
+                } else if (normalizedHeader.startsWith("transfer-encoding:") &&
+                           normalizedHeader.indexOf("chunked") >= 0) {
                     chunked = true;
                 }
             }
-            if (chunked || (size == 0 && !client.connected())) {
+            if (size == 0 && !chunked && !client.connected()) {
                 Serial.println("[QURAN] CDN response is not a supported MP3 stream.");
                 close();
                 return false;
             }
+            chunkedTransfer = chunked;
             position = 0;
             return true;
         }
 
         uint32_t read(void* data, uint32_t length) override {
+            if (!data || length == 0 || chunkFinished) return 0;
+            if (chunkedTransfer) {
+                while (chunkRemaining == 0) {
+                    if (!readNextChunk()) return 0;
+                }
+                if (length > chunkRemaining) length = chunkRemaining;
+            }
             if (!data || (!client.connected() && client.available() == 0) ||
                 (size && position >= size)) return 0;
             if (size && length > size - position) length = size - position;
             const size_t received = client.readBytes(
                 static_cast<uint8_t*>(data), length);
             position += received;
+            if (chunkedTransfer) chunkRemaining -= received;
             return static_cast<uint32_t>(received);
         }
 
@@ -90,6 +102,10 @@ namespace {
             client.stop();
             position = 0;
             size = 0;
+            chunkRemaining = 0;
+            chunkedTransfer = false;
+            chunkStarted = false;
+            chunkFinished = false;
             return true;
         }
 
@@ -101,10 +117,53 @@ namespace {
         uint32_t getPos() override { return position; }
 
     private:
+        bool readNextChunk() {
+            if (chunkStarted) {
+                char terminator[2];
+                if (client.readBytes(reinterpret_cast<uint8_t*>(terminator),
+                                     sizeof(terminator)) != sizeof(terminator) ||
+                    terminator[0] != '\r' || terminator[1] != '\n') {
+                    Serial.println("[QURAN] Invalid chunked audio stream.");
+                    chunkFinished = true;
+                    return false;
+                }
+            }
+
+            String line = client.readStringUntil('\n');
+            line.trim();
+            const int extension = line.indexOf(';');
+            if (extension >= 0) line.remove(extension);
+            char* end = nullptr;
+            const unsigned long chunkSize = strtoul(line.c_str(), &end, 16);
+            if (line.isEmpty() || end == line.c_str() || *end != '\0' ||
+                chunkSize > 1024UL * 1024UL) {
+                Serial.println("[QURAN] Invalid chunk size in audio stream.");
+                chunkFinished = true;
+                return false;
+            }
+            if (chunkSize == 0) {
+                while (client.connected()) {
+                    String trailer = client.readStringUntil('\n');
+                    trailer.trim();
+                    if (trailer.isEmpty()) break;
+                }
+                chunkFinished = true;
+                return false;
+            }
+
+            chunkRemaining = static_cast<uint32_t>(chunkSize);
+            chunkStarted = true;
+            return true;
+        }
+
         WiFiClientSecure client;
         char host[96] = {};
         uint32_t position = 0;
         uint32_t size = 0;
+        uint32_t chunkRemaining = 0;
+        bool chunkedTransfer = false;
+        bool chunkStarted = false;
+        bool chunkFinished = false;
     };
 
     constexpr uint32_t BEEP_FREQUENCY_HZ = 880;
@@ -250,9 +309,15 @@ namespace {
             return false;
         }
 
+        JsonDocument filter;
+        filter["reciters"][0]["id"] = true;
+        filter["reciters"][0]["moshaf"][0]["rewaya_id"] = true;
+        filter["reciters"][0]["moshaf"][0]["surah_list"] = true;
+        filter["reciters"][0]["moshaf"][0]["server"] = true;
         JsonDocument response;
-        const DeserializationError parseError =
-            deserializeJson(response, http.getStream());
+        const DeserializationError parseError = deserializeJson(
+            response, http.getStream(), DeserializationOption::Filter(filter),
+            DeserializationOption::NestingLimit(8));
         http.end();
         if (parseError) {
             Serial.printf("[QURAN] Could not parse MP3Quran API response: %s\n",

@@ -24,6 +24,24 @@ namespace {
         oled.drawStr(SCREEN_WIDTH - offset, baseline, text);
         oled.drawStr(SCREEN_WIDTH - offset + travel, baseline, text);
     }
+
+    void drawPlaybackResult(uint8_t number) {
+        U8G2& oled = DisplayManager::getDisplay();
+        ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 37);
+
+        constexpr int centerX = SCREEN_WIDTH / 2;
+        constexpr int centerY = 30;
+        oled.drawCircle(centerX, centerY, 8);
+        oled.drawTriangle(centerX - 2, centerY - 4,
+                          centerX - 2, centerY + 4,
+                          centerX + 4, centerY);
+
+        char title[40];
+        snprintf(title, sizeof(title), "%u. %s", number,
+                 VoiceManager::getSurahName(number));
+        oled.setFont(u8g2_font_5x8_tf);
+        DisplayManager::drawCenteredText(title, 52);
+    }
 }
 
 void draw() {
@@ -67,65 +85,38 @@ void draw() {
         }
         oled.drawDisc(cx - 3, cy - 3, 2);
         oled.setFont(u8g2_font_6x12_tf);
-        DisplayManager::drawCenteredText("Analyzing voice...", 55);
+        DisplayManager::drawCenteredText("Recognizing Surah...", 55);
         oled.setFont(u8g2_font_5x8_tf);
-        DisplayManager::drawCenteredText("Gemini is finding the Surah", 63);
+        DisplayManager::drawCenteredText("Finding Quran chapter", 63);
 
     } else if (VoiceManager::isPlaying()) {
         const uint8_t surah = VoiceManager::getPlayingSurah();
-        ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 37);
-        oled.setFont(u8g2_font_helvB10_tf);
-        drawSurahTitle(surah, 32);
-
-        const uint8_t frame = (now / 260) % 6;
-        const uint8_t eqHeights[6][11] = {
-            {3, 6, 9, 13, 8, 4, 11, 7, 12, 6, 4},
-            {5, 11, 4, 8, 14, 7, 5, 12, 8, 10, 5},
-            {8, 5, 12, 6, 9, 13, 7, 4, 11, 5, 8},
-            {12, 9, 6, 11, 5, 8, 14, 9, 6, 12, 4},
-            {6, 13, 8, 4, 11, 6, 8, 13, 5, 7, 11},
-            {4, 8, 11, 7, 12, 5, 10, 6, 9, 13, 6}
-        };
-
-        const int startX = 29;
-        for (int b = 0; b < 11; ++b) {
-            const int h = eqHeights[frame][b];
-            oled.drawVLine(startX + b * 6, 47 - h, h);
-            oled.drawVLine(startX + b * 6 + 1, 47 - h, h);
-        }
+        drawPlaybackResult(surah);
 
         oled.setFont(u8g2_font_5x8_tf);
-        char recognizedText[32];
-        if (VoiceManager::wasLastSelectionVoiceRecognized()) {
-            snprintf(recognizedText, sizeof(recognizedText),
-                     "GEMINI FOUND SURAH %u", surah);
-        } else {
-            snprintf(recognizedText, sizeof(recognizedText),
-                     "NOW PLAYING SURAH %u", surah);
-        }
-        DisplayManager::drawCenteredText(recognizedText, 52);
-        DisplayManager::drawCenteredText("[Tap] Next   [Shake] Stop", 63);
+        DisplayManager::drawCenteredText("PLAYING", 63);
+
+    } else if (VoiceManager::wasLastSelectionVoiceRecognized() &&
+               !VoiceManager::hasError()) {
+        drawPlaybackResult(VoiceManager::getRecognizedSurah());
+        oled.setFont(u8g2_font_5x8_tf);
+        DisplayManager::drawCenteredText("SURAH FOUND", 63);
 
     } else {
         const uint8_t surah = VoiceManager::getPlayingSurah();
         ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 37);
         oled.setFont(u8g2_font_helvB10_tf);
-        drawSurahTitle(surah, 34);
+        if (surah == 0)
+            DisplayManager::drawCenteredText("Select a Surah", 34);
+        else
+            drawSurahTitle(surah, 34);
 
         oled.setFont(u8g2_font_6x10_tf);
-        if (VoiceManager::wasLastSelectionVoiceRecognized()) {
-            char recognizedText[32];
-            snprintf(recognizedText, sizeof(recognizedText),
-                     "Gemini identified Surah %u", surah);
-            oled.setFont(u8g2_font_5x8_tf);
-            DisplayManager::drawCenteredText(recognizedText, 49);
-        } else {
-            DisplayManager::drawCenteredText(VoiceManager::getStatusText(), 49);
-        }
+        DisplayManager::drawCenteredText(VoiceManager::getStatusText(), 49);
 
         oled.setFont(u8g2_font_5x8_tf);
         if (VoiceManager::hasError())
-            DisplayManager::drawCenteredText("Check Wi-Fi, mic, Gemini", 63);
+            DisplayManager::drawCenteredText("Tap to choose; shake to play", 63);
         else
             DisplayManager::drawCenteredText("[Tap] Next   [Shake] Play", 63);
     }

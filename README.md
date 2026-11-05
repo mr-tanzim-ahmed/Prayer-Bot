@@ -46,7 +46,7 @@ Prayer-Bot is a DIY **ESP32 prayer clock and personal assistant**. Use the OLED 
 | 🕌 Prayer focus and daily prayer schedule | 📱 Local dashboard and device controls | ⚙️ Modular C++ managers and screens |
 | 🗓️ Clock, Gregorian/Hijri calendar, and events | 📍 Location, calculation, and device settings | 🧵 FreeRTOS tasks for display, network, and audio |
 | 🧭 Qibla bearing and live compass direction | 📈 Seven-day Pomodoro history | 💾 LittleFS settings and cached data |
-| ⏱️ Pomodoro focus timer and Dhikr counter | 🎧 Quran Surah requests by voice or text | 🔌 Aladhan, OpenWeatherMap, Gemini, and MP3Quran |
+| ⏱️ Pomodoro focus timer and Dhikr counter | 🎧 Quran Surah requests by voice or text | 🔌 Aladhan, OpenWeatherMap, optional Gemini, and MP3Quran |
 | 🔊 Azan notification tone and Quran audio | 🕹️ Screen, timer, Dhikr, and audio controls | 🔐 API keys stay on the device |
 
 The device has eight OLED screens: Prayer Focus, All Prayers, Clock & Calendar, Qibla, Weather, Pomodoro, Dhikr, and Quran.
@@ -54,16 +54,16 @@ The device has eight OLED screens: Prayer Focus, All Prayers, Clock & Calendar, 
 <details>
 <summary><strong>🧭 Qibla screen: calibration and accuracy</strong> <kbd>▸ VIEW DETAILS</kbd></summary>
 
-The Qibla screen uses an HMC5883L or QMC5883L compass and shows a smoothed arrow toward Makkah as the device rotates, along with the calculated bearing and live compass heading. At the default Dhaka coordinates, the calculated bearing is approximately 278° W; other locations use their configured latitude and longitude. The compass heading assumes the documented mounting orientation (sensor X axis to the display's right, Y axis toward the top). The displayed bearing is geographic while the compass is magnetic, so local magnetic declination and nearby interference can cause a small difference. The screen provides guidance if the compass, location, or calibration is not ready.
+The Qibla screen uses an HMC5883L or QMC5883L compass and shows a smoothed arrow toward Makkah as the device rotates. Its cardinal direction and degree readout update relative to the live device heading; the target bearing is recalculated from the current dashboard coordinates. At the default Dhaka coordinates, the absolute bearing is approximately 278° W when the device faces north. The compass heading assumes the documented mounting orientation (sensor X axis to the display's right, Y axis toward the top). The target bearing is geographic while the compass is magnetic, so local magnetic declination and nearby interference can cause a difference.
 
-On first use, keep the device level and slowly rotate it through a full 360° turn. Calibration is saved only after readings cover all directions; it corrects hard-iron offsets and per-axis soft-iron distortion. After updating from older firmware, perform this calibration again once. A figure-eight can help expose the sensor to different directions, but keep it level while calibrating. Long-press the touch sensor on the Qibla screen to recalibrate. The MPU6050 gyro is not fused into the heading because it measures relative rotation, drifts over time, and cannot establish magnetic north. The bearing uses zero magnetic declination and is approximate; the firmware does not compensate for tilting the device. Keep the compass away from speakers, motors, magnets, and metal, as interference or incorrect sensor orientation can reduce accuracy. You can set a different location in the dashboard or use its permission-based device-location option.
+On first use, the Qibla screen prompts you to keep the device level and slowly turn it through about 270°. Calibration is saved after readings cover at least six of eight compass directions and both sensor axes have enough range; it corrects hard-iron offsets and per-axis soft-iron distortion without requiring a full turn. After updating from older firmware, perform this calibration again once. Keep the device level while calibrating. Long-press the touch sensor on the Qibla screen to recalibrate. The MPU6050 gyro is not fused into the heading because it measures relative rotation, drifts over time, and cannot establish magnetic north. The firmware does not compensate for local magnetic declination or device tilt. Keep the compass away from speakers, motors, magnets, and metal, as interference or incorrect sensor orientation can reduce accuracy. You can set a different location in the dashboard or use its permission-based device-location option.
 
 </details>
 
 <details>
 <summary><strong>🔊 Audio behavior and safe testing</strong> <kbd>▸ VIEW DETAILS</kbd></summary>
 
-Touch feedback plays an MP3 embedded in program flash, so it does not need a filesystem upload. Short notification and prayer-alarm tones use a faded sine waveform. Touch feedback is skipped during Quran playback and interrupted by the Azan alarm.
+To test the touch beep, start at low volume and touch the TTP223 sensor once; the MAX98357A speaker should play the embedded MP3. The same sound is retained as [`data/beep_sound.mp3`](data/beep_sound.mp3) for inspection and standalone testing. The ESP8266Audio MP3 decoder reads the embedded MP3 directly, so no conversion or filesystem upload is needed for firmware playback. Short notification and prayer-alarm tones use a faded sine waveform. Touch feedback is skipped during Quran playback and interrupted by the Azan alarm.
 
 When testing the MAX98357A and speaker, start at a low device volume and raise it gradually. Never connect either speaker output terminal to ground.
 
@@ -72,7 +72,7 @@ When testing the MAX98357A and speaker, start at a low device volume and raise i
 <details>
 <summary><strong>📶 First connection: setup Wi-Fi</strong> <kbd>▸ VIEW DETAILS</kbd></summary>
 
-The setup hotspot is **`Prayer-Bot`** (password: **`12345678`**) at **`http://10.77.0.1`**. A phone or laptop may show a captive-portal prompt when it connects; if it does not, open that address in a browser. Use `https://10.77.0.1` only after installing dashboard certificates. From the dashboard, connect the ESP32 to any compatible 2.4 GHz Wi-Fi network, including a router or phone hotspot.
+The setup hotspot is **`Prayer-Bot`** (password: **`12345678`**) at **`http://10.77.0.1`**. A phone or laptop may show a captive-portal prompt when it connects; if it does not, open that address in a browser. From the dashboard, connect the ESP32 to any compatible 2.4 GHz Wi-Fi network, including a router or phone hotspot.
 
 </details>
 
@@ -102,7 +102,7 @@ The firmware groups feature logic into C++ managers and keeps OLED presentation 
 | Pomodoro state and weekly statistics | [`src/managers/productivity/pomodoro_manager.cpp`](src/managers/productivity/pomodoro_manager.cpp), [`src/managers/productivity/pomodoro_stats.cpp`](src/managers/productivity/pomodoro_stats.cpp) |
 | Wi-Fi, weather, or outbound network clients | [`include/managers/network/`](include/managers/network/), [`include/network/`](include/network/) |
 | Settings, LittleFS, or caches | [`include/managers/storage/`](include/managers/storage/), [`src/managers/storage/`](src/managers/storage/) |
-| Dashboard routes or HTTPS listener | [`include/managers/web/`](include/managers/web/), [`src/managers/web/`](src/managers/web/) |
+| Dashboard routes and HTTP server | [`include/managers/web/web_server_manager.h`](include/managers/web/web_server_manager.h), [`src/managers/web/web_server_manager.cpp`](src/managers/web/web_server_manager.cpp) |
 | OLED presentation and screen routing | [`src/screens/`](src/screens/), [`include/screens/`](include/screens/), [`src/managers/ui/screen_router.cpp`](src/managers/ui/screen_router.cpp) |
 
 ### Project layout
@@ -144,7 +144,6 @@ Prayer-Bot/
 |   |   |-- ui/
 |   |   |   `-- screen_router.h
 |   |   `-- web/
-|   |       |-- https_server_manager.h
 |   |       `-- web_server_manager.h
 |   |-- network/
 |   |   `-- https_client.h
@@ -193,7 +192,6 @@ Prayer-Bot/
 |   |   |-- ui/
 |   |   |   `-- screen_router.cpp
 |   |   `-- web/
-|   |       |-- https_server_manager.cpp
 |   |       `-- web_server_manager.cpp
 |   `-- screens/                     OLED screen implementations
 |       |-- all_prayers_screen.cpp
@@ -204,10 +202,8 @@ Prayer-Bot/
 |       |-- qibla_screen.cpp
 |       |-- surah_screen.cpp
 |       `-- weather_screen.cpp
-|-- data/                             LittleFS assets; local certificates/keys are ignored
-|   |-- beep_sound.mp3
+|-- data/                             LittleFS assets; local/private files are ignored
 |   `-- PrayerBot_Arrow.svg
-|-- Prayer-Bot.ino                    Arduino IDE entry point
 |-- platformio.ini                    PlatformIO board and dependency configuration
 |-- README.md
 |-- SETUP_GUIDE.md
@@ -263,7 +259,7 @@ See [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) for full wiring notes and
 
 ## 🌐 Online services and API keys
 
-Prayer schedules come from Aladhan and do not need a personal API key. Weather and air-quality features use an optional OpenWeatherMap key; Quran request recognition uses an optional Gemini key. Keep optional keys in the local, Git-ignored `configuration/secrets.h` file. The [Setup Guide](SETUP_GUIDE.md#api-keys) explains how to add them safely.
+Prayer schedules come from Aladhan and do not need a personal API key. Weather and air-quality features use an optional OpenWeatherMap key. Common Surah names/numbers and explicit Azan requests work in the dashboard without Gemini; Gemini 3.8 Flash is optional for flexible dashboard requests and on-device microphone recognition. The firmware proxies text and inline Base64 audio to Google's Interactions API over HTTPS; the browser never receives the Gemini key, and requests set `store: false`. Audio uses a short 16 kHz mono WAV. This is push-to-talk command recognition, not Gemini Live conversation. Keep optional keys in the local, Git-ignored `configuration/secrets.h` file. The [Setup Guide](SETUP_GUIDE.md#api-keys) explains how to add them safely.
 
 Prayer schedules are fetched from Aladhan and stored with the Hijri date in a rolling three-day LittleFS backup. Cached prayer, Sehri/Fajr, prohibited-window, and calendar data remain available offline. After an internet time sync, the clock and Gregorian calendar continue running offline while the board stays powered; after full power loss, Wi-Fi is needed again because the documented circuit has no battery-backed RTC. Live data and time automatically resync when Wi-Fi reconnects. An initial network connection is needed to fetch location-specific timings. The default location is Dhaka, Bangladesh (23.8103, 90.4125), in `Asia/Dhaka` (UTC+6).
 
@@ -309,7 +305,7 @@ The OLED cycles through English transliterations and meanings, so no Arabic font
 
 - **Board:** PlatformIO uses the `esp32dev` profile for the ESP32 Dev Board (CH340). Board variants may differ in flash size and pin availability.
 - **Flash layout:** The 4 MB target uses `no_ota.csv`: one 2 MB firmware slot and about 1.875 MB for LittleFS. This preserves the current feature set but does not support A/B OTA updates. Changing from the default partition layout changes the LittleFS offset; back up settings and Wi-Fi credentials, then re-upload the LittleFS image after changing layouts.
-- **Memory:** The ESP32 Dev Board target has no PSRAM by default. Microphone I²S DMA buffers are sized for this target, and dashboard voice uploads use PSRAM when available with an internal-RAM fallback; very large uploads can still be rejected if the largest available memory block is too small.
+- **Memory:** The ESP32 Dev Board target has no PSRAM by default. Microphone recordings and dashboard audio uploads use bounded allocations, preferring PSRAM when available; oversized uploads can be rejected when internal RAM is fragmented or low. Quran-reciter, prayer, and weather responses are parsed from network streams with ArduinoJson filters instead of buffering complete API response bodies. The touch-feedback MP3 is stored in program flash and decoded directly from there, not copied into RAM or LittleFS.
 - **Framework and dependencies:** Arduino framework with dependency versions pinned in [`platformio.ini`](platformio.ini).
 - **Concurrency:** FreeRTOS tasks coordinate display rendering, networking, scheduling, audio, and voice features.
 - **Persistent data:** Settings, cached responses, and bounded Pomodoro history are stored in LittleFS. Prayer and weather cache files have expiry policies; interrupted atomic writes leave `.tmp` files that are cleaned at startup. Serial startup logs report filesystem usage. Back up device settings before replacing or erasing the filesystem.

@@ -9,7 +9,7 @@ namespace {
     constexpr double KAABA_LATITUDE = 21.4225;
     constexpr double KAABA_LONGITUDE = 39.8262;
     constexpr float RADIANS_TO_DEGREES = 57.2957795131f;
-    constexpr float HEADING_FILTER_TIME_CONSTANT_MS = 100.0f;
+    constexpr float HEADING_FILTER_TIME_CONSTANT_MS = 160.0f;
     constexpr const char* CARDINAL_DIRECTIONS[] = {
         "N", "NE", "E", "SE", "S", "SW", "W", "NW"
     };
@@ -55,6 +55,12 @@ namespace {
         return rounded >= 360 ? 0 : rounded;
     }
 
+    float normalizeBearing(float bearing) {
+        while (bearing < 0.0f) bearing += 360.0f;
+        while (bearing >= 360.0f) bearing -= 360.0f;
+        return bearing;
+    }
+
     float smoothHeading(float heading, uint32_t now) {
         if (!headingFilterInitialized) {
             filteredHeadingDegrees = heading;
@@ -77,34 +83,50 @@ namespace {
         return filteredHeadingDegrees;
     }
 
-    void drawQiblaArrow(U8G2& oled, float relativeAngle, int centerX,
-                        int centerY, float scale);
+    void drawCompassIcon(U8G2& oled, float relativeAngle,
+                         bool headingReady) {
+        constexpr int frameX = 16;
+        constexpr int frameY = 17;
+        constexpr int frameWidth = 38;
+        constexpr int frameHeight = 45;
+        constexpr float centerX = 35.0f;
+        constexpr float centerY = 40.0f;
+        constexpr float iconScale = 0.6f;
 
-    void drawQiblaArrow(U8G2& oled, float relativeAngle, int centerX,
-                        int centerY, float scale) {
-        constexpr float pivotX = 24.0f;
-        constexpr float pivotY = 39.0f;
+        oled.drawRFrame(frameX, frameY, frameWidth, frameHeight, 5);
+        oled.setDrawColor(1);
+        oled.drawCircle(static_cast<int>(centerX),
+                        static_cast<int>(centerY), 18);
+        oled.drawCircle(static_cast<int>(centerX),
+                        static_cast<int>(centerY), 17);
+
         const float radians = relativeAngle * (PI / 180.0f);
         const float cosine = cosf(radians);
         const float sine = sinf(radians);
         const auto transform = [&](float x, float y, int& screenX,
                                    int& screenY) {
-            const float dx = x - pivotX;
-            const float dy = y - pivotY;
+            const float dx = x * iconScale;
+            const float dy = y * iconScale;
             screenX = static_cast<int>(roundf(
-                centerX + (dx * cosine - dy * sine) * scale));
+                centerX + dx * cosine - dy * sine));
             screenY = static_cast<int>(roundf(
-                centerY + (dx * sine + dy * cosine) * scale));
+                centerY + dx * sine + dy * cosine));
         };
 
-        int tipX, tipY, notchX, notchY, rightX, rightY, leftX, leftY;
-        transform(24.0f, 22.0f, tipX, tipY);
-        transform(24.0f, 43.0f, notchX, notchY);
-        transform(37.0f, 55.0f, rightX, rightY);
-        transform(11.0f, 55.0f, leftX, leftY);
+        if (headingReady) {
+            int tipX, tipY, centerTipX, centerTipY, rightX, rightY;
+            int leftX, leftY;
+            transform(0.0f, -18.0f, tipX, tipY);
+            transform(0.0f, 6.0f, centerTipX, centerTipY);
+            transform(14.0f, 18.0f, rightX, rightY);
+            transform(-14.0f, 18.0f, leftX, leftY);
 
-        oled.drawTriangle(tipX, tipY, rightX, rightY, notchX, notchY);
-        oled.drawTriangle(tipX, tipY, notchX, notchY, leftX, leftY);
+            oled.drawTriangle(tipX, tipY, rightX, rightY,
+                              centerTipX, centerTipY);
+            oled.drawTriangle(tipX, tipY, centerTipX, centerTipY,
+                              leftX, leftY);
+        }
+        oled.setDrawColor(1);
     }
 
     void drawCompassScreen(const CompassReading& reading,
@@ -115,43 +137,32 @@ namespace {
 
         const bool headingReady = reading.sensorAvailable &&
             reading.calibrated && reading.headingValid && locationValid;
+        float relativeBearing = qiblaBearing;
         if (headingReady) {
             const float displayHeading = smoothHeading(
                 reading.headingDegrees, millis());
-            float relAngle = qiblaBearing - displayHeading;
-            while (relAngle > 180.0f) relAngle -= 360.0f;
-            while (relAngle < -180.0f) relAngle += 360.0f;
-
-            drawQiblaArrow(oled, relAngle, 35, 40, 0.95f);
-            oled.setFont(u8g2_font_5x8_tf);
-            oled.drawStr(70, 29, "TO KAABA");
-            char bearingText[16];
-            snprintf(bearingText, sizeof(bearingText), "%03d %s",
-                     roundedBearing(qiblaBearing),
-                     getCardinalDirection(qiblaBearing));
-            oled.setFont(u8g2_font_7x14B_tf);
-            oled.drawStr(69, 46, bearingText);
-            oled.setFont(u8g2_font_5x8_tf);
-            char headingText[16];
-            snprintf(headingText, sizeof(headingText), "HDG %03d %s",
-                     roundedBearing(displayHeading),
-                     getCardinalDirection(displayHeading));
-            oled.drawStr(69, 59, headingText);
+            relativeBearing = normalizeBearing(qiblaBearing - displayHeading);
+            float relAngle = relativeBearing;
+            if (relAngle > 180.0f) relAngle -= 360.0f;
+            drawCompassIcon(oled, relAngle, true);
         } else {
             headingFilterInitialized = false;
-            ScreenUI::drawCard(oled, 4, 18, SCREEN_WIDTH - 8, 42);
-            const char* status = "WAITING FOR COMPASS";
-            if (!reading.sensorAvailable) {
-                status = "COMPASS NOT FOUND";
-            } else if (!locationValid) {
-                status = "LOCATION NOT SET";
-            } else if (!reading.calibrated) {
-                status = "ROTATE TO CALIBRATE";
-            }
-            oled.setFont(u8g2_font_6x10_tf);
-            DisplayManager::drawCenteredText(status, 38);
+            drawCompassIcon(oled, 0.0f, false);
+        }
+
+        if (headingReady) {
+            char bearingText[20];
+            snprintf(bearingText, sizeof(bearingText), "%s %03d\xC2\xB0",
+                     getCardinalDirection(relativeBearing),
+                     roundedBearing(relativeBearing));
+            oled.setFont(u8g2_font_7x14B_tf);
+            const int textWidth = oled.getUTF8Width(bearingText);
+            oled.drawUTF8(67 + (SCREEN_WIDTH - 67 - textWidth) / 2,
+                          42, bearingText);
+        }
+        if (reading.sensorAvailable && !reading.calibrated) {
             oled.setFont(u8g2_font_5x8_tf);
-            DisplayManager::drawCenteredText(reading.calibrated ? "Keep flat & rotate" : "Rotate flat through 360", 50);
+            oled.drawStr(67, 55, "TURN 270 DEG");
         }
         DisplayManager::sendBuffer();
     }

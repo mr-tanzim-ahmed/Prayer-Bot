@@ -5,9 +5,8 @@
 
 // ============================================================
 //  VOICE MANAGER
-//  Handles voice recording via INMP441, sending audio to
-//  Gemini API for surah name recognition, and streaming
-//  Quran audio playback.
+//  Handles INMP441 voice recording, optional cloud recognition,
+//  and Quran audio playback.
 // ============================================================
 
 namespace VoiceManager {
@@ -24,6 +23,7 @@ namespace VoiceManager {
     void update(VoiceState& state);
     void processPending(const Settings& settings);
     bool queueDashboardRecognition(const char* transcript, uint32_t& requestId);
+    // Takes ownership of audio only when the request is successfully queued.
     bool queueDashboardAudioRecognition(uint8_t* audio, size_t audioLength,
                                         const char* mimeType,
                                         uint32_t& requestId);
