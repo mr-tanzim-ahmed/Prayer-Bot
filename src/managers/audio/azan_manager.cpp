@@ -3,9 +3,7 @@
 #include "network/https_client.h"
 #include <ArduinoJson.h>
 #include <AudioFileSource.h>
-#include <AudioFileSourceLittleFS.h>
 #include <AudioGeneratorMP3.h>
-#include <AudioGeneratorWAV.h>
 #include <AudioOutputI2S.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -172,13 +170,12 @@ namespace {
     constexpr uint32_t BEEP_LENGTH_MS = 250;
     constexpr uint32_t BEEP_GAP_MS = 200;
     constexpr uint32_t POMODORO_BEEP_LENGTH_MS = 250;
+    constexpr uint32_t TOUCH_BEEP_LENGTH_MS = 220;
     constexpr int16_t BEEP_AMPLITUDE = 9000;
     constexpr uint32_t SCREEN_CHANGE_BEEP_LENGTH_MS = 130;
     constexpr int16_t SCREEN_CHANGE_BEEP_AMPLITUDE = 9000;
     constexpr float SCREEN_CHANGE_BEEP_GAIN = 0.45f;
     constexpr float TOUCH_BEEP_GAIN = 0.65f;
-    constexpr char TOUCH_BEEP_WAV_PATH[] =
-        "/beep_sound_ESP32_16kHz_16bit.wav";
     constexpr size_t AUDIO_SAMPLES_PER_UPDATE = 256;
     constexpr float AUDIO_TWO_PI = 6.28318530718f;
     constexpr float PHASE_SCALE = AUDIO_TWO_PI / 4294967296.0f;
@@ -208,6 +205,7 @@ namespace {
     unsigned long alarmStartedMs = 0;
     unsigned long pomodoroBeepStartedMs = 0;
     unsigned long screenChangeBeepStartedMs = 0;
+    unsigned long touchBeepStartedMs = 0;
     uint32_t samplePhase = 0;
     uint16_t beepEnvelope = 0;
 
@@ -217,9 +215,6 @@ namespace {
     AudioGeneratorMP3 *quranDecoder = nullptr;
     HttpsAudioSource *quranPreparedSource = nullptr;
     AudioGeneratorMP3 *quranPreparedDecoder = nullptr;
-    AudioFileSourceLittleFS touchBeepSource;
-    AudioGeneratorWAV touchBeepDecoder;
-    bool touchBeepDecoderStarted = false;
 
     bool startI2SOutput() {
         if (!out) return false;
@@ -232,44 +227,6 @@ namespace {
     float getTouchBeepGain() {
         return static_cast<float>(currentVolume) / 100.0f *
                TOUCH_BEEP_GAIN;
-    }
-
-    void stopTouchBeep() {
-        if (touchBeepDecoderStarted) {
-            touchBeepDecoder.stop();
-            touchBeepDecoderStarted = false;
-            outputStarted = false;
-        }
-        touchBeepSource.close();
-        touchBeepActive = false;
-    }
-
-    bool startTouchBeep() {
-        if (!touchBeepSource.open(TOUCH_BEEP_WAV_PATH)) {
-            Serial.printf("[AZAN] Could not open %s from LittleFS; upload the filesystem image.\n",
-                          TOUCH_BEEP_WAV_PATH);
-            return false;
-        }
-        if (!startI2SOutput()) {
-            Serial.println("[AZAN] Could not start I2S for touch WAV playback.");
-            touchBeepSource.close();
-            return false;
-        }
-        out->SetGain(getTouchBeepGain());
-        if (!touchBeepDecoder.begin(&touchBeepSource, out)) {
-            Serial.println("[AZAN] Could not decode touch WAV or start amplifier output.");
-            outputStarted = false;
-            touchBeepSource.close();
-            if (!startI2SOutput()) {
-                Serial.println("[AZAN] Could not restore I2S after touch WAV startup failed.");
-            }
-            return false;
-        }
-        outputStarted = true;
-        touchBeepDecoderStarted = true;
-        touchBeepActive = true;
-        Serial.println("[AZAN] Playing LittleFS touch WAV through MAX98357A.");
-        return true;
     }
 
     float getScreenChangeBeepGain() {
@@ -685,10 +642,10 @@ void update() {
     if (touchBeepStopRequested) {
         touchBeepStopRequested = false;
         if (touchBeepActive) {
-            stopTouchBeep();
+            touchBeepActive = false;
             out->SetGain(static_cast<float>(currentVolume) / 100.0f);
             if (playing && !startI2SOutput()) {
-                Serial.println("[AZAN] Could not restart I2S after interrupting touch MP3.");
+                Serial.println("[AZAN] Could not restart I2S after interrupting touch beep.");
             }
         }
     }
@@ -706,14 +663,6 @@ void update() {
         return;
     }
 
-    if (touchBeepActive) {
-        if (touchBeepDecoder.loop()) return;
-        Serial.println("[AZAN] Touch MP3 playback finished.");
-        stopTouchBeep();
-        out->SetGain(static_cast<float>(currentVolume) / 100.0f);
-        return;
-    }
-
     portENTER_CRITICAL(&quranStateMux);
     const bool quranBlocksTouchBeep =
         quranActive || quranStarting || quranStopRequested;
@@ -722,7 +671,15 @@ void update() {
         !screenChangeBeepActive && !touchBeepActive &&
         !quranBlocksTouchBeep) {
         touchBeepPending = false;
-        startTouchBeep();
+        if (!startI2SOutput()) {
+            Serial.println("[AZAN] Could not start I2S for touch beep.");
+        } else {
+            out->SetGain(getTouchBeepGain());
+            touchBeepActive = true;
+            touchBeepStartedMs = millis();
+            samplePhase = 0;
+            Serial.println("[AZAN] Playing built-in touch beep through MAX98357A.");
+        }
     } else if (screenChangeBeepPending && !playing && !pomodoroBeepActive &&
         !screenChangeBeepActive) {
         screenChangeBeepPending = false;
@@ -747,6 +704,7 @@ void update() {
         }
     }
     if (!playing && !pomodoroBeepActive && !screenChangeBeepActive &&
+        !touchBeepActive &&
         beepEnvelope == 0) return;
 
     const unsigned long now = millis();
@@ -758,6 +716,12 @@ void update() {
         now - screenChangeBeepStartedMs >= SCREEN_CHANGE_BEEP_LENGTH_MS) {
         screenChangeBeepActive = false;
     }
+    if (touchBeepActive &&
+        now - touchBeepStartedMs >= TOUCH_BEEP_LENGTH_MS) {
+        touchBeepActive = false;
+        out->SetGain(static_cast<float>(currentVolume) / 100.0f);
+        Serial.println("[AZAN] Touch beep finished.");
+    }
     if (screenChangeGainReduced && !screenChangeBeepActive &&
         !screenChangeBeepPending && !touchBeepActive &&
         !touchBeepPending) {
@@ -766,7 +730,7 @@ void update() {
     }
     const bool beepOn = playing
         ? isBeepOn(now - alarmStartedMs)
-        : (pomodoroBeepActive || screenChangeBeepActive);
+        : (pomodoroBeepActive || screenChangeBeepActive || touchBeepActive);
     const int16_t amplitude = screenChangeBeepActive
         ? SCREEN_CHANGE_BEEP_AMPLITUDE : BEEP_AMPLITUDE;
     const uint32_t phaseIncrement =
@@ -805,6 +769,7 @@ void stop() {
     screenChangeBeepPending = false;
     screenChangeBeepActive = false;
     touchBeepPending = false;
+    touchBeepActive = false;
     Serial.println("[AZAN] Alarm stopped.");
 }
 

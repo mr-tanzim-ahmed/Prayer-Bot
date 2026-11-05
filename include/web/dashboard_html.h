@@ -792,6 +792,17 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       border-color: var(--primary);
       animation: voice-pulse 1s ease-in-out infinite;
     }
+    .voice-orb.connecting {
+      color: #b7791f;
+      border-color: #f6c453;
+      animation: voice-pulse 1.4s ease-in-out infinite;
+    }
+    .voice-orb.recognizing {
+      color: #6d5bd0;
+      border-color: #a99cf4;
+      background: #f0edff;
+      animation: voice-pulse 0.8s ease-in-out infinite;
+    }
     #browserVoiceButton { touch-action: none; user-select: none; }
     #browserVoiceButton.holding {
       background: var(--primary);
@@ -813,8 +824,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       opacity: 0.35;
       transition: height 0.15s ease;
     }
-    .listening .voice-bars i {
+    .assistant-heading[data-voice-phase="listening"] .voice-bars i {
       animation: voice-wave 0.75s ease-in-out infinite alternate;
+      opacity: 1;
+    }
+    .assistant-heading[data-voice-phase="recognizing"] .voice-bars i {
+      background: #6d5bd0;
+      animation: voice-wave 0.45s ease-in-out infinite alternate;
       opacity: 1;
     }
     .voice-bars i:nth-child(2n) { animation-delay: 0.15s; }
@@ -823,6 +839,39 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       50% { box-shadow: 0 0 0 10px rgba(15, 118, 110, 0.18); transform: scale(1.05); }
     }
     @keyframes voice-wave { to { height: 28px; } }
+    .voice-activity {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border: 1px solid #c8e8d6;
+      border-radius: 999px;
+      background: rgba(255,255,255,.82);
+      color: var(--primary-dark);
+      font-size: .78rem;
+      font-weight: 750;
+      font-variant-numeric: tabular-nums;
+    }
+    .voice-activity[hidden] { display: none; }
+    .voice-activity[data-phase="recognizing"] {
+      color: #5746b2;
+      border-color: #d7d0ff;
+    }
+    .voice-activity[data-phase="connecting"] {
+      color: #93600c;
+      border-color: #f4dda9;
+    }
+    .voice-timer-icon {
+      width: 16px;
+      height: 16px;
+      flex: 0 0 16px;
+      animation: voice-timer-spin 2.4s linear infinite;
+      transform-origin: center;
+    }
+    @keyframes voice-timer-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .voice-orb, .voice-timer-icon, .voice-bars i { animation: none !important; }
+    }
     @media (max-width: 520px) {
       .assistant-panel { padding: 14px; }
       .assistant-search { grid-template-columns: 1fr; }
@@ -869,9 +918,24 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       border: none;
       box-shadow: 0 8px 20px rgba(15, 118, 110, 0.24), inset 0 1px 0 rgba(255,255,255,.22);
       transition: transform .2s var(--ease-out), box-shadow .2s var(--ease-out), filter .2s var(--ease-out);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
-    .dhikr-button:hover { filter: brightness(1.05); box-shadow: 0 11px 26px rgba(15, 118, 110, .29), inset 0 1px 0 rgba(255,255,255,.25); }
-    .dhikr-button:active { transform: scale(0.985); }
+    button.dhikr-button,
+    button.dhikr-button:hover,
+    button.dhikr-button:active,
+    button.dhikr-button:focus-visible {
+      background: linear-gradient(135deg, #1a9b83 0%, #0b705f 52%, #064a40 100%);
+      color: #fff;
+      border-color: transparent;
+    }
+    button.dhikr-button:active { transform: scale(0.985); }
+    @media (hover: hover) {
+      button.dhikr-button:hover {
+        filter: brightness(1.08);
+        box-shadow: 0 11px 26px rgba(15, 118, 110, .29), inset 0 1px 0 rgba(255,255,255,.25);
+      }
+    }
     .chart-wrap {
       position: relative;
       width: 100%;
@@ -899,6 +963,41 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     .legend .sessions::before {
       border-radius: 50%;
       background: var(--warn);
+    }
+    .chart-scale-note {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 3px 4px -6px;
+      color: var(--text-muted);
+      font-size: .75rem;
+      font-weight: 650;
+    }
+    .weekly-breakdown {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .weekly-day {
+      min-width: 0;
+      padding: 9px 5px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fff, #f7fbf8);
+      text-align: center;
+    }
+    .weekly-day strong, .weekly-day span { display: block; }
+    .weekly-day strong { color: var(--text); font-size: .82rem; }
+    .weekly-day span { color: var(--text-muted); font-size: .72rem; line-height: 1.5; }
+    .weekly-day.today {
+      border-color: rgba(15, 128, 111, .55);
+      background: linear-gradient(180deg, #effaf5, #e3f5ec);
+      box-shadow: inset 0 0 0 1px rgba(15, 128, 111, .08);
+    }
+    @media (max-width: 580px) {
+      .weekly-breakdown { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+      .weekly-day { padding: 8px 3px; }
     }
     
     /* Settings Accordion */
@@ -1253,13 +1352,18 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       <p class="hint">Find a Surah by voice or text, then listen on this phone or Prayer-Bot. Common Surah names and numbers are matched locally; flexible requests use Gemini 3.8 Flash through the device, so the API key is not exposed to the browser.</p>
 
       <div class="assistant-panel">
-        <div class="assistant-heading">
+        <div id="assistantVoiceHeading" class="assistant-heading" data-voice-phase="idle">
           <div id="voiceOrb" class="voice-orb" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"></path></svg>
           </div>
           <div>
             <div class="assistant-greeting">Choose English or Bangla, then speak. Secure pages stream voice to Gemini Live; browser speech recognition remains available as a fallback.</div>
             <div class="voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div id="voiceActivity" class="voice-activity" data-phase="connecting" role="status" aria-live="polite" hidden>
+              <svg class="voice-timer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l2.5 1.5M9 2h6m-3 0v3"></path></svg>
+              <span id="voiceActivityPhase">Connecting</span>
+              <strong id="voiceElapsed">0.0 s</strong>
+            </div>
           </div>
         </div>
         <div id="browserVoiceStatus" class="assistant-result" role="status" aria-live="polite">Ready. Ask for a Surah or the Prayer-Bot Azan alarm.</div>
@@ -1354,7 +1458,9 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       </div>
 
       <div class="legend"><span>Completed focus minutes</span><span class="sessions">Sessions started</span></div>
+      <div class="chart-scale-note" aria-hidden="true"><span>Minutes</span><span>Sessions</span></div>
       <div class="chart-wrap"><canvas id="weeklyChart" aria-label="Daily focus chart for the past week"></canvas></div>
+      <div id="weeklyBreakdown" class="weekly-breakdown" aria-label="Daily Pomodoro totals for the past seven days"></div>
       <p id="statsNote" class="hint">Stored in LittleFS flash memory. On the device, long-touch the sensor for 3 seconds to start.</p>
     </article>
 
@@ -1410,6 +1516,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
           <div class="field"><label for="lon">Longitude (-180 to 180)</label><input id="lon" type="number" min="-180" max="180" step="any" required></div>
           <div class="field"><label for="utcOffset">UTC Offset (hours, e.g. +6)</label><input id="utcOffset" type="number" min="-12" max="14" step="0.25" required></div>
           <div class="field"><label for="hijriOffset">Hijri Day Offset (-2 to +2)</label><input id="hijriOffset" type="number" min="-2" max="2" step="1"></div>
+          <p class="hint" style="grid-column:span 2">The Qibla direction uses the saved latitude and longitude. Choose a city preset or update the coordinates for your location, then select Save &amp; Apply Settings; changing only the city-name label does not change the direction. For best compass accuracy, keep the device level and away from speakers, magnets, and metal while slowly turning it through a full 360° to calibrate. The compass uses magnetic heading without local declination correction, so the displayed direction is approximate.</p>
         </div>
 
         <h3>🕌 Prayer Calculation Parameters</h3>
@@ -1608,6 +1715,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       audio.pause();
       audio.removeAttribute('src');
       audio.load();
+      phonePlaybackStatus = '';
       put('quranStreamStatus', 'Stopped: Wi-Fi is disconnected.');
     }
   }
@@ -1777,8 +1885,14 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       put('quranStatus', `Surah ${qName} · ${s.quran.status || 'Idle'}`);
       put('quranNowPlaying', qNum ? `${qNum}. ${qName}` : qName);
       const phoneAudio = byId('phoneQuranAudio');
-      const phonePlaying = byId('quranOutput').value === 'phone' && phoneAudio && !phoneAudio.paused && Boolean(phoneAudio.currentSrc);
-      put('quranStreamStatus', phonePlaying ? 'Playing on this phone' : (s.quran.playing ? 'Playing on Prayer-Bot' : (s.quran.status || 'Idle')));
+      const phoneSelected = byId('quranOutput').value === 'phone' &&
+        phoneAudio && (Boolean(phoneAudio.currentSrc) || Boolean(phonePlaybackStatus));
+      const phonePlaying = phoneSelected && !phoneAudio.paused;
+      put('quranStreamStatus', phonePlaying
+        ? 'Playing on this phone'
+        : (phoneSelected
+          ? (phonePlaybackStatus || 'Ready on this phone')
+          : (s.quran.playing ? 'Playing on Prayer-Bot' : (s.quran.status || 'Idle'))));
       const qSel = byId('quranSurahSelect');
       if (qSel && s.quran.surahNumber && document.activeElement !== qSel) {
         qSel.value = s.quran.surahNumber;
@@ -1927,53 +2041,87 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     canvas.height = Math.round(rect.height * ratio);
     const ctx = canvas.getContext('2d');
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    const w = rect.width, h = rect.height, pad = { l: 38, r: 12, t: 16, b: 32 };
+    const w = rect.width, h = rect.height, pad = { l: 38, r: 34, t: 16, b: 32 };
     ctx.clearRect(0, 0, w, h);
-    const maxMinutes = Math.max(60, ...days.map(d => d.focusMinutes));
-    const maxSessions = Math.max(1, ...days.map(d => d.started));
-    const chartW = w - pad.l - pad.r, chartH = h - pad.t - pad.b, step = chartW / 7;
+    const maxMinutes = Math.max(60, ...days.map(d => Number(d.focusMinutes) || 0));
+    const maxSessions = Math.max(1, ...days.map(d => Number(d.started) || 0));
+    const minuteScale = Math.ceil(maxMinutes / 30) * 30;
+    const sessionScale = Math.max(4, Math.ceil(maxSessions / 2) * 2);
+    const chartW = w - pad.l - pad.r, chartH = h - pad.t - pad.b, step = chartW / days.length;
     ctx.font = '12px system-ui';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    for (let tick = 0; tick <= 3; tick++) {
-      const y = pad.t + chartH * tick / 3;
-      const minutes = Math.round(maxMinutes * (1 - tick / 3));
+    for (let tick = 0; tick <= 4; tick++) {
+      const progress = tick / 4;
+      const y = pad.t + chartH * (1 - progress);
+      const minutes = Math.round(minuteScale * progress);
+      const sessions = Math.round(sessionScale * progress);
       ctx.strokeStyle = '#e2e8f0';
       ctx.beginPath();
       ctx.moveTo(pad.l, y);
       ctx.lineTo(w - pad.r, y);
       ctx.stroke();
       ctx.fillStyle = '#64748b';
-      ctx.fillText(`${minutes}m`, pad.l - 6, y);
+      ctx.fillText(String(minutes), pad.l - 6, y);
+      ctx.textAlign = 'left';
+      ctx.fillText(String(sessions), w - pad.r + 6, y);
+      ctx.textAlign = 'right';
     }
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     days.forEach((day, i) => {
       const x = pad.l + step * (i + 0.5);
-      const barH = chartH * day.focusMinutes / maxMinutes;
-      ctx.fillStyle = '#0f766e';
-      ctx.globalAlpha = 0.8;
-      ctx.fillRect(x - step * 0.24, pad.t + chartH - barH, step * 0.48, barH);
-      ctx.globalAlpha = 1;
+      const focusMinutes = Number(day.focusMinutes) || 0;
+      const barH = chartH * focusMinutes / minuteScale;
+      const gradient = ctx.createLinearGradient(0, pad.t + chartH - barH, 0, pad.t + chartH);
+      gradient.addColorStop(0, '#21a486');
+      gradient.addColorStop(1, '#08705f');
+      ctx.fillStyle = gradient;
+      const barWidth = Math.min(24, step * 0.48);
+      if (barH > 0) {
+        ctx.fillRect(x - barWidth / 2, pad.t + chartH - barH, barWidth, barH);
+      }
       ctx.fillStyle = '#475569';
-      ctx.fillText(day.weekday, x, h - pad.b + 8);
+      ctx.fillText(String(day.weekday || ''), x, h - pad.b + 8);
     });
     ctx.strokeStyle = '#d97706';
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     days.forEach((day, i) => {
       const x = pad.l + step * (i + 0.5);
-      const y = pad.t + chartH - chartH * day.started / Math.max(maxSessions, 4);
+      const y = pad.t + chartH - chartH * (Number(day.started) || 0) / sessionScale;
       if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     });
     ctx.stroke();
     days.forEach((day, i) => {
       const x = pad.l + step * (i + 0.5);
-      const y = pad.t + chartH - chartH * day.started / Math.max(maxSessions, 4);
-      ctx.fillStyle = '#d97706';
+      const y = pad.t + chartH - chartH * (Number(day.started) || 0) / sessionScale;
+      ctx.fillStyle = '#fff';
       ctx.beginPath();
-      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
+    canvas.setAttribute('aria-label',
+      `Weekly Pomodoro chart. Teal bars show focus minutes up to ${minuteScale} minutes; amber line shows sessions started up to ${sessionScale}.`);
+
+    const breakdown = byId('weeklyBreakdown');
+    breakdown.replaceChildren();
+    days.forEach((day, index) => {
+      const item = document.createElement('div');
+      item.className = `weekly-day${index === days.length - 1 ? ' today' : ''}`;
+      const weekday = document.createElement('strong');
+      weekday.textContent = String(day.weekday || 'Day');
+      const focus = document.createElement('span');
+      focus.textContent = `${Number(day.focusMinutes) || 0} min focus`;
+      const started = document.createElement('span');
+      started.textContent = `${Number(day.started) || 0} started`;
+      const completed = document.createElement('span');
+      completed.textContent = `${Number(day.completed) || 0} done`;
+      item.append(weekday, focus, started, completed);
+      breakdown.append(item);
     });
   }
 
@@ -1988,7 +2136,9 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       put('weeklyCompleted', stats.totalCompleted);
       put('weeklyFocus', `${stats.totalFocusMinutes} min`);
       drawWeeklyChart(stats.week);
-    } catch(e) {}
+    } catch(e) {
+      put('statsNote', 'Weekly history is temporarily unavailable. Check the device connection and refresh.');
+    }
   }
 
   async function refreshAll() {
@@ -2113,8 +2263,25 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   let liveEndTimer = null;
   let liveTranscriptFinalizing = false;
   let liveSetupReject = null;
+  let voiceTimerEnabled = false;
+  let voiceTimerStartedAt = 0;
+  let voiceTimerInterval = null;
+  function updateVoiceActivityTimer() {
+    if (!voiceTimerEnabled || !voiceTimerStartedAt) return;
+    const elapsedSeconds = Math.max(0, performance.now() - voiceTimerStartedAt) / 1000;
+    put('voiceElapsed', `${elapsedSeconds.toFixed(1)} s`);
+  }
   function setBrowserVoiceState(listening, text, error = false) {
-    byId('voiceOrb')?.classList.toggle('listening', listening);
+    const phase = !listening ? 'idle'
+      : (voiceCapturing ? 'listening'
+        : (voiceProcessingSpokenResult || liveSessionEnding ||
+           /recogn|transcrib|finish|gemini|sending|heard|matched|found surah/i.test(text)
+          ? 'recognizing' : 'connecting'));
+    const orb = byId('voiceOrb');
+    orb?.classList.toggle('listening', phase === 'listening');
+    orb?.classList.toggle('connecting', phase === 'connecting');
+    orb?.classList.toggle('recognizing', phase === 'recognizing');
+    byId('assistantVoiceHeading')?.setAttribute('data-voice-phase', phase);
     byId('browserVoiceButton').disabled =
       (listening && !voiceCapturing) || !routerWifiConnected;
     byId('voiceLanguage').disabled = listening || !routerWifiConnected;
@@ -2125,6 +2292,28 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     byId('browserVoiceCancel').hidden = !listening;
     put('browserVoiceStatus', text);
     byId('browserVoiceStatus').classList.toggle('error', error);
+    const activity = byId('voiceActivity');
+    if (voiceTimerEnabled && listening) {
+      activity.hidden = false;
+      activity.dataset.phase = phase;
+      put('voiceActivityPhase',
+        phase === 'listening' ? 'Listening'
+          : (phase === 'recognizing' ? 'Recognizing' : 'Connecting'));
+      if (voiceTimerInterval === null) {
+        updateVoiceActivityTimer();
+        voiceTimerInterval = window.setInterval(updateVoiceActivityTimer, 100);
+      }
+    } else {
+      activity.hidden = true;
+      if (voiceTimerInterval !== null) {
+        window.clearInterval(voiceTimerInterval);
+        voiceTimerInterval = null;
+      }
+      if (!listening) {
+        voiceTimerEnabled = false;
+        voiceTimerStartedAt = 0;
+      }
+    }
   }
 
   function initializeSectionReveals() {
@@ -2238,6 +2427,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   let phonePlaybackGeneration = 0;
   let phonePlaybackStallTimer = null;
+  let phonePlaybackStatus = '';
   function clearPhonePlaybackStallTimer() {
     if (phonePlaybackStallTimer !== null) {
       window.clearTimeout(phonePlaybackStallTimer);
@@ -2247,54 +2437,60 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   function startPhoneQuranPlayback(audio, primaryUrl, fallbackUrl, generation) {
     let usingFallback = false;
+    const setPhoneStatus = text => {
+      if (generation !== phonePlaybackGeneration) return;
+      phonePlaybackStatus = text;
+      put('quranStreamStatus', text);
+    };
     const clearStalledTimer = () => {
       clearPhonePlaybackStallTimer();
     };
     const startFallback = () => {
-      if (generation !== phonePlaybackGeneration || usingFallback) return;
+      if (generation !== phonePlaybackGeneration || usingFallback) {
+        return Promise.resolve(false);
+      }
       usingFallback = true;
       clearStalledTimer();
-      put('quranStreamStatus', 'Primary stream unavailable. Trying alternate recitation source…');
+      setPhoneStatus('Primary stream unavailable. Trying alternate recitation source…');
       audio.src = fallbackUrl;
       audio.load();
-      audio.play().catch(() => {
+      return Promise.resolve().then(() => audio.play()).then(() => true).catch(error => {
         if (generation === phonePlaybackGeneration) {
-          put('quranStreamStatus',
-            'Tap play to retry. Check that this phone has internet access.');
+          setPhoneStatus(error.name === 'NotAllowedError'
+            ? 'Tap play in the audio controls to allow this phone to start recitation.'
+            : 'Alternate recitation source could not start. Check this phone’s internet connection.');
         }
+        return false;
       });
     };
 
     audio.onerror = () => {
       if (usingFallback) {
         clearStalledTimer();
-        if (generation === phonePlaybackGeneration) {
-          put('quranStreamStatus',
-            'Recitation could not load. Check this phone’s internet connection and try again.');
-        }
+        setPhoneStatus('Recitation could not load. Check this phone’s internet connection and try again.');
       } else {
-        startFallback();
+        void startFallback();
       }
     };
     audio.onplaying = () => {
       if (generation !== phonePlaybackGeneration) return;
       clearStalledTimer();
-      put('quranStreamStatus', 'Playing recitation on this phone');
+      setPhoneStatus('Playing recitation on this phone');
     };
     audio.oncanplay = () => clearStalledTimer();
     audio.onwaiting = audio.onstalled = () => {
       if (generation !== phonePlaybackGeneration ||
           phonePlaybackStallTimer !== null) return;
-      put('quranStreamStatus', usingFallback
+      setPhoneStatus(usingFallback
         ? 'Buffering alternate stream… check the phone’s internet connection.'
         : 'Buffering recitation…');
       phonePlaybackStallTimer = window.setTimeout(() => {
         phonePlaybackStallTimer = null;
         if (usingFallback) {
-          put('quranStreamStatus',
+          setPhoneStatus(
             'Still buffering. Check that this phone has internet access, or select the Prayer-Bot speaker.');
         } else {
-          startFallback();
+          void startFallback();
         }
       }, 12000);
     };
@@ -2303,14 +2499,19 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     audio.src = primaryUrl;
     audio.load();
     audio.style.display = 'block';
-    put('quranStreamStatus', 'Starting recitation on this phone…');
-    return audio.play().then(() => {
+    setPhoneStatus('Starting recitation on this phone…');
+    return Promise.resolve().then(() => audio.play()).then(() => {
       return { playing: !audio.paused, destination: 'phone' };
-    }).catch(() => {
-      if (generation === phonePlaybackGeneration) {
-        put('quranStreamStatus',
-          'Tap play in the audio controls. Check that this phone has internet access.');
+    }).catch(error => {
+      if (generation !== phonePlaybackGeneration) {
+        return { playing: false, destination: 'phone' };
       }
+      if (!usingFallback && error.name !== 'NotAllowedError') {
+        return startFallback().then(playing => ({ playing, destination: 'phone' }));
+      }
+      setPhoneStatus(error.name === 'NotAllowedError'
+        ? 'Tap play in the audio controls to allow this phone to start recitation.'
+        : 'Could not start recitation. Check this phone’s internet connection and try again.');
       return { playing: false, destination: 'phone' };
     });
   }
@@ -2325,7 +2526,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
     if (byId('quranOutput').value === 'phone') {
       const audio = byId('phoneQuranAudio');
-      const primary = `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${number}.mp3`;
+      const primary = `https://cdn.islamic.network/quran/audio-surah/128/ar.alafasy/${number}.mp3`;
       const backup = `https://cdn.mp3quran.net/audio/maher-muaiqly/r1/${String(number).padStart(3, '0')}.mp3`;
       const generation = ++phonePlaybackGeneration;
       return startPhoneQuranPlayback(audio, primary, backup, generation);
@@ -2338,6 +2539,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     phoneAudio.removeAttribute('src');
     phoneAudio.load();
     phoneAudio.style.display = 'none';
+    phonePlaybackStatus = '';
+    clearPhonePlaybackStallTimer();
     const response = await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'play', surah: number }) });
     put('quranStreamStatus', response.status === 'queued' ? 'Connecting to device speaker…' : 'Starting recitation…');
     await loadStatus();
@@ -2860,6 +3063,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     const attempt = ++voiceAttemptGeneration;
     voiceCaptureError = '';
     voiceCapturedTranscript = '';
+    voiceTimerEnabled = true;
+    voiceTimerStartedAt = performance.now();
 
     if (window.isSecureContext && window.WebSocket &&
         navigator.mediaDevices?.getUserMedia &&
@@ -3061,6 +3266,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       audio.removeAttribute('src');
       audio.load();
       audio.style.display = 'none';
+      phonePlaybackStatus = '';
       await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) });
       message('Quran recitation stopped.');
       await loadStatus();
