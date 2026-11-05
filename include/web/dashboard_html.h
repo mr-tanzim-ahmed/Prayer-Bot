@@ -1258,14 +1258,14 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"></path></svg>
           </div>
           <div>
-            <div class="assistant-greeting">Tap the microphone and speak. Browser speech recognition works without a Gemini key; flexible requests are handled by Gemini 3.8 Flash on Prayer-Bot.</div>
+            <div class="assistant-greeting">Choose English or Bangla, then speak. Secure pages stream voice to Gemini Live; browser speech recognition remains available as a fallback.</div>
             <div class="voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
           </div>
         </div>
         <div id="browserVoiceStatus" class="assistant-result" role="status" aria-live="polite">Ready. Ask for a Surah or the Prayer-Bot Azan alarm.</div>
         <div class="actions">
           <select id="voiceLanguage" data-requires-wifi aria-label="Voice language" style="max-width:150px;min-height:44px"><option value="en-US">English</option><option value="bn-BD">বাংলা (Bangla)</option></select>
-          <button id="browserVoiceButton" type="button" data-requires-wifi style="min-height:44px">🎙 Start recording</button>
+          <button id="browserVoiceButton" type="button" data-requires-wifi style="min-height:44px">🎙 Start voice input</button>
           <button id="browserVoiceCancel" type="button" onclick="cancelBrowserVoice()" style="min-height:44px" hidden>Cancel</button>
         </div>
         <div class="assistant-search">
@@ -1279,7 +1279,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
         <label for="quranOutput">Audio Playback Destination</label>
         <select id="quranOutput" data-requires-wifi>
           <option value="device" selected>🔊 Prayer-Bot Device Speaker (default)</option>
-          <option value="phone">📱 This Phone / Browser</option>
+          <option value="phone">📱 This Phone / Browser (needs internet)</option>
         </select>
       </div>
 
@@ -2101,13 +2101,26 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   let browserMediaRecorder = null;
   let browserAudioStream = null;
   let browserAudioChunks = [];
+  let liveWebSocket = null;
+  let liveAudioContext = null;
+  let liveAudioSource = null;
+  let liveAudioProcessor = null;
+  let liveAudioMute = null;
+  let liveSetupComplete = false;
+  let liveSessionEnding = false;
+  let liveTranscript = '';
+  let liveCaptureTimer = null;
+  let liveEndTimer = null;
+  let liveTranscriptFinalizing = false;
+  let liveSetupReject = null;
   function setBrowserVoiceState(listening, text, error = false) {
     byId('voiceOrb')?.classList.toggle('listening', listening);
     byId('browserVoiceButton').disabled =
       (listening && !voiceCapturing) || !routerWifiConnected;
+    byId('voiceLanguage').disabled = listening || !routerWifiConnected;
     byId('browserVoiceButton').textContent = voiceCapturing
-      ? '⏹ Stop and send'
-      : '🎙 Start recording';
+      ? '⏹ Stop listening'
+      : '🎙 Start voice input';
     byId('assistantAskButton').disabled = listening || !routerWifiConnected;
     byId('browserVoiceCancel').hidden = !listening;
     put('browserVoiceStatus', text);
@@ -2223,6 +2236,85 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     return null;
   }
 
+  let phonePlaybackGeneration = 0;
+  let phonePlaybackStallTimer = null;
+  function clearPhonePlaybackStallTimer() {
+    if (phonePlaybackStallTimer !== null) {
+      window.clearTimeout(phonePlaybackStallTimer);
+      phonePlaybackStallTimer = null;
+    }
+  }
+
+  function startPhoneQuranPlayback(audio, primaryUrl, fallbackUrl, generation) {
+    let usingFallback = false;
+    const clearStalledTimer = () => {
+      clearPhonePlaybackStallTimer();
+    };
+    const startFallback = () => {
+      if (generation !== phonePlaybackGeneration || usingFallback) return;
+      usingFallback = true;
+      clearStalledTimer();
+      put('quranStreamStatus', 'Primary stream unavailable. Trying alternate recitation source…');
+      audio.src = fallbackUrl;
+      audio.load();
+      audio.play().catch(() => {
+        if (generation === phonePlaybackGeneration) {
+          put('quranStreamStatus',
+            'Tap play to retry. Check that this phone has internet access.');
+        }
+      });
+    };
+
+    audio.onerror = () => {
+      if (usingFallback) {
+        clearStalledTimer();
+        if (generation === phonePlaybackGeneration) {
+          put('quranStreamStatus',
+            'Recitation could not load. Check this phone’s internet connection and try again.');
+        }
+      } else {
+        startFallback();
+      }
+    };
+    audio.onplaying = () => {
+      if (generation !== phonePlaybackGeneration) return;
+      clearStalledTimer();
+      put('quranStreamStatus', 'Playing recitation on this phone');
+    };
+    audio.oncanplay = () => clearStalledTimer();
+    audio.onwaiting = audio.onstalled = () => {
+      if (generation !== phonePlaybackGeneration ||
+          phonePlaybackStallTimer !== null) return;
+      put('quranStreamStatus', usingFallback
+        ? 'Buffering alternate stream… check the phone’s internet connection.'
+        : 'Buffering recitation…');
+      phonePlaybackStallTimer = window.setTimeout(() => {
+        phonePlaybackStallTimer = null;
+        if (usingFallback) {
+          put('quranStreamStatus',
+            'Still buffering. Check that this phone has internet access, or select the Prayer-Bot speaker.');
+        } else {
+          startFallback();
+        }
+      }, 12000);
+    };
+
+    audio.pause();
+    audio.src = primaryUrl;
+    audio.load();
+    audio.style.display = 'block';
+    put('quranStreamStatus', 'Starting recitation on this phone…');
+    return audio.play().then(() => {
+      return { playing: !audio.paused, destination: 'phone' };
+    }).catch(() => {
+      if (generation === phonePlaybackGeneration) {
+        put('quranStreamStatus',
+          'Tap play in the audio controls. Check that this phone has internet access.');
+      }
+      return { playing: false, destination: 'phone' };
+    });
+  }
+
   async function chooseSurah(number) {
     if (!Number.isInteger(number) || number < 1 || number > surahs.length) {
       throw new Error('Could not identify a Surah. Try again or pick from the list.');
@@ -2235,33 +2327,17 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       const audio = byId('phoneQuranAudio');
       const primary = `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${number}.mp3`;
       const backup = `https://cdn.mp3quran.net/audio/maher-muaiqly/r1/${String(number).padStart(3, '0')}.mp3`;
-      audio.dataset.fallbackUsed = 'false';
-      audio.onerror = () => {
-        if (audio.dataset.fallbackUsed === 'false') {
-          audio.dataset.fallbackUsed = 'true';
-          audio.src = backup;
-          put('quranStreamStatus', 'Trying alternate recitation source… Tap play if it does not start.');
-        } else {
-          put('quranStreamStatus', 'Recitation could not load. Check network.');
-        }
-      };
-      audio.pause();
-      audio.src = primary;
-      audio.load();
-      audio.style.display = 'block';
-      put('quranStreamStatus', 'Starting recitation on this phone…');
-      return audio.play().then(() => {
-        put('quranStreamStatus', 'Playing recitation on this phone');
-        return { playing: true, destination: 'phone' };
-      }).catch(() => {
-        put('quranStreamStatus', 'Tap play on the audio controls to start.');
-        return { playing: false, destination: 'phone' };
-      });
+      const generation = ++phonePlaybackGeneration;
+      return startPhoneQuranPlayback(audio, primary, backup, generation);
     }
 
     await ensureRouterConnection();
-    await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'select', surah: number }) });
-    byId('phoneQuranAudio').pause();
+    ++phonePlaybackGeneration;
+    const phoneAudio = byId('phoneQuranAudio');
+    phoneAudio.pause();
+    phoneAudio.removeAttribute('src');
+    phoneAudio.load();
+    phoneAudio.style.display = 'none';
     const response = await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'play', surah: number }) });
     put('quranStreamStatus', response.status === 'queued' ? 'Connecting to device speaker…' : 'Starting recitation…');
     await loadStatus();
@@ -2273,7 +2349,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       throw new Error('Device did not return a valid Gemini recognition ID.');
     }
     for (let attempt = 0; attempt < 60; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, 750));
+      await new Promise(resolve => setTimeout(resolve, 250));
       const result = await api(`/api/quran/recognize?id=${encodeURIComponent(requestId)}`);
       if (result.status === 'done' && result.intent === 'azan') return { intent: 'azan' };
       if (result.status === 'done' && result.intent === 'surah' &&
@@ -2302,7 +2378,9 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     if (!['audio/mp4', 'audio/webm', 'audio/wav', 'audio/aac'].includes(mimeType)) {
       throw new Error('This browser recorded an unsupported audio format. Try typing the Surah name instead.');
     }
-    const queued = await api('/api/quran/recognize-audio', {
+    const language = byId('voiceLanguage').value;
+    const queued = await api(
+      `/api/quran/recognize-audio?lang=${encodeURIComponent(language)}`, {
       method: 'POST',
       headers: { 'Content-Type': mimeType },
       body: blob
@@ -2367,6 +2445,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   }
 
   async function submitAssistantQuery() {
+    if (voiceCapturing || voicePermissionPending) cancelBrowserVoice();
     const attempt = ++voiceAttemptGeneration;
     const transcript = byId('assistantQuery').value.trim();
     try {
@@ -2452,12 +2531,354 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     }
   }
 
+  function stopLiveAudioInput() {
+    if (liveCaptureTimer !== null) {
+      window.clearTimeout(liveCaptureTimer);
+      liveCaptureTimer = null;
+    }
+    if (liveAudioProcessor) {
+      liveAudioProcessor.onaudioprocess = null;
+      liveAudioProcessor.disconnect();
+      liveAudioProcessor = null;
+    }
+    if (liveAudioSource) {
+      liveAudioSource.disconnect();
+      liveAudioSource = null;
+    }
+    if (liveAudioMute) {
+      liveAudioMute.disconnect();
+      liveAudioMute = null;
+    }
+    if (liveAudioContext) {
+      const context = liveAudioContext;
+      liveAudioContext = null;
+      if (context.state !== 'closed') {
+        void context.close().catch(error =>
+          console.warn('Could not close the live audio context:', error.message));
+      }
+    }
+    if (browserAudioStream) {
+      releaseBrowserAudioStream();
+    }
+  }
+
+  function closeGeminiLiveSession() {
+    if (liveEndTimer !== null) {
+      window.clearTimeout(liveEndTimer);
+      liveEndTimer = null;
+    }
+    stopLiveAudioInput();
+    if (liveSetupReject) {
+      const rejectSetup = liveSetupReject;
+      liveSetupReject = null;
+      rejectSetup(new Error('Live voice session was cancelled.'));
+    }
+    const socket = liveWebSocket;
+    liveWebSocket = null;
+    liveSetupComplete = false;
+    liveSessionEnding = false;
+    if (socket) {
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
+      if (socket.readyState === WebSocket.CONNECTING ||
+          socket.readyState === WebSocket.OPEN) socket.close();
+    }
+  }
+
+  function sendLiveAudioChunk(samples, sampleRate, attempt) {
+    if (attempt !== voiceAttemptGeneration || !liveSetupComplete ||
+        !liveWebSocket || liveWebSocket.readyState !== WebSocket.OPEN) return;
+    if (liveWebSocket.bufferedAmount > 128 * 1024) {
+      handleLiveConnectionFailure(attempt,
+        'Live voice connection is too slow. Check Wi-Fi and try again.');
+      return;
+    }
+
+    const ratio = sampleRate / 16000;
+    const pcmSampleCount = Math.floor(samples.length / ratio);
+    if (pcmSampleCount < 1) return;
+    const pcmBytes = new Uint8Array(pcmSampleCount * 2);
+    const view = new DataView(pcmBytes.buffer);
+    for (let i = 0; i < pcmSampleCount; i++) {
+      const start = Math.floor(i * ratio);
+      const end = Math.min(samples.length, Math.floor((i + 1) * ratio));
+      let total = 0;
+      for (let j = start; j < Math.max(start + 1, end); j++) total += samples[j];
+      const sample = Math.max(-1, Math.min(1, total / Math.max(1, end - start)));
+      view.setInt16(i * 2, sample < 0 ? sample * 32768 : sample * 32767, true);
+    }
+
+    let binary = '';
+    for (let offset = 0; offset < pcmBytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...pcmBytes.subarray(
+        offset, Math.min(offset + 0x8000, pcmBytes.length)));
+    }
+    try {
+      liveWebSocket.send(JSON.stringify({
+        realtimeInput: {
+          audio: {
+            data: btoa(binary),
+            mimeType: 'audio/pcm;rate=16000'
+          }
+        }
+      }));
+    } catch(error) {
+      handleLiveConnectionFailure(attempt,
+        'Could not stream microphone audio. Check Wi-Fi and try again.');
+    }
+  }
+
+  function finishGeminiLiveTranscript(attempt) {
+    if (attempt !== voiceAttemptGeneration || liveTranscriptFinalizing) return;
+    liveTranscriptFinalizing = true;
+    const transcript = liveTranscript.trim();
+    closeGeminiLiveSession();
+    voiceCapturing = false;
+    if (!transcript) {
+      liveTranscriptFinalizing = false;
+      setBrowserVoiceState(false, 'No speech detected. Tap the microphone and try again.', true);
+      return;
+    }
+
+    byId('assistantQuery').value = transcript;
+    voiceProcessingSpokenResult = true;
+    setBrowserVoiceState(true, `Heard: ${transcript}`);
+    handleAssistantQuery(transcript, attempt)
+      .catch(error => {
+        if (attempt === voiceAttemptGeneration) setBrowserVoiceState(false, error.message, true);
+      })
+      .finally(() => {
+        if (attempt === voiceAttemptGeneration) {
+          voiceProcessingSpokenResult = false;
+          liveTranscriptFinalizing = false;
+        }
+      });
+  }
+
+  function handleLiveServerMessage(message, attempt) {
+    if (attempt !== voiceAttemptGeneration) return;
+    if (message.error) {
+      handleLiveConnectionFailure(attempt,
+        message.error.message || 'Gemini Live could not process the voice request.');
+      return;
+    }
+    if (message.setupComplete) {
+      liveSetupComplete = true;
+      voicePermissionPending = false;
+      try {
+        if (!liveAudioContext || !browserAudioStream) {
+          throw new Error('This browser cannot stream microphone audio.');
+        }
+        liveAudioSource = liveAudioContext.createMediaStreamSource(browserAudioStream);
+        liveAudioProcessor = liveAudioContext.createScriptProcessor(2048, 1, 1);
+        liveAudioMute = liveAudioContext.createGain();
+        liveAudioMute.gain.value = 0;
+        const sampleRate = liveAudioContext.sampleRate;
+        liveAudioProcessor.onaudioprocess = event => {
+          sendLiveAudioChunk(
+            event.inputBuffer.getChannelData(0),
+            sampleRate,
+            attempt);
+        };
+        liveAudioSource.connect(liveAudioProcessor);
+        liveAudioProcessor.connect(liveAudioMute);
+        liveAudioMute.connect(liveAudioContext.destination);
+        voiceCapturing = true;
+        byId('browserVoiceButton').classList.add('holding');
+        setBrowserVoiceState(true,
+          `Listening in ${byId('voiceLanguage').value === 'bn-BD' ? 'Bangla' : 'English'}… tap stop when finished.`);
+        liveCaptureTimer = window.setTimeout(() => {
+          if (attempt === voiceAttemptGeneration && voiceCapturing) stopVoiceCapture();
+        }, 6000);
+      } catch(error) {
+        handleLiveConnectionFailure(attempt, error.message);
+      }
+      return;
+    }
+
+    const content = message.serverContent;
+    if (!content) return;
+    const interim = content.interimInputTranscription?.text || '';
+    const finalized = content.inputTranscription?.text?.trim() || '';
+    if (finalized) {
+      liveTranscript = `${liveTranscript} ${finalized}`.trim();
+      byId('assistantQuery').value = liveTranscript;
+    } else if (interim) {
+      byId('assistantQuery').value = `${liveTranscript} ${interim}`.trim();
+    }
+    if (liveSessionEnding && finalized) {
+      finishGeminiLiveTranscript(attempt);
+    }
+  }
+
+  function handleLiveConnectionFailure(attempt, reason) {
+    if (attempt !== voiceAttemptGeneration) return;
+    closeGeminiLiveSession();
+    voicePermissionPending = false;
+    voiceCapturing = false;
+    byId('browserVoiceButton').classList.remove('holding');
+    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+      setBrowserVoiceState(true, 'Live voice unavailable; switching to browser speech recognition.');
+      startBrowserRecognition(attempt);
+    } else {
+      setBrowserVoiceState(false, reason, true);
+    }
+  }
+
+  async function beginGeminiLiveCapture(attempt) {
+    voicePermissionPending = true;
+    setBrowserVoiceState(true, 'Opening microphone for live voice input…');
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+    liveAudioContext = new AudioContextConstructor();
+    await liveAudioContext.resume();
+    browserAudioStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+    if (attempt !== voiceAttemptGeneration) {
+      releaseBrowserAudioStream();
+      return;
+    }
+    setBrowserVoiceState(true, 'Starting secure live voice connection…');
+    const tokenRequest = await api('/api/quran/live-token', { method: 'POST' });
+    if (!Number.isInteger(tokenRequest.requestId) || tokenRequest.requestId < 1) {
+      throw new Error('Prayer-Bot did not queue a Live API token request.');
+    }
+    let tokenReply = null;
+    for (let attemptIndex = 0; attemptIndex < 60; attemptIndex++) {
+      if (attempt !== voiceAttemptGeneration) return;
+      await new Promise(resolve => window.setTimeout(resolve, 250));
+      tokenReply = await api(
+        `/api/quran/live-token?id=${encodeURIComponent(tokenRequest.requestId)}`);
+      if (attempt !== voiceAttemptGeneration) return;
+      if (tokenReply.status === 'done') break;
+      if (tokenReply.status === 'error') {
+        throw new Error(tokenReply.error || 'Gemini could not authorize live voice.');
+      }
+      if (tokenReply.status === 'unknown') {
+        throw new Error('Prayer-Bot could not find the Live API token request.');
+      }
+      if (attemptIndex > 0 && attemptIndex % 8 === 0) {
+        setBrowserVoiceState(true, 'Preparing secure Gemini Live access…');
+      }
+    }
+    if (tokenReply?.status !== 'done') {
+      throw new Error('Timed out while preparing secure Gemini Live access.');
+    }
+    if (attempt !== voiceAttemptGeneration) return;
+    if (!tokenReply.token) throw new Error('Prayer-Bot did not return a Live API token.');
+
+    const socketUrl =
+      `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(tokenReply.token)}`;
+    const socket = new WebSocket(socketUrl);
+    liveWebSocket = socket;
+    liveTranscript = '';
+    liveTranscriptFinalizing = false;
+    liveSessionEnding = false;
+    liveSetupComplete = false;
+    await new Promise((resolve, reject) => {
+      liveSetupReject = reject;
+      const setupTimeout = window.setTimeout(() => {
+        if (!liveSetupComplete) {
+          liveSetupReject = null;
+          reject(new Error('Gemini Live connection timed out.'));
+        }
+      }, 12000);
+      socket.onopen = () => {
+        const setup = {
+          setup: {
+            model: 'models/gemini-3.5-transcribe-live',
+            generationConfig: { responseModalities: ['TEXT'] },
+            inputAudioTranscription: {
+              languageCodes: [byId('voiceLanguage').value]
+            }
+          }
+        };
+        try {
+          socket.send(JSON.stringify(setup));
+        } catch(error) {
+          window.clearTimeout(setupTimeout);
+          reject(new Error('Could not configure the Gemini Live session.'));
+        }
+      };
+      socket.onmessage = event => {
+        let message;
+        try {
+          message = JSON.parse(event.data);
+        } catch(error) {
+          window.clearTimeout(setupTimeout);
+          reject(new Error('Gemini Live returned an invalid response.'));
+          return;
+        }
+        if (message.error && !liveSetupComplete) {
+          window.clearTimeout(setupTimeout);
+          liveSetupReject = null;
+          reject(new Error(message.error.message ||
+            'Gemini Live rejected the voice session.'));
+          return;
+        }
+        if (message.setupComplete) {
+          window.clearTimeout(setupTimeout);
+          liveSetupReject = null;
+          handleLiveServerMessage(message, attempt);
+          resolve();
+          return;
+        }
+        handleLiveServerMessage(message, attempt);
+      };
+      socket.onerror = () => {
+        if (!liveSetupComplete) {
+          window.clearTimeout(setupTimeout);
+          liveSetupReject = null;
+          reject(new Error('Could not connect to Gemini Live. Check Wi-Fi and API access.'));
+        } else {
+          handleLiveConnectionFailure(attempt,
+            'Gemini Live disconnected. Check Wi-Fi and try again.');
+        }
+      };
+      socket.onclose = () => {
+        if (!liveSetupComplete) {
+          window.clearTimeout(setupTimeout);
+          liveSetupReject = null;
+          reject(new Error('Gemini Live closed before voice setup completed.'));
+        } else if (attempt === voiceAttemptGeneration && !liveSessionEnding) {
+          handleLiveConnectionFailure(attempt,
+            'Gemini Live disconnected. Check Wi-Fi and try again.');
+        }
+      };
+    }).catch(error => {
+      closeGeminiLiveSession();
+      voicePermissionPending = false;
+      throw error;
+    });
+  }
+
   async function beginVoiceCapture() {
     if (voiceCapturing || voicePermissionPending || voiceProcessingSpokenResult ||
         !routerWifiConnected) return;
     const attempt = ++voiceAttemptGeneration;
     voiceCaptureError = '';
     voiceCapturedTranscript = '';
+
+    if (window.isSecureContext && window.WebSocket &&
+        navigator.mediaDevices?.getUserMedia &&
+        (window.AudioContext || window.webkitAudioContext)) {
+      try {
+        await beginGeminiLiveCapture(attempt);
+        return;
+      } catch(error) {
+        if (attempt !== voiceAttemptGeneration) return;
+        closeGeminiLiveSession();
+        voicePermissionPending = false;
+        voiceCapturing = false;
+        console.warn('Gemini Live voice input unavailable:', error.message);
+        if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) {
+          setBrowserVoiceState(false, error.message, true);
+          return;
+        }
+      }
+    }
 
     if (window.SpeechRecognition || window.webkitSpeechRecognition) {
       setBrowserVoiceState(true, 'Starting browser speech recognition…');
@@ -2530,12 +2951,9 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       } catch(error) {
         voicePermissionPending = false;
         releaseBrowserAudioStream();
+        closeGeminiLiveSession();
         if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
           setBrowserVoiceState(false, 'Allow microphone access in Safari and open the dashboard through a secure HTTPS page.', true);
-          return;
-        }
-        if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) {
-          setBrowserVoiceState(false, 'Could not open the microphone. Check browser permission and try again.', true);
           return;
         }
       }
@@ -2546,6 +2964,33 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   function stopVoiceCapture() {
     byId('browserVoiceButton').classList.remove('holding');
+    if (liveWebSocket && liveSetupComplete && voiceCapturing) {
+      liveSessionEnding = true;
+      voiceCapturing = false;
+      stopLiveAudioInput();
+      setBrowserVoiceState(true, 'Finishing live transcription…');
+      try {
+        liveWebSocket.send(JSON.stringify({
+          realtimeInput: { audioStreamEnd: true }
+        }));
+      } catch(error) {
+        handleLiveConnectionFailure(voiceAttemptGeneration,
+          'Could not finish the live voice request. Try again.');
+        return;
+      }
+      liveEndTimer = window.setTimeout(() => {
+        if (liveSessionEnding) {
+          if (liveTranscript.trim()) {
+            finishGeminiLiveTranscript(voiceAttemptGeneration);
+          } else {
+            closeGeminiLiveSession();
+            setBrowserVoiceState(false,
+              'No speech detected. Tap the microphone and try again.', true);
+          }
+        }
+      }, 5000);
+      return;
+    }
     if (browserMediaRecorder?.state === 'recording') {
       setBrowserVoiceState(true, 'Finishing recording…');
       browserMediaRecorder.stop();
@@ -2563,9 +3008,11 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   function cancelBrowserVoice() {
     ++voiceAttemptGeneration;
+    closeGeminiLiveSession();
     voicePermissionPending = false;
     voiceCapturing = false;
     voiceProcessingSpokenResult = false;
+    liveTranscriptFinalizing = false;
     voiceCapturedTranscript = '';
     voiceCaptureError = '';
     byId('browserVoiceButton').classList.remove('holding');
@@ -2603,8 +3050,17 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   async function stopQuran() {
     try {
       const audio = byId('phoneQuranAudio');
+      ++phonePlaybackGeneration;
+      clearPhonePlaybackStallTimer();
       audio.pause();
-      audio.dataset.fallbackUsed = 'false';
+      audio.onerror = null;
+      audio.onplaying = null;
+      audio.oncanplay = null;
+      audio.onwaiting = null;
+      audio.onstalled = null;
+      audio.removeAttribute('src');
+      audio.load();
+      audio.style.display = 'none';
       await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) });
       message('Quran recitation stopped.');
       await loadStatus();

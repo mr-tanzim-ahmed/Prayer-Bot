@@ -63,7 +63,7 @@ On first use, the Qibla screen prompts you to keep the device level and slowly t
 <details>
 <summary><strong>🔊 Audio behavior and safe testing</strong> <kbd>▸ VIEW DETAILS</kbd></summary>
 
-To test the touch beep, start at low volume and touch the TTP223 sensor once; the MAX98357A speaker should play the embedded MP3. The same sound is retained as [`data/beep_sound.mp3`](data/beep_sound.mp3) for inspection and standalone testing. The ESP8266Audio MP3 decoder reads the embedded MP3 directly, so no conversion or filesystem upload is needed for firmware playback. Short notification and prayer-alarm tones use a faded sine waveform. Touch feedback is skipped during Quran playback and interrupted by the Azan alarm.
+To test the touch beep, start at low volume and touch the TTP223 sensor once; the MAX98357A speaker should play [`data/beep_sound_ESP32_16kHz_16bit.wav`](data/beep_sound_ESP32_16kHz_16bit.wav) from LittleFS. Upload the filesystem image when installing or replacing this 16 kHz, mono, 16-bit PCM WAV. Short notification and prayer-alarm tones use a faded sine waveform. Touch feedback is skipped during Quran playback and interrupted by the Azan alarm.
 
 When testing the MAX98357A and speaker, start at a low device volume and raise it gradually. Never connect either speaker output terminal to ground.
 
@@ -98,7 +98,7 @@ The firmware groups feature logic into C++ managers and keeps OLED presentation 
 | Pins, defaults, timing, or API endpoints | [`configuration/prayer_bot_config.h`](configuration/prayer_bot_config.h) |
 | Prayer schedules and prohibited-time windows | [`include/managers/prayer/prayer_manager.h`](include/managers/prayer/prayer_manager.h), [`src/managers/prayer/prayer_manager.cpp`](src/managers/prayer/prayer_manager.cpp) |
 | Device inputs, sensors, display, and I²C | [`include/managers/device/`](include/managers/device/), [`src/managers/device/`](src/managers/device/) |
-| Voice recognition, Quran playback, audio output, and notification tones | [`include/managers/audio/azan_manager.h`](include/managers/audio/azan_manager.h), [`src/managers/audio/azan_manager.cpp`](src/managers/audio/azan_manager.cpp), [`include/audio/touch_beep_audio.h`](include/audio/touch_beep_audio.h) |
+| Voice recognition, Quran playback, audio output, and notification tones | [`include/managers/audio/azan_manager.h`](include/managers/audio/azan_manager.h), [`src/managers/audio/azan_manager.cpp`](src/managers/audio/azan_manager.cpp) |
 | Pomodoro state and weekly statistics | [`src/managers/productivity/pomodoro_manager.cpp`](src/managers/productivity/pomodoro_manager.cpp), [`src/managers/productivity/pomodoro_stats.cpp`](src/managers/productivity/pomodoro_stats.cpp) |
 | Wi-Fi, weather, or outbound network clients | [`include/managers/network/`](include/managers/network/), [`include/network/`](include/network/) |
 | Settings, LittleFS, or caches | [`include/managers/storage/`](include/managers/storage/), [`src/managers/storage/`](src/managers/storage/) |
@@ -113,8 +113,6 @@ The firmware groups feature logic into C++ managers and keeps OLED presentation 
 ```text
 Prayer-Bot/
 |-- include/                         Public headers and interfaces
-|   |-- audio/
-|   |   `-- touch_beep_audio.h
 |   |-- core/
 |   |   `-- types.h
 |   |-- managers/                    Manager interfaces grouped by responsibility
@@ -202,8 +200,9 @@ Prayer-Bot/
 |       |-- qibla_screen.cpp
 |       |-- surah_screen.cpp
 |       `-- weather_screen.cpp
-|-- data/                             LittleFS assets; local/private files are ignored
-|   `-- PrayerBot_Arrow.svg
+|-- data/                             LittleFS assets; private files are ignored
+|   |-- PrayerBot_Arrow.svg
+|   `-- beep_sound_ESP32_16kHz_16bit.wav
 |-- platformio.ini                    PlatformIO board and dependency configuration
 |-- README.md
 |-- SETUP_GUIDE.md
@@ -259,7 +258,7 @@ See [HARDWARE_CONNECTIONS.md](HARDWARE_CONNECTIONS.md) for full wiring notes and
 
 ## 🌐 Online services and API keys
 
-Prayer schedules come from Aladhan and do not need a personal API key. Weather and air-quality features use an optional OpenWeatherMap key. Common Surah names/numbers and explicit Azan requests work in the dashboard without Gemini; Gemini 3.8 Flash is optional for flexible dashboard requests and on-device microphone recognition. The firmware proxies text and inline Base64 audio to Google's Interactions API over HTTPS; the browser never receives the Gemini key, and requests set `store: false`. Audio uses a short 16 kHz mono WAV. This is push-to-talk command recognition, not Gemini Live conversation. Keep optional keys in the local, Git-ignored `configuration/secrets.h` file. The [Setup Guide](SETUP_GUIDE.md#api-keys) explains how to add them safely.
+Prayer schedules come from Aladhan and do not need a personal API key. Weather and air-quality features use an optional OpenWeatherMap key. The dashboard voice selector supports English and Bangla (`bn-BD`). On a secure HTTPS page, voice input streams 16 kHz mono audio over a Gemini Live WebSocket for low-latency transcription; the ESP32 mints a single-use, short-lived token constrained to that transcription model, so the persistent Gemini key is never sent to the browser. The device serves HTTP only, so plain-HTTP dashboards use browser speech recognition or the existing recorded-audio fallback instead. Flexible text requests, recorded-audio fallback, and the on-device microphone recognizer use Gemini 3.8 Flash through the Interactions API over HTTPS with `store: false`. Keep optional keys in the local, Git-ignored `configuration/secrets.h` file. The [Setup Guide](SETUP_GUIDE.md#api-keys) explains how to add them safely.
 
 Prayer schedules are fetched from Aladhan and stored with the Hijri date in a rolling three-day LittleFS backup. Cached prayer, Sehri/Fajr, prohibited-window, and calendar data remain available offline. After an internet time sync, the clock and Gregorian calendar continue running offline while the board stays powered; after full power loss, Wi-Fi is needed again because the documented circuit has no battery-backed RTC. Live data and time automatically resync when Wi-Fi reconnects. An initial network connection is needed to fetch location-specific timings. The default location is Dhaka, Bangladesh (23.8103, 90.4125), in `Asia/Dhaka` (UTC+6).
 
@@ -305,7 +304,7 @@ The OLED cycles through English transliterations and meanings, so no Arabic font
 
 - **Board:** PlatformIO uses the `esp32dev` profile for the ESP32 Dev Board (CH340). Board variants may differ in flash size and pin availability.
 - **Flash layout:** The 4 MB target uses `no_ota.csv`: one 2 MB firmware slot and about 1.875 MB for LittleFS. This preserves the current feature set but does not support A/B OTA updates. Changing from the default partition layout changes the LittleFS offset; back up settings and Wi-Fi credentials, then re-upload the LittleFS image after changing layouts.
-- **Memory:** The ESP32 Dev Board target has no PSRAM by default. Microphone recordings and dashboard audio uploads use bounded allocations, preferring PSRAM when available; oversized uploads can be rejected when internal RAM is fragmented or low. Quran-reciter, prayer, and weather responses are parsed from network streams with ArduinoJson filters instead of buffering complete API response bodies. The touch-feedback MP3 is stored in program flash and decoded directly from there, not copied into RAM or LittleFS.
+- **Memory:** The ESP32 Dev Board target has no PSRAM by default. Microphone recordings and dashboard audio uploads use bounded allocations, preferring PSRAM when available; oversized uploads can be rejected when internal RAM is fragmented or low. Quran-reciter, prayer, and weather responses are parsed from network streams with ArduinoJson filters instead of buffering complete API response bodies. The short touch-feedback WAV is streamed from LittleFS and decoded in the audio task.
 - **Framework and dependencies:** Arduino framework with dependency versions pinned in [`platformio.ini`](platformio.ini).
 - **Concurrency:** FreeRTOS tasks coordinate display rendering, networking, scheduling, audio, and voice features.
 - **Persistent data:** Settings, cached responses, and bounded Pomodoro history are stored in LittleFS. Prayer and weather cache files have expiry policies; interrupted atomic writes leave `.tmp` files that are cleaned at startup. Serial startup logs report filesystem usage. Back up device settings before replacing or erasing the filesystem.

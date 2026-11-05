@@ -85,7 +85,15 @@ The serial log prints the HTTP setup dashboard address (`10.77.0.1`) and, after 
 
 ## Touch feedback sound
 
-Touching the sensor plays an MP3 through the MAX98357A I²S amplifier. The sound is embedded in program flash and also retained as `data/beep_sound.mp3` for inspection and standalone testing; the firmware does not need a filesystem upload for touch feedback.
+Touching the sensor plays `data/beep_sound_ESP32_16kHz_16bit.wav` through the MAX98357A I²S amplifier and connected speaker. The WAV is stored in LittleFS, so upload the filesystem image when installing or updating the sound:
+
+```powershell
+pio run --target uploadfs --upload-port COM5
+```
+
+Replace `COM5` with the ESP32's serial port. Upload the firmware separately with the normal `upload` target if it has also changed. The beep is skipped while Quran playback is active; a prayer alarm can interrupt it.
+
+Uploading a LittleFS image replaces the filesystem contents and may reset saved settings and caches; back up any device data you need first.
 
 The dashboard runs over HTTP on port 80. Browser geolocation and direct microphone recording require a secure browser context; use manual location entry and supported browser speech recognition, or put the device behind a trusted HTTPS reverse proxy if those features are needed. The firmware's trusted root certificates in [`include/network/https_client.h`](include/network/https_client.h) are still required for secure outbound API requests.
 
@@ -112,7 +120,9 @@ Dhaka is the default location. In **Device Preferences & Coordinates**, choose a
 
 Browser location and direct microphone recording need a secure page. The device serves HTTP only; enter location manually and use supported browser speech recognition or text requests, or access the dashboard through a trusted HTTPS reverse proxy.
 
-Common Surah names/numbers and explicit Azan alarm requests work without Gemini in the dashboard. Flexible dashboard requests and on-device microphone recognition use the optional Gemini API key (Gemini 3.8 Flash). The firmware proxies text and inline Base64 audio to Google's Interactions API over HTTPS; the browser never receives the API key, and requests set `store: false`. Device audio is a short 16 kHz mono WAV. This is push-to-talk command recognition, not Gemini Live conversation. Direct browser audio recording is available when you access the dashboard through a secure page. Phone browsers may require tapping the visible audio controls to start Quran playback.
+The dashboard voice-language selector supports English and Bangla. On an HTTPS dashboard with microphone access, the browser streams 16 kHz PCM over a WebSocket to Gemini Live Transcription (`gemini-3.5-transcribe-live`), using the selected language as a recognition hint. Prayer-Bot creates a single-use token that expires after five minutes, permits a session to start within one minute, and is restricted to the transcription model and text responses. The persistent Gemini key stays on the ESP32; voice audio is sent directly from the browser to Google during the live session. Gemini Live requires a configured Gemini key, internet access, and synchronized device time. If Live API access is unavailable, the dashboard falls back to browser speech recognition or recorded-audio recognition. On the device's plain-HTTP dashboard, use browser speech recognition (which honors the selected language), type a request, or access the dashboard through a trusted HTTPS reverse proxy to enable live recording.
+
+Flexible text requests, recorded-audio fallback, and the on-device microphone recognizer use the optional Gemini API key (Gemini 3.8 Flash). The firmware proxies text and inline Base64 audio to Google's Interactions API over HTTPS and sets `store: false`. Device microphone audio is a short 16 kHz mono WAV. Common Surah names/numbers and explicit Azan alarm requests can be handled without a Gemini key in the dashboard. Phone browsers may require tapping the visible audio controls to start Quran playback.
 
 ## API keys
 

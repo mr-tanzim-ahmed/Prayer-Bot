@@ -58,8 +58,12 @@ void draw(const HijriDate& hijri, const IslamicEvent& event, const DailyPrayers&
     }
 
     char hijriBuf[40];
-    snprintf(hijriBuf, sizeof(hijriBuf), "%d %s %d AH", hijri.day,
-             hijri.monthName.c_str(), hijri.year);
+    if (hijri.year) {
+        snprintf(hijriBuf, sizeof(hijriBuf), "%d %s %d AH", hijri.day,
+                 hijri.monthName.c_str(), hijri.year);
+    } else {
+        snprintf(hijriBuf, sizeof(hijriBuf), "Hijri date unavailable");
+    }
     oled.setFont(u8g2_font_5x8_tf);
     DisplayManager::drawCenteredText(String(hijriBuf), 56);
 

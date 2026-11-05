@@ -3,6 +3,7 @@
 #include <prayer_bot_config.h>
 #include "network/https_client.h"
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <driver/i2s.h>
@@ -11,6 +12,7 @@
 #include <mbedtls/base64.h>
 #include <math.h>
 #include <stdlib.h>
+#include <time.h>
 
 extern VoiceState g_voiceState;
 extern volatile bool g_webAzanStartRequested;
@@ -27,6 +29,9 @@ namespace {
     constexpr size_t MAX_SPOKEN_TRANSCRIPT_LENGTH = 120;
     constexpr uint8_t GEMINI_AZAN_INTENT = TOTAL_SURAHS + 1;
     constexpr char GEMINI_MODEL[] = "gemini-3.8-flash";
+    constexpr char GEMINI_LIVE_TRANSCRIPTION_MODEL[] =
+        "models/gemini-3.5-transcribe-live";
+    constexpr size_t MAX_LIVE_TOKEN_LENGTH = 256;
 
     const char* const SURAH_NAMES[] = {
         "Al-Fatiha", "Al-Baqarah", "Aal-E-Imran", "An-Nisa", "Al-Maidah",
@@ -85,10 +90,21 @@ namespace {
     bool dashboardRecognitionQueued = false;
     bool dashboardRecognitionRunning = false;
     bool dashboardRecognitionFinished = false;
+    uint32_t dashboardLiveTokenRequestId = 0;
+    uint32_t nextDashboardLiveTokenRequestId = 1;
+    bool dashboardLiveTokenQueued = false;
+    bool dashboardLiveTokenRunning = false;
+    bool dashboardLiveTokenFinished = false;
+    bool dashboardLiveTokenFailed = false;
+    char dashboardLiveToken[MAX_LIVE_TOKEN_LENGTH] = {};
+    uint32_t dashboardLiveTokenReadyMs = 0;
+    uint32_t lastDashboardLiveTokenRequestMs = 0;
+    bool dashboardLiveTokenRequestStarted = false;
     bool dashboardAudioQueued = false;
     uint8_t* dashboardAudioBuffer = nullptr;
     size_t dashboardAudioLength = 0;
     char dashboardAudioMimeType[32] = {};
+    char dashboardAudioLanguage[8] = "auto";
 
     class AudioBufferOwner {
     public:
@@ -454,6 +470,7 @@ namespace {
 
     bool recognizeAudio(const char* apiKey, uint8_t* audioData,
                         size_t audioLength, const char* mimeType,
+                        const char* language,
                         uint8_t& surahNumber) {
         AudioBufferOwner audioOwner(audioData);
         if (!apiKey || !apiKey[0] || !audioData || !audioLength ||
@@ -468,6 +485,15 @@ namespace {
             "\",\"input\":["
             "{\"type\":\"text\",\"text\":\"Identify the requested Quran Surah in this short voice command. The speaker may use English, Bangla/Bengali, Arabic pronunciation, or phonetic transliteration, with brief silence or background noise. Focus on the spoken Surah name or number. Return only one integer: 1 through 114 for a requested Surah; 115 only for an explicit Azan-alarm request; otherwise 0.\"},"
             "{\"type\":\"audio\",\"mime_type\":\"";
+        if (language && strcmp(language, "bn-BD") == 0) {
+            prefix.replace(
+                "The speaker may use English, Bangla/Bengali, Arabic pronunciation, or phonetic transliteration",
+                "The selected language is Bangla (bn-BD); prioritize Bengali speech while accepting Arabic pronunciation or phonetic transliteration");
+        } else if (language && strcmp(language, "en-US") == 0) {
+            prefix.replace(
+                "The speaker may use English, Bangla/Bengali, Arabic pronunciation, or phonetic transliteration",
+                "The selected language is English (en-US); prioritize English speech while accepting Arabic pronunciation or phonetic transliteration");
+        }
         prefix += mimeType;
         prefix +=
             "\",\"data\":\"";
@@ -532,6 +558,93 @@ namespace {
 
         audioOwner.reset();
         return readGeminiInteractionResponse(client, surahNumber);
+    }
+
+    bool createGeminiLiveToken(const char* apiKey, char* token,
+                               size_t tokenCapacity) {
+        if (!token || tokenCapacity == 0 || WiFi.status() != WL_CONNECTED) {
+            return false;
+        }
+        if (!apiKey || !apiKey[0]) {
+            Serial.println("[VOICE] Gemini API key is not configured for Live voice.");
+            return false;
+        }
+
+        const time_t currentTime = time(nullptr);
+        if (currentTime < 1700000000) {
+            Serial.println("[VOICE] Cannot create a Live API token before time sync.");
+            return false;
+        }
+        char sessionExpiry[25] = {};
+        char tokenExpiry[25] = {};
+        const time_t sessionExpiryTime = currentTime + 60;
+        const time_t tokenExpiryTime = currentTime + 300;
+        struct tm sessionExpiryUtc = {};
+        struct tm tokenExpiryUtc = {};
+        if (!gmtime_r(&sessionExpiryTime, &sessionExpiryUtc) ||
+            !gmtime_r(&tokenExpiryTime, &tokenExpiryUtc) ||
+            strftime(sessionExpiry, sizeof(sessionExpiry), "%Y-%m-%dT%H:%M:%SZ",
+                     &sessionExpiryUtc) == 0 ||
+            strftime(tokenExpiry, sizeof(tokenExpiry), "%Y-%m-%dT%H:%M:%SZ",
+                     &tokenExpiryUtc) == 0) {
+            Serial.println("[VOICE] Could not format Live API token expiry.");
+            return false;
+        }
+
+        JsonDocument tokenRequest;
+        tokenRequest["uses"] = 1;
+        tokenRequest["newSessionExpireTime"] = sessionExpiry;
+        tokenRequest["expireTime"] = tokenExpiry;
+        JsonObject liveConstraints =
+            tokenRequest["liveConnectConstraints"].to<JsonObject>();
+        liveConstraints["model"] = GEMINI_LIVE_TRANSCRIPTION_MODEL;
+        JsonObject liveConfig = liveConstraints["config"].to<JsonObject>();
+        JsonArray responseModalities =
+            liveConfig["responseModalities"].to<JsonArray>();
+        responseModalities.add("TEXT");
+        String requestBody;
+        if (serializeJson(tokenRequest, requestBody) == 0 ||
+            requestBody.isEmpty()) {
+            Serial.println("[VOICE] Could not serialize Live API token request.");
+            return false;
+        }
+
+        WiFiClientSecure tlsClient;
+        configureHttpsClient(tlsClient);
+        HTTPClient http;
+        if (!http.begin(tlsClient,
+                        "https://generativelanguage.googleapis.com/v1beta/auth_tokens")) {
+            Serial.println("[VOICE] Could not connect to Gemini token service.");
+            return false;
+        }
+        http.setTimeout(10000);
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("x-goog-api-key", apiKey);
+        const int responseCode = http.POST(requestBody);
+        requestBody.clear();
+        if (responseCode != HTTP_CODE_OK) {
+            Serial.printf("[VOICE] Live API token request failed with HTTP %d.\n",
+                          responseCode);
+            http.end();
+            return false;
+        }
+
+        JsonDocument tokenFilter;
+        tokenFilter["name"] = true;
+        JsonDocument tokenReply;
+        const DeserializationError parseError = deserializeJson(
+            tokenReply, http.getStream(),
+            DeserializationOption::Filter(tokenFilter),
+            DeserializationOption::NestingLimit(4));
+        http.end();
+        const char* tokenName = tokenReply["name"] | "";
+        if (parseError || !tokenName[0] ||
+            strnlen(tokenName, tokenCapacity) >= tokenCapacity) {
+            Serial.println("[VOICE] Gemini returned an invalid Live API token.");
+            return false;
+        }
+        strlcpy(token, tokenName, tokenCapacity);
+        return true;
     }
 
     bool hasSpeechEnergy(const uint8_t* pcm, size_t length, double& rms) {
@@ -667,7 +780,8 @@ void update(VoiceState& state) {
         portENTER_CRITICAL(&dashboardRecognitionMux);
         const bool dashboardRecognitionBusy =
             dashboardRecognitionQueued || dashboardAudioQueued ||
-            dashboardRecognitionRunning;
+            dashboardRecognitionRunning || dashboardLiveTokenQueued ||
+            dashboardLiveTokenRunning;
         portEXIT_CRITICAL(&dashboardRecognitionMux);
         if (dashboardRecognitionBusy) return;
 
@@ -758,12 +872,46 @@ void update(VoiceState& state) {
 
 void processPending(const Settings& settings) {
     AzanManager::processQuranQueue();
+    uint32_t liveTokenRequestId = 0;
+    bool processLiveToken = false;
+    portENTER_CRITICAL(&dashboardRecognitionMux);
+    if (dashboardLiveTokenQueued && !dashboardRecognitionQueued &&
+        !dashboardAudioQueued && !dashboardRecognitionRunning) {
+        dashboardLiveTokenQueued = false;
+        dashboardLiveTokenRunning = true;
+        liveTokenRequestId = dashboardLiveTokenRequestId;
+        processLiveToken = true;
+    }
+    portEXIT_CRITICAL(&dashboardRecognitionMux);
+
+    if (processLiveToken) {
+        char token[MAX_LIVE_TOKEN_LENGTH] = {};
+        const bool succeeded = createGeminiLiveToken(
+            settings.geminiApiKey, token, sizeof(token));
+        portENTER_CRITICAL(&dashboardRecognitionMux);
+        if (dashboardLiveTokenRequestId == liveTokenRequestId) {
+            dashboardLiveTokenRunning = false;
+            dashboardLiveTokenFinished = true;
+            dashboardLiveTokenFailed = !succeeded;
+            if (succeeded) {
+                strlcpy(dashboardLiveToken, token, sizeof(dashboardLiveToken));
+                dashboardLiveTokenReadyMs = millis();
+            } else {
+                dashboardLiveToken[0] = '\0';
+                dashboardLiveTokenReadyMs = 0;
+            }
+        }
+        portEXIT_CRITICAL(&dashboardRecognitionMux);
+        memset(token, 0, sizeof(token));
+    }
+
     char transcript[MAX_SPOKEN_TRANSCRIPT_LENGTH + 1] = {};
     uint32_t transcriptRequestId = 0;
     bool processTranscript = false;
     uint8_t* audioBuffer = nullptr;
     size_t audioLength = 0;
     char audioMimeType[sizeof(dashboardAudioMimeType)] = {};
+    char audioLanguage[sizeof(dashboardAudioLanguage)] = "auto";
     bool processAudio = false;
     portENTER_CRITICAL(&dashboardRecognitionMux);
     if (dashboardRecognitionQueued || dashboardAudioQueued) {
@@ -775,9 +923,13 @@ void processPending(const Settings& settings) {
             audioBuffer = dashboardAudioBuffer;
             audioLength = dashboardAudioLength;
             strlcpy(audioMimeType, dashboardAudioMimeType, sizeof(audioMimeType));
+            strlcpy(audioLanguage, dashboardAudioLanguage,
+                    sizeof(audioLanguage));
             dashboardAudioBuffer = nullptr;
             dashboardAudioLength = 0;
             dashboardAudioMimeType[0] = '\0';
+            strlcpy(dashboardAudioLanguage, "auto",
+                    sizeof(dashboardAudioLanguage));
             processAudio = true;
         } else {
             strlcpy(transcript, dashboardTranscript, sizeof(transcript));
@@ -796,6 +948,7 @@ void processPending(const Settings& settings) {
                 audioBuffer = nullptr;
                 recognized = recognizeAudio(settings.geminiApiKey, ownedAudio,
                                             audioLength, audioMimeType,
+                                            audioLanguage,
                                             recognizedSurah);
             } else {
                 recognized = recognizeSpokenTranscript(
@@ -891,7 +1044,8 @@ void processPending(const Settings& settings) {
             uint8_t* audioToRecognize = recordingBuffer;
             recordingBuffer = nullptr;
             if (recognizeAudio(apiKey, audioToRecognize,
-                               wavLength, "audio/wav", recognizedSurah) &&
+                               wavLength, "audio/wav", "auto",
+                               recognizedSurah) &&
                 surahScreenActive && !cancelRequested &&
                 requestGeneration == screenGeneration) {
                 if (recognizedSurah >= 1 &&
@@ -992,7 +1146,8 @@ bool queueDashboardRecognition(const char* transcript, uint32_t& requestId) {
 
     portENTER_CRITICAL(&dashboardRecognitionMux);
     if (dashboardRecognitionQueued || dashboardAudioQueued ||
-        dashboardRecognitionRunning) {
+        dashboardRecognitionRunning || dashboardLiveTokenQueued ||
+        dashboardLiveTokenRunning) {
         portEXIT_CRITICAL(&dashboardRecognitionMux);
         return false;
     }
@@ -1010,19 +1165,23 @@ bool queueDashboardRecognition(const char* transcript, uint32_t& requestId) {
 
 bool queueDashboardAudioRecognition(uint8_t* audio, size_t audioLength,
                                     const char* mimeType,
+                                    const char* language,
                                     uint32_t& requestId) {
     if (WiFi.status() != WL_CONNECTED || !audio || audioLength == 0 ||
-        audioLength > MAX_DASHBOARD_AUDIO_BYTES || !mimeType ||
+        audioLength > MAX_DASHBOARD_AUDIO_BYTES || !mimeType || !language ||
         recording || listenRequested || recognitionPending ||
         recognitionInProgress) return false;
     if (strcmp(mimeType, "audio/mp4") != 0 &&
         strcmp(mimeType, "audio/webm") != 0 &&
         strcmp(mimeType, "audio/wav") != 0 &&
         strcmp(mimeType, "audio/aac") != 0) return false;
+    if (strcmp(language, "en-US") != 0 && strcmp(language, "bn-BD") != 0 &&
+        strcmp(language, "auto") != 0) return false;
 
     portENTER_CRITICAL(&dashboardRecognitionMux);
     if (dashboardRecognitionQueued || dashboardAudioQueued ||
-        dashboardRecognitionRunning) {
+        dashboardRecognitionRunning || dashboardLiveTokenQueued ||
+        dashboardLiveTokenRunning) {
         portEXIT_CRITICAL(&dashboardRecognitionMux);
         return false;
     }
@@ -1034,6 +1193,8 @@ bool queueDashboardAudioRecognition(uint8_t* audio, size_t audioLength,
     dashboardAudioBuffer = audio;
     dashboardAudioLength = audioLength;
     strlcpy(dashboardAudioMimeType, mimeType, sizeof(dashboardAudioMimeType));
+    strlcpy(dashboardAudioLanguage, language,
+            sizeof(dashboardAudioLanguage));
     dashboardAudioQueued = true;
     requestId = nextId;
     portEXIT_CRITICAL(&dashboardRecognitionMux);
@@ -1052,6 +1213,79 @@ const char* getDashboardRecognition(uint32_t requestId,
         } else if (dashboardRecognitionFinished) {
             if (dashboardRecognizedSurah != 0) {
                 surahNumber = dashboardRecognizedSurah;
+                status = "done";
+            } else {
+                status = "error";
+            }
+        }
+    }
+    portEXIT_CRITICAL(&dashboardRecognitionMux);
+    return status;
+}
+
+bool queueDashboardLiveToken(uint32_t& requestId) {
+    if (WiFi.status() != WL_CONNECTED || recording || listenRequested || recognitionPending ||
+        recognitionInProgress) {
+        return false;
+    }
+
+    const uint32_t now = millis();
+    portENTER_CRITICAL(&dashboardRecognitionMux);
+    if (dashboardRecognitionQueued || dashboardAudioQueued ||
+        dashboardRecognitionRunning || dashboardLiveTokenQueued ||
+        dashboardLiveTokenRunning ||
+        (dashboardLiveTokenRequestStarted &&
+         now - lastDashboardLiveTokenRequestMs < 5000UL)) {
+        portEXIT_CRITICAL(&dashboardRecognitionMux);
+        return false;
+    }
+
+    uint32_t nextId = nextDashboardLiveTokenRequestId++;
+    if (nextDashboardLiveTokenRequestId == 0)
+        nextDashboardLiveTokenRequestId = 1;
+    if (nextId == 0) {
+        nextId = nextDashboardLiveTokenRequestId++;
+        if (nextDashboardLiveTokenRequestId == 0)
+            nextDashboardLiveTokenRequestId = 1;
+    }
+    dashboardLiveTokenRequestId = nextId;
+    dashboardLiveTokenFinished = false;
+    dashboardLiveTokenFailed = false;
+    memset(dashboardLiveToken, 0, sizeof(dashboardLiveToken));
+    dashboardLiveTokenReadyMs = 0;
+    dashboardLiveTokenQueued = true;
+    lastDashboardLiveTokenRequestMs = now;
+    dashboardLiveTokenRequestStarted = true;
+    requestId = nextId;
+    portEXIT_CRITICAL(&dashboardRecognitionMux);
+    return true;
+}
+
+const char* getDashboardLiveToken(uint32_t requestId, char* token,
+                                  size_t tokenCapacity) {
+    const char* status = "unknown";
+    if (token && tokenCapacity) token[0] = '\0';
+    portENTER_CRITICAL(&dashboardRecognitionMux);
+    if (dashboardLiveTokenFinished && !dashboardLiveTokenFailed &&
+        millis() - dashboardLiveTokenReadyMs >= 300000UL) {
+        memset(dashboardLiveToken, 0, sizeof(dashboardLiveToken));
+        dashboardLiveTokenFinished = false;
+        dashboardLiveTokenReadyMs = 0;
+    }
+    if (requestId == dashboardLiveTokenRequestId && requestId != 0) {
+        if (dashboardLiveTokenQueued) {
+            status = "queued";
+        } else if (dashboardLiveTokenRunning) {
+            status = "processing";
+        } else if (dashboardLiveTokenFinished && dashboardLiveTokenFailed) {
+            status = "error";
+        } else if (dashboardLiveTokenFinished) {
+            if (token && tokenCapacity &&
+                strnlen(dashboardLiveToken, tokenCapacity) < tokenCapacity) {
+                strlcpy(token, dashboardLiveToken, tokenCapacity);
+                memset(dashboardLiveToken, 0, sizeof(dashboardLiveToken));
+                dashboardLiveTokenFinished = false;
+                dashboardLiveTokenReadyMs = 0;
                 status = "done";
             } else {
                 status = "error";

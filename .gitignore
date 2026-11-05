@@ -10,6 +10,7 @@ Prayer-Bot.code-workspace
 !/data/.gitkeep
 !/data/PrayerBot_Arrow.svg
 !/data/beep_sound.mp3
+!/data/beep_sound_ESP32_16kHz_16bit.wav
 
 # Firmware build artifacts
 *.bin

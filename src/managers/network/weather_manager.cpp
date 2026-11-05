@@ -292,6 +292,13 @@ String getAQIText(int aqi) {
 }
 
 bool loadCache(WeatherData& weather) {
+    const uint32_t cacheAge = CacheManager::getCacheAge(WEATHER_CACHE_PATH);
+    if (cacheAge == 0xFFFFFFFF ||
+        cacheAge > CACHE_WEATHER_MAX_DAYS * 86400UL) {
+        Serial.println("[WEATHER] Cache is missing a timestamp or has expired.");
+        return false;
+    }
+
     String json = StorageManager::readFile(WEATHER_CACHE_PATH);
     if (json.isEmpty()) return false;
 

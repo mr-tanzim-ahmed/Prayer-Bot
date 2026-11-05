@@ -3,15 +3,16 @@
 #include "network/https_client.h"
 #include <ArduinoJson.h>
 #include <AudioFileSource.h>
-#include <AudioFileSourcePROGMEM.h>
+#include <AudioFileSourceLittleFS.h>
 #include <AudioGeneratorMP3.h>
+#include <AudioGeneratorWAV.h>
 #include <AudioOutputI2S.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <math.h>
 #include <new>
 #include <stdlib.h>
-#include "audio/touch_beep_audio.h"
+#include <freertos/FreeRTOS.h>
 
 // ============================================================
 //  AZAN MANAGER IMPLEMENTATION
@@ -176,6 +177,8 @@ namespace {
     constexpr int16_t SCREEN_CHANGE_BEEP_AMPLITUDE = 9000;
     constexpr float SCREEN_CHANGE_BEEP_GAIN = 0.45f;
     constexpr float TOUCH_BEEP_GAIN = 0.65f;
+    constexpr char TOUCH_BEEP_WAV_PATH[] =
+        "/beep_sound_ESP32_16kHz_16bit.wav";
     constexpr size_t AUDIO_SAMPLES_PER_UPDATE = 256;
     constexpr float AUDIO_TWO_PI = 6.28318530718f;
     constexpr float PHASE_SCALE = AUDIO_TWO_PI / 4294967296.0f;
@@ -192,12 +195,15 @@ namespace {
     bool screenChangeGainReduced = false;
     bool audioReady = false;
     bool outputStarted = false;
+    portMUX_TYPE quranStateMux = portMUX_INITIALIZER_UNLOCKED;
     bool quranActive = false;
     bool quranStarting = false;
-    volatile bool quranStopRequested = false;
+    bool quranStopRequested = false;
     bool quranDecoderStarted = false;
-    volatile int16_t quranPendingSurah = -1;
-    volatile bool quranQueuedStartFailed = false;
+    int16_t quranPendingSurah = -1;
+    bool quranQueuedStartFailed = false;
+    uint32_t quranRequestGeneration = 0;
+    uint32_t quranPreparedGeneration = 0;
     uint8_t currentVolume = DEFAULT_VOLUME;
     unsigned long alarmStartedMs = 0;
     unsigned long pomodoroBeepStartedMs = 0;
@@ -206,10 +212,13 @@ namespace {
     uint16_t beepEnvelope = 0;
 
     AudioOutputI2S *out = nullptr;
+    // The active stream is owned by update(); the prepared pair is a locked handoff.
     HttpsAudioSource *quranSource = nullptr;
     AudioGeneratorMP3 *quranDecoder = nullptr;
-    AudioFileSourcePROGMEM touchBeepSource;
-    AudioGeneratorMP3 touchBeepDecoder;
+    HttpsAudioSource *quranPreparedSource = nullptr;
+    AudioGeneratorMP3 *quranPreparedDecoder = nullptr;
+    AudioFileSourceLittleFS touchBeepSource;
+    AudioGeneratorWAV touchBeepDecoder;
     bool touchBeepDecoderStarted = false;
 
     bool startI2SOutput() {
@@ -236,29 +245,30 @@ namespace {
     }
 
     bool startTouchBeep() {
-        if (!touchBeepSource.open(touchBeepMP3, touchBeepMP3Length)) {
-            Serial.println("[AZAN] Could not open embedded touch MP3.");
+        if (!touchBeepSource.open(TOUCH_BEEP_WAV_PATH)) {
+            Serial.printf("[AZAN] Could not open %s from LittleFS; upload the filesystem image.\n",
+                          TOUCH_BEEP_WAV_PATH);
             return false;
         }
         if (!startI2SOutput()) {
-            Serial.println("[AZAN] Could not start I2S for touch MP3 playback.");
+            Serial.println("[AZAN] Could not start I2S for touch WAV playback.");
             touchBeepSource.close();
             return false;
         }
         out->SetGain(getTouchBeepGain());
         if (!touchBeepDecoder.begin(&touchBeepSource, out)) {
-            Serial.println("[AZAN] Could not start touch MP3 playback.");
+            Serial.println("[AZAN] Could not decode touch WAV or start amplifier output.");
             outputStarted = false;
             touchBeepSource.close();
             if (!startI2SOutput()) {
-                Serial.println("[AZAN] Could not restore I2S after touch MP3 startup failed.");
+                Serial.println("[AZAN] Could not restore I2S after touch WAV startup failed.");
             }
             return false;
         }
         outputStarted = true;
         touchBeepDecoderStarted = true;
         touchBeepActive = true;
-        Serial.println("[AZAN] Playing embedded touch MP3.");
+        Serial.println("[AZAN] Playing LittleFS touch WAV through MAX98357A.");
         return true;
     }
 
@@ -375,22 +385,18 @@ namespace {
             quranSource = nullptr;
         }
         outputStarted = false;
+        portENTER_CRITICAL(&quranStateMux);
         quranActive = false;
-        quranStopRequested = false;
+        portEXIT_CRITICAL(&quranStateMux);
     }
 
-    bool startQuranStream(uint8_t surahNumber) {
-        if (!audioReady || !out || surahNumber < 1 ||
-            surahNumber > TOTAL_SURAHS || playing || quranActive ||
-            quranStarting || quranDecoder || quranSource ||
-            touchBeepPending || touchBeepActive || screenChangeBeepActive ||
-            screenChangeBeepPending || pomodoroBeepPending ||
-            pomodoroBeepActive ||
-            quranStopRequested) {
-            return false;
-        }
-
-        quranStarting = true;
+    bool prepareQuranStream(uint8_t surahNumber,
+                            HttpsAudioSource*& preparedSource,
+                            AudioGeneratorMP3*& preparedDecoder) {
+        preparedSource = nullptr;
+        preparedDecoder = nullptr;
+        if (!audioReady || surahNumber < 1 ||
+            surahNumber > TOTAL_SURAHS) return false;
         char url[180];
         if (!resolveQuranStreamUrl(surahNumber, url, sizeof(url))) {
             snprintf(url, sizeof(url),
@@ -399,48 +405,32 @@ namespace {
             Serial.printf("[QURAN] Using validated direct stream fallback for Surah %u.\n",
                           surahNumber);
         }
-        quranSource = new (std::nothrow) HttpsAudioSource();
-        quranDecoder = new (std::nothrow) AudioGeneratorMP3();
-        if (!quranSource || !quranDecoder) {
+        preparedSource = new (std::nothrow) HttpsAudioSource();
+        preparedDecoder = new (std::nothrow) AudioGeneratorMP3();
+        if (!preparedSource || !preparedDecoder) {
             Serial.println("[QURAN] Not enough memory to prepare playback.");
-            quranStarting = false;
-            cleanupQuran();
+            delete preparedDecoder;
+            delete preparedSource;
+            preparedDecoder = nullptr;
+            preparedSource = nullptr;
             return false;
         }
-        if (!quranSource->open(url)) {
+        if (!preparedSource->open(url)) {
             snprintf(url, sizeof(url),
                      "https://cdn.islamic.network/quran/audio/128/ar.alafasy/%u.mp3",
                      surahNumber);
             Serial.printf("[QURAN] Retrying Surah %u from alternate CDN.\n",
                           surahNumber);
         }
-        if (!quranSource->isOpen() && !quranSource->open(url)) {
+        if (!preparedSource->isOpen() && !preparedSource->open(url)) {
             Serial.printf("[QURAN] Could not start Surah %u stream.\n", surahNumber);
-            quranStarting = false;
-            cleanupQuran();
+            delete preparedDecoder;
+            preparedSource->close();
+            delete preparedSource;
+            preparedDecoder = nullptr;
+            preparedSource = nullptr;
             return false;
         }
-        if (!outputStarted) {
-            outputStarted = out->begin();
-            if (!outputStarted) {
-                Serial.println("[QURAN] Could not restart I2S output.");
-                quranStarting = false;
-                cleanupQuran();
-                return false;
-            }
-        }
-        if (!quranDecoder->begin(quranSource, out)) {
-            Serial.printf("[QURAN] Could not start Surah %u stream.\n", surahNumber);
-            quranStarting = false;
-            cleanupQuran();
-            return false;
-        }
-        out->SetGain(static_cast<float>(currentVolume) / 100.0f);
-        quranDecoderStarted = true;
-        outputStarted = true;
-        quranActive = true;
-        quranStarting = false;
-        Serial.printf("[QURAN] Streaming Surah %u from mp3quran.net.\n", surahNumber);
         return true;
     }
 }
@@ -505,56 +495,95 @@ bool playQuranSurah(uint8_t surahNumber) {
         Serial.println("[QURAN] Prayer alarm is active; Quran playback was not started.");
         return false;
     }
+    portENTER_CRITICAL(&quranStateMux);
+    ++quranRequestGeneration;
     quranQueuedStartFailed = false;
-    if (touchBeepPending || touchBeepActive ||
-        screenChangeBeepPending || screenChangeBeepActive ||
-        pomodoroBeepPending || pomodoroBeepActive) {
-        quranPendingSurah = surahNumber;
-        return true;
-    }
-    if (quranActive || quranStarting || quranDecoder || quranSource ||
-        quranStopRequested) {
-        quranPendingSurah = surahNumber;
-        if (quranActive || quranDecoder || quranSource)
-            quranStopRequested = true;
-        return true;
-    }
-
-    return startQuranStream(surahNumber);
+    quranPendingSurah = surahNumber;
+    if (quranActive) quranStopRequested = true;
+    portEXIT_CRITICAL(&quranStateMux);
+    return true;
 }
 
 void stopQuran() {
+    portENTER_CRITICAL(&quranStateMux);
+    ++quranRequestGeneration;
     quranPendingSurah = -1;
     quranStopRequested = true;
+    quranQueuedStartFailed = false;
+    portEXIT_CRITICAL(&quranStateMux);
 }
 
 bool isQuranPlaying() {
-    return quranActive && !quranStopRequested;
+    portENTER_CRITICAL(&quranStateMux);
+    const bool active = quranActive && !quranStopRequested;
+    portEXIT_CRITICAL(&quranStateMux);
+    return active;
 }
 
 bool isQuranPending() {
-    return quranPendingSurah > 0 || quranStarting;
+    portENTER_CRITICAL(&quranStateMux);
+    const bool pending = quranPendingSurah > 0 || quranStarting ||
+                         quranPreparedSource != nullptr;
+    portEXIT_CRITICAL(&quranStateMux);
+    return pending;
 }
 
 bool takeQuranStartFailure() {
+    portENTER_CRITICAL(&quranStateMux);
     const bool failed = quranQueuedStartFailed;
     quranQueuedStartFailed = false;
+    portEXIT_CRITICAL(&quranStateMux);
     return failed;
 }
 
 void processQuranQueue() {
-    if (quranPendingSurah < 1 || playing || quranActive || quranStarting ||
-        quranDecoder || quranSource || touchBeepPending ||
-        touchBeepActive || screenChangeBeepPending || screenChangeBeepActive ||
-        pomodoroBeepPending || pomodoroBeepActive || quranStopRequested) {
-        return;
+    uint8_t requestedSurah = 0;
+    uint32_t requestGeneration = 0;
+    portENTER_CRITICAL(&quranStateMux);
+    if (quranPendingSurah > 0 && !playing && !quranActive &&
+        !quranStarting && !quranPreparedSource && !quranStopRequested &&
+        !touchBeepPending && !touchBeepActive &&
+        !screenChangeBeepPending && !screenChangeBeepActive &&
+        !pomodoroBeepPending && !pomodoroBeepActive) {
+        requestedSurah = static_cast<uint8_t>(quranPendingSurah);
+        quranPendingSurah = -1;
+        quranStarting = true;
+        requestGeneration = quranRequestGeneration;
     }
+    portEXIT_CRITICAL(&quranStateMux);
+    if (requestedSurah == 0) return;
 
-    const uint8_t requestedSurah =
-        static_cast<uint8_t>(quranPendingSurah);
-    quranPendingSurah = -1;
-    if (!startQuranStream(requestedSurah)) {
+    HttpsAudioSource* preparedSource = nullptr;
+    AudioGeneratorMP3* preparedDecoder = nullptr;
+    const bool prepared = prepareQuranStream(
+        requestedSurah, preparedSource, preparedDecoder);
+
+    bool accepted = false;
+    bool reportFailure = false;
+    portENTER_CRITICAL(&quranStateMux);
+    quranStarting = false;
+    if (prepared && requestGeneration == quranRequestGeneration &&
+        !quranStopRequested && !quranActive) {
+        quranPreparedSource = preparedSource;
+        quranPreparedDecoder = preparedDecoder;
+        quranPreparedGeneration = requestGeneration;
+        accepted = true;
+    } else if (!prepared &&
+               requestGeneration == quranRequestGeneration &&
+               !quranStopRequested) {
         quranQueuedStartFailed = true;
+        reportFailure = true;
+    }
+    portEXIT_CRITICAL(&quranStateMux);
+
+    if (accepted) {
+        Serial.printf("[QURAN] Surah %u stream prepared for playback.\n",
+                      requestedSurah);
+    } else if (prepared) {
+        delete preparedDecoder;
+        preparedSource->close();
+        delete preparedSource;
+    } else if (reportFailure) {
         Serial.printf("[QURAN] Queued Surah %u could not be started.\n", requestedSurah);
     }
 }
@@ -562,11 +591,94 @@ void processQuranQueue() {
 void update() {
     if (!audioReady || !out) return;
 
-    if (quranStopRequested && !quranStarting) {
+    HttpsAudioSource* discardedSource = nullptr;
+    AudioGeneratorMP3* discardedDecoder = nullptr;
+    portENTER_CRITICAL(&quranStateMux);
+    const bool stopQuranNow = quranStopRequested;
+    if (stopQuranNow) {
+        discardedSource = quranPreparedSource;
+        discardedDecoder = quranPreparedDecoder;
+        quranPreparedSource = nullptr;
+        quranPreparedDecoder = nullptr;
+    }
+    portEXIT_CRITICAL(&quranStateMux);
+
+    if (stopQuranNow) {
         cleanupQuran();
+        if (discardedDecoder) delete discardedDecoder;
+        if (discardedSource) {
+            discardedSource->close();
+            delete discardedSource;
+        }
+        portENTER_CRITICAL(&quranStateMux);
+        quranStopRequested = false;
+        portEXIT_CRITICAL(&quranStateMux);
         if (playing || pomodoroBeepPending || screenChangeBeepPending ||
             touchBeepPending) {
             outputStarted = out->begin();
+        }
+    }
+
+    HttpsAudioSource* startingSource = nullptr;
+    AudioGeneratorMP3* startingDecoder = nullptr;
+    uint32_t startingGeneration = 0;
+    portENTER_CRITICAL(&quranStateMux);
+    if (quranPreparedSource && quranPreparedDecoder &&
+        !quranStopRequested && !quranActive && !playing &&
+        !touchBeepPending && !touchBeepActive &&
+        !screenChangeBeepPending && !screenChangeBeepActive &&
+        !pomodoroBeepPending && !pomodoroBeepActive) {
+        startingSource = quranPreparedSource;
+        startingDecoder = quranPreparedDecoder;
+        startingGeneration = quranPreparedGeneration;
+        quranPreparedSource = nullptr;
+        quranPreparedDecoder = nullptr;
+        quranStarting = true;
+    }
+    portEXIT_CRITICAL(&quranStateMux);
+
+    if (startingSource && startingDecoder) {
+        const bool outputReady =
+            outputStarted || (outputStarted = out->begin());
+        const bool decoderStarted =
+            outputReady && startingDecoder->begin(startingSource, out);
+        bool accepted = false;
+        if (decoderStarted) {
+            quranSource = startingSource;
+            quranDecoder = startingDecoder;
+            quranDecoderStarted = true;
+            out->SetGain(static_cast<float>(currentVolume) / 100.0f);
+            outputStarted = true;
+        }
+        portENTER_CRITICAL(&quranStateMux);
+        if (decoderStarted &&
+            startingGeneration == quranRequestGeneration &&
+            !quranStopRequested) {
+            quranActive = true;
+            accepted = true;
+        } else if (!decoderStarted &&
+                   startingGeneration == quranRequestGeneration &&
+                   !quranStopRequested) {
+            quranQueuedStartFailed = true;
+        }
+        quranStarting = false;
+        portEXIT_CRITICAL(&quranStateMux);
+
+        if (!accepted) {
+            if (decoderStarted) startingDecoder->stop();
+            if (!decoderStarted)
+                Serial.println("[QURAN] Could not start prepared stream.");
+            delete startingDecoder;
+            startingSource->close();
+            delete startingSource;
+            if (decoderStarted) {
+                quranDecoder = nullptr;
+                quranSource = nullptr;
+                quranDecoderStarted = false;
+            }
+            outputStarted = false;
+        } else {
+            Serial.println("[QURAN] Quran stream playback started.");
         }
     }
 
@@ -581,10 +693,15 @@ void update() {
         }
     }
 
-    if (quranActive && quranDecoder) {
+    portENTER_CRITICAL(&quranStateMux);
+    const bool quranIsActive = quranActive;
+    portEXIT_CRITICAL(&quranStateMux);
+    if (quranIsActive && quranDecoder) {
         if (!quranDecoder->loop()) {
             Serial.println("[QURAN] Surah stream finished.");
+            portENTER_CRITICAL(&quranStateMux);
             quranStopRequested = true;
+            portEXIT_CRITICAL(&quranStateMux);
         }
         return;
     }
@@ -597,10 +714,13 @@ void update() {
         return;
     }
 
+    portENTER_CRITICAL(&quranStateMux);
+    const bool quranBlocksTouchBeep =
+        quranActive || quranStarting || quranStopRequested;
+    portEXIT_CRITICAL(&quranStateMux);
     if (touchBeepPending && !playing && !pomodoroBeepActive &&
         !screenChangeBeepActive && !touchBeepActive &&
-        !quranActive && !quranStarting && !quranDecoder && !quranSource &&
-        !quranStopRequested) {
+        !quranBlocksTouchBeep) {
         touchBeepPending = false;
         startTouchBeep();
     } else if (screenChangeBeepPending && !playing && !pomodoroBeepActive &&
@@ -720,7 +840,10 @@ void playTouchBeep() {
         Serial.println("[AZAN] Touch feedback unavailable: I2S audio is not initialized.");
         return;
     }
-    if (playing || quranActive || quranStarting) return;
+    portENTER_CRITICAL(&quranStateMux);
+    const bool quranBusy = quranActive || quranStarting;
+    portEXIT_CRITICAL(&quranStateMux);
+    if (playing || quranBusy) return;
     touchBeepPending = true;
 }
 

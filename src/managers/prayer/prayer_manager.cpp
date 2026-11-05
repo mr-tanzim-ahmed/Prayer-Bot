@@ -11,6 +11,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include "managers/storage/cache_manager.h"
+#include <freertos/FreeRTOS.h>
 
 // ============================================================
 //  PRAYER MANAGER IMPLEMENTATION
@@ -47,8 +48,10 @@ namespace {
     DailyPrayers singleTodayPrayers = defaultDhakaPrayers;
     bool hasTodayPrayers = true;
     bool liveSynced = false;
+    bool refreshInProgress = false;
     PrayerName lastAzanPrayer = PRAYER_NONE;
     int lastAzanDay = -1;
+    portMUX_TYPE prayerStateMux = portMUX_INITIALIZER_UNLOCKED;
 
     bool parseTime(const char* str, PrayerTime& time) {
         if (!str || strlen(str) < 4) return false;
@@ -205,20 +208,24 @@ namespace {
     bool getCachedPrayersForDate(const struct tm& date, DailyPrayers& prayers) {
         const int year = date.tm_year + 1900;
         const int month = date.tm_mon + 1;
+        bool found = false;
+        portENTER_CRITICAL(&prayerStateMux);
         for (int i = 0; i < backupDaysCount; ++i) {
             if (backupPrayers[i].year == year &&
                 backupPrayers[i].month == month &&
                 backupPrayers[i].day == date.tm_mday) {
                 prayers = backupPrayers[i].prayers;
-                return true;
+                found = true;
+                break;
             }
         }
-        if (cachedYear == year && cachedMonth == month &&
+        if (!found && cachedYear == year && cachedMonth == month &&
             date.tm_mday >= 1 && date.tm_mday <= cachedDaysCount) {
             prayers = cachedPrayers[date.tm_mday - 1];
-            return true;
+            found = true;
         }
-        return false;
+        portEXIT_CRITICAL(&prayerStateMux);
+        return found;
     }
 
     void getTodayPrayersForDay(int day, DailyPrayers& prayers) {
@@ -226,6 +233,7 @@ namespace {
         const bool hasDate = getLocalTime(&today, 0) &&
             today.tm_year >= (2020 - 1900);
         bool foundBackup = false;
+        portENTER_CRITICAL(&prayerStateMux);
         if (hasDate && day == today.tm_mday) {
             for (int i = 0; i < backupDaysCount; ++i) {
                 if (backupPrayers[i].year == today.tm_year + 1900 &&
@@ -252,6 +260,7 @@ namespace {
         } else if (!foundBackup) {
             prayers = defaultDhakaPrayers;
         }
+        portEXIT_CRITICAL(&prayerStateMux);
 
         if (prayers.fajr.hour == 0 && prayers.fajr.minute == 0)
             prayers.fajr = defaultDhakaPrayers.fajr;
@@ -278,6 +287,7 @@ namespace {
             return;
         }
 
+        portENTER_CRITICAL(&prayerStateMux);
         int existingIndex = -1;
         for (int i = 0; i < backupDaysCount; ++i) {
             if (backupPrayers[i].year == year &&
@@ -300,6 +310,7 @@ namespace {
         backupPrayers[0] = {year, month, day, prayers};
         if (existingIndex < 0 && backupDaysCount < PRAYER_CACHE_BACKUP_DAYS)
             ++backupDaysCount;
+        portEXIT_CRITICAL(&prayerStateMux);
     }
 
     void copyCachedDay(JsonObject destination, JsonObjectConst source) {
@@ -414,9 +425,11 @@ namespace {
         }
         if (!parseTime(imsakStr, fetched.imsak)) fetched.imsak = fetched.fajr;
 
+        portENTER_CRITICAL(&prayerStateMux);
         singleTodayPrayers = fetched;
         hasTodayPrayers = true;
         liveSynced = true;
+        portEXIT_CRITICAL(&prayerStateMux);
 
         // Auto-set device clock from Aladhan trusted server timestamp if clock is not synced
         const uint32_t ts = static_cast<uint32_t>(
@@ -641,7 +654,7 @@ bool init(const Settings& settings) {
     if (!json.isEmpty()) {
         JsonDocument doc;
         const uint32_t age = CacheManager::getCacheAge(PRAYER_CACHE_PATH);
-        const bool fresh = age == 0xFFFFFFFF ||
+        const bool fresh = age != 0xFFFFFFFF &&
             age <= CACHE_PRAYER_MAX_DAYS * 86400UL;
         if (!deserializeJson(doc, json) && fresh) {
             JsonArray backupDays = doc["days"].as<JsonArray>();
@@ -745,10 +758,27 @@ bool init(const Settings& settings) {
 bool refresh(const Settings& settings) {
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("[PRAYER] WiFi not connected. Cannot refresh.");
-        return hasTodayPrayers;
+        portENTER_CRITICAL(&prayerStateMux);
+        const bool available = hasTodayPrayers;
+        portEXIT_CRITICAL(&prayerStateMux);
+        return available;
     }
 
-    return fetchTodayTimings(settings);
+    portENTER_CRITICAL(&prayerStateMux);
+    if (refreshInProgress) {
+        const bool available = hasTodayPrayers;
+        portEXIT_CRITICAL(&prayerStateMux);
+        return available;
+    }
+    refreshInProgress = true;
+    portEXIT_CRITICAL(&prayerStateMux);
+
+    const bool refreshed = fetchTodayTimings(settings);
+
+    portENTER_CRITICAL(&prayerStateMux);
+    refreshInProgress = false;
+    portEXIT_CRITICAL(&prayerStateMux);
+    return refreshed;
 }
 
 void getTodayPrayers(DailyPrayers& prayers) {
@@ -1003,18 +1033,25 @@ bool isAzanTime(const DailyPrayers& prayers) {
     for (int i = 0; i < 5; i++) {
         const int prayerMin = timeToMinutes(times[i]);
         if (nowMin == prayerMin && t.tm_sec < 30) {
+            bool shouldTrigger = false;
+            portENTER_CRITICAL(&prayerStateMux);
             if (lastAzanDay != day || lastAzanPrayer != names[i]) {
                 lastAzanPrayer = names[i];
                 lastAzanDay = day;
-                return true;
+                shouldTrigger = true;
             }
+            portEXIT_CRITICAL(&prayerStateMux);
+            if (shouldTrigger) return true;
         }
     }
     return false;
 }
 
 PrayerName getCurrentPrayerName() {
-    return lastAzanPrayer;
+    portENTER_CRITICAL(&prayerStateMux);
+    const PrayerName prayer = lastAzanPrayer;
+    portEXIT_CRITICAL(&prayerStateMux);
+    return prayer;
 }
 
 const char* getPrayerNameStr(PrayerName name) {
@@ -1030,7 +1067,10 @@ const char* getPrayerNameStr(PrayerName name) {
 }
 
 bool isLiveSynced() {
-    return liveSynced;
+    portENTER_CRITICAL(&prayerStateMux);
+    const bool synced = liveSynced;
+    portEXIT_CRITICAL(&prayerStateMux);
+    return synced;
 }
 
 } // namespace PrayerManager

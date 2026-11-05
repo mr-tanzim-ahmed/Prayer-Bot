@@ -4,6 +4,7 @@
 #include "managers/storage/cache_manager.h"
 #include <ArduinoJson.h>
 #include <time.h>
+#include <freertos/FreeRTOS.h>
 
 // ============================================================
 //  CALENDAR MANAGER IMPLEMENTATION
@@ -12,10 +13,19 @@
 
 namespace {
     int8_t hijriOffset = 0;
+    portMUX_TYPE calendarStateMux = portMUX_INITIALIZER_UNLOCKED;
 
-    void normalizeHijriDate(HijriDate& date) {
-        while (date.day < 1) {
-            date.day += 30;
+    // Hijri month names
+    const char* HIJRI_MONTHS[] = {
+        "Muharram", "Safar", "Rabi al-Awwal", "Rabi al-Thani",
+        "Jumada al-Ula", "Jumada al-Thani", "Rajab", "Shaban",
+        "Ramadan", "Shawwal", "Dhul Qadah", "Dhul Hijjah"
+    };
+
+    void normalizeHijriDate(HijriDate& date, int day, int8_t offset) {
+        const uint8_t originalMonth = date.month;
+        while (day < 1) {
+            day += 30;
             if (date.month == 1) {
                 date.month = 12;
                 date.year--;
@@ -24,8 +34,8 @@ namespace {
             }
         }
 
-        while (date.day > 30) {
-            date.day -= 30;
+        while (day > 30) {
+            day -= 30;
             if (date.month == 12) {
                 date.month = 1;
                 date.year++;
@@ -33,6 +43,39 @@ namespace {
                 date.month++;
             }
         }
+
+        if (date.month != originalMonth && date.month >= 1 && date.month <= 12) {
+            date.monthName = HIJRI_MONTHS[date.month - 1];
+        }
+        date.day = day;
+    }
+
+    bool loadCachedHijriDate(JsonObjectConst cachedHijri, HijriDate& date,
+                             int8_t offset) {
+        JsonVariantConst cachedDay = cachedHijri["day"];
+        JsonVariantConst cachedMonth = cachedHijri["month"];
+        JsonVariantConst cachedYear = cachedHijri["year"];
+        if (cachedHijri.isNull() || !cachedDay.is<int>() ||
+            !cachedMonth.is<int>() || !cachedYear.is<int>()) {
+            return false;
+        }
+
+        const int day = cachedDay.as<int>();
+        const int month = cachedMonth.as<int>();
+        const int year = cachedYear.as<int>();
+        if (day < 1 || day > 30 || month < 1 || month > 12 ||
+            year < 1 || year > UINT16_MAX) {
+            return false;
+        }
+
+        date.day = day;
+        date.month = month;
+        date.year = year;
+        const char* monthName = cachedHijri["monthName"] | "";
+        date.monthName = monthName[0] ? monthName : HIJRI_MONTHS[month - 1];
+        date.designation = "AH";
+        normalizeHijriDate(date, day + offset, offset);
+        return true;
     }
 
     // Built-in Islamic events table
@@ -50,26 +93,27 @@ namespace {
     };
     const int EVENT_COUNT = sizeof(EVENTS) / sizeof(EVENTS[0]);
 
-    // Hijri month names
-    const char* HIJRI_MONTHS[] = {
-        "Muharram", "Safar", "Rabi al-Awwal", "Rabi al-Thani",
-        "Jumada al-Ula", "Jumada al-Thani", "Rajab", "Shaban",
-        "Ramadan", "Shawwal", "Dhul Qadah", "Dhul Hijjah"
-    };
 }
 
 namespace CalendarManager {
 
 void init(const Settings& settings) {
+    portENTER_CRITICAL(&calendarStateMux);
     hijriOffset = settings.hijriOffset;
-    Serial.printf("[CALENDAR] Initialized with Hijri offset: %d\n", hijriOffset);
+    portEXIT_CRITICAL(&calendarStateMux);
+    Serial.printf("[CALENDAR] Initialized with Hijri offset: %d\n",
+                  settings.hijriOffset);
 }
 
 void getHijriDate(HijriDate& date) {
+    portENTER_CRITICAL(&calendarStateMux);
+    const int8_t offset = hijriOffset;
+    portEXIT_CRITICAL(&calendarStateMux);
+
     // Read from cached prayer data which includes Hijri info per day
     String json = StorageManager::readFile(PRAYER_CACHE_PATH);
     const uint32_t cacheAge = CacheManager::getCacheAge(PRAYER_CACHE_PATH);
-    const bool cacheFresh = cacheAge == 0xFFFFFFFF ||
+    const bool cacheFresh = cacheAge != 0xFFFFFFFF &&
         cacheAge <= CACHE_PRAYER_MAX_DAYS * 86400UL;
     if (!json.isEmpty() && cacheFresh) {
         JsonDocument doc;
@@ -94,28 +138,14 @@ void getHijriDate(HijriDate& date) {
                 }
 
                 JsonObjectConst cachedHijri = selectedDay["hijri"];
-                if (!cachedHijri.isNull()) {
-                    date.day = cachedHijri["day"] | 1;
-                    date.month = cachedHijri["month"] | 1;
-                    date.year = cachedHijri["year"] | 1448;
-                    date.monthName = String((const char*)(cachedHijri["monthName"] | "Muharram"));
-                    date.designation = "AH";
-                    date.day += hijriOffset;
-                    normalizeHijriDate(date);
+                if (loadCachedHijriDate(cachedHijri, date, offset)) {
                     return;
                 }
             }
 
             // Check single day cache format first
-            JsonObject singleHijri = doc["hijri"];
-            if (!singleHijri.isNull()) {
-                date.day       = singleHijri["day"] | 1;
-                date.month     = singleHijri["month"] | 1;
-                date.year      = singleHijri["year"] | 1448;
-                date.monthName = String((const char*)(singleHijri["monthName"] | "Muharram"));
-                date.designation = "AH";
-                date.day += hijriOffset;
-                normalizeHijriDate(date);
+            JsonObjectConst singleHijri = doc["hijri"];
+            if (loadCachedHijriDate(singleHijri, date, offset)) {
                 return;
             }
 
@@ -126,17 +156,8 @@ void getHijriDate(HijriDate& date) {
                 JsonArray days = doc["days"].as<JsonArray>();
                 
                 if (dayIndex >= 0 && dayIndex < days.size()) {
-                    JsonObject todayHijri = days[dayIndex]["hijri"];
-                    if (!todayHijri.isNull()) {
-                        date.day       = todayHijri["day"] | 1;
-                        date.month     = todayHijri["month"] | 1;
-                        date.year      = todayHijri["year"] | 1448;
-                        date.monthName = String((const char*)(todayHijri["monthName"] | "Muharram"));
-                        date.designation = "AH";
-
-                        // Apply offset and keep the Hijri month/day valid after rollover.
-                        date.day += hijriOffset;
-                        normalizeHijriDate(date);
+                    JsonObjectConst todayHijri = days[dayIndex]["hijri"];
+                    if (loadCachedHijriDate(todayHijri, date, offset)) {
                         return;
                     }
                 }
@@ -144,11 +165,11 @@ void getHijriDate(HijriDate& date) {
         }
     }
 
-    // Fallback: approximate Hijri date
-    date.day = 1;
-    date.month = 1;
-    date.year = 1446;
-    date.monthName = "Muharram";
+    // Zero year represents an unavailable date; never substitute a stale fixed date.
+    date.day = 0;
+    date.month = 0;
+    date.year = 0;
+    date.monthName = "";
     date.designation = "AH";
 }
 
@@ -171,20 +192,27 @@ void getTodayEvent(const HijriDate& date, IslamicEvent& event) {
 }
 
 bool isEventComingSoon(const HijriDate& date, IslamicEvent& event, uint8_t withinDays) {
+    event = {0, 0, "", false};
+    if (date.month < 1 || date.month > 12 || date.day < 1 || date.day > 30)
+        return false;
+
+    int soonestDays = 361;
     for (int i = 0; i < EVENT_COUNT; i++) {
-        if (EVENTS[i].month == date.month) {
-            int diff = EVENTS[i].day - date.day;
-            if (diff > 0 && diff <= withinDays) {
-                event = EVENTS[i];
-                return true;
-            }
+        const int monthsAhead = (EVENTS[i].month - date.month + 12) % 12;
+        int diff = monthsAhead * 30 + EVENTS[i].day - date.day;
+        if (diff <= 0) diff += 12 * 30;
+        if (diff > 0 && diff <= withinDays && diff < soonestDays) {
+            event = EVENTS[i];
+            soonestDays = diff;
         }
     }
-    return false;
+    return soonestDays <= withinDays;
 }
 
 void setHijriOffset(int8_t offset) {
+    portENTER_CRITICAL(&calendarStateMux);
     hijriOffset = offset;
+    portEXIT_CRITICAL(&calendarStateMux);
     Serial.printf("[CALENDAR] Hijri offset set to: %d\n", offset);
 }
 

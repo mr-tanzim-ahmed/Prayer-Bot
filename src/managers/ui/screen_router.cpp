@@ -10,6 +10,7 @@
 #include "screens/dhikr_screen.h"
 #include "screens/surah_screen.h"
 #include "managers/prayer/prayer_manager.h"
+#include "core/shared_state.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -54,6 +55,24 @@ namespace {
     float lastQiblaLongitude = DEFAULT_LONGITUDE;
     bool hasQiblaLocation = true;
 
+    bool copyPrayerSnapshot(DailyPrayers& prayers, NextPrayerInfo& nextPrayer,
+                            ProhibitedTimes& prohibited) {
+        if (!lockPrayerData()) return false;
+        prayers = g_todayPrayers;
+        nextPrayer = g_nextPrayer;
+        prohibited = g_prohibited;
+        unlockPrayerData();
+        return true;
+    }
+
+    bool copyCalendarSnapshot(HijriDate& hijriDate, IslamicEvent& todayEvent) {
+        if (!lockCalendarData()) return false;
+        hijriDate = g_hijriDate;
+        todayEvent = g_todayEvent;
+        unlockCalendarData();
+        return true;
+    }
+
     bool getQiblaLocation(float& latitude, float& longitude) {
         if (!g_settingsMutex) {
             latitude = g_settings.latitude;
@@ -94,14 +113,18 @@ namespace {
     }
 
     void drawPomodoro() {
-        PomodoroScreen::draw(g_pomodoro);
-        lastPomodoroPhase = g_pomodoro.phase;
-        lastPomodoroRemainingSeconds = g_pomodoro.remainingSeconds;
-        lastPomodoroCycle = g_pomodoro.currentCycle;
-        lastPomodoroAzanPaused = g_pomodoro.pausedByAzan;
-        lastPomodoroFocusMinutes = g_pomodoro.focusMinutes;
-        lastPomodoroShortBreakMinutes = g_pomodoro.shortBreakMinutes;
-        lastPomodoroLongBreakMinutes = g_pomodoro.longBreakMinutes;
+        PomodoroState state;
+        if (!lockPomodoroState()) return;
+        state = g_pomodoro;
+        unlockPomodoroState();
+        PomodoroScreen::draw(state);
+        lastPomodoroPhase = state.phase;
+        lastPomodoroRemainingSeconds = state.remainingSeconds;
+        lastPomodoroCycle = state.currentCycle;
+        lastPomodoroAzanPaused = state.pausedByAzan;
+        lastPomodoroFocusMinutes = state.focusMinutes;
+        lastPomodoroShortBreakMinutes = state.shortBreakMinutes;
+        lastPomodoroLongBreakMinutes = state.longBreakMinutes;
         lastPomodoroAnimationFrame =
             static_cast<uint8_t>((millis() / 350UL) % 8UL);
         pomodoroViewInitialized = true;
@@ -117,8 +140,13 @@ void draw(SystemScreen screen) {
     if (!DisplayManager::isAvailable()) return;
 
     if (g_azanState == AZAN_PLAYING) {
+        DailyPrayers prayers;
+        NextPrayerInfo nextPrayer;
+        ProhibitedTimes prohibited;
+        if (!copyPrayerSnapshot(prayers, nextPrayer, prohibited)) return;
+        (void)prayers;
         azanOverlayDisplayed = true;
-        PrayerFocusScreen::draw(g_nextPrayer, g_prohibited, true,
+        PrayerFocusScreen::draw(nextPrayer, prohibited, true,
                                 PrayerManager::getCurrentPrayerName(),
                                 g_prayerRefreshing ||
                                     g_locationRefreshRequested,
@@ -130,28 +158,50 @@ void draw(SystemScreen screen) {
     const bool showNextPrayer = shouldShowNextPrayer(timeOnScreen);
 
     switch (screen) {
-        case SYS_SCREEN_PRAYER_FOCUS:
-            PrayerFocusScreen::draw(g_nextPrayer, g_prohibited,
+        case SYS_SCREEN_PRAYER_FOCUS: {
+            DailyPrayers prayers;
+            NextPrayerInfo nextPrayer;
+            ProhibitedTimes prohibited;
+            if (!copyPrayerSnapshot(prayers, nextPrayer, prohibited)) break;
+            (void)prayers;
+            PrayerFocusScreen::draw(nextPrayer, prohibited,
                                     g_azanState == AZAN_PLAYING,
                                     PrayerManager::getCurrentPrayerName(),
                                     g_prayerRefreshing ||
                                         g_locationRefreshRequested,
                                     showNextPrayer);
             break;
+        }
 
-        case SYS_SCREEN_ALL_PRAYERS:
+        case SYS_SCREEN_ALL_PRAYERS: {
+            DailyPrayers prayers;
+            NextPrayerInfo nextPrayer;
+            ProhibitedTimes prohibited;
+            if (!copyPrayerSnapshot(prayers, nextPrayer, prohibited)) break;
+            (void)prohibited;
             showingSahariIftar = shouldShowSahariIftar(timeOnScreen);
             allPrayersViewInitialized = true;
             if (showingSahariIftar) {
-                AllPrayersScreen::drawSahariIftar(g_todayPrayers);
+                AllPrayersScreen::drawSahariIftar(prayers);
             } else {
-                AllPrayersScreen::draw(g_todayPrayers, g_nextPrayer);
+                AllPrayersScreen::draw(prayers, nextPrayer);
             }
             break;
+        }
 
-        case SYS_SCREEN_CLOCK_CALENDAR:
-            ClockCalendarScreen::draw(g_hijriDate, g_todayEvent, g_todayPrayers);
+        case SYS_SCREEN_CLOCK_CALENDAR: {
+            DailyPrayers prayers;
+            NextPrayerInfo nextPrayer;
+            ProhibitedTimes prohibited;
+            HijriDate hijriDate;
+            IslamicEvent todayEvent;
+            if (!copyPrayerSnapshot(prayers, nextPrayer, prohibited)) break;
+            if (!copyCalendarSnapshot(hijriDate, todayEvent)) break;
+            (void)nextPrayer;
+            (void)prohibited;
+            ClockCalendarScreen::draw(hijriDate, todayEvent, prayers);
             break;
+        }
 
         case SYS_SCREEN_QIBLA:
             drawQiblaScreen();
@@ -184,8 +234,13 @@ void update(SystemScreen screen) {
     if (!DisplayManager::isAvailable()) return;
 
     if (g_azanState == AZAN_PLAYING) {
+        DailyPrayers prayers;
+        NextPrayerInfo nextPrayer;
+        ProhibitedTimes prohibited;
+        if (!copyPrayerSnapshot(prayers, nextPrayer, prohibited)) return;
+        (void)prayers;
         azanOverlayDisplayed = true;
-        PrayerFocusScreen::update(g_nextPrayer, g_prohibited, true,
+        PrayerFocusScreen::update(nextPrayer, prohibited, true,
                                   PrayerManager::getCurrentPrayerName(),
                                   g_prayerRefreshing ||
                                       g_locationRefreshRequested,
@@ -203,33 +258,54 @@ void update(SystemScreen screen) {
     const bool showNextPrayer = shouldShowNextPrayer(timeOnScreen);
 
     switch (screen) {
-        case SYS_SCREEN_PRAYER_FOCUS:
-            PrayerFocusScreen::update(g_nextPrayer, g_prohibited,
+        case SYS_SCREEN_PRAYER_FOCUS: {
+            DailyPrayers prayers;
+            NextPrayerInfo nextPrayer;
+            ProhibitedTimes prohibited;
+            if (!copyPrayerSnapshot(prayers, nextPrayer, prohibited)) break;
+            (void)prayers;
+            PrayerFocusScreen::update(nextPrayer, prohibited,
                                       g_azanState == AZAN_PLAYING,
                                       PrayerManager::getCurrentPrayerName(),
                                       g_prayerRefreshing ||
                                           g_locationRefreshRequested,
                                       showNextPrayer);
             break;
+        }
 
         case SYS_SCREEN_ALL_PRAYERS: {
+            DailyPrayers prayers;
+            NextPrayerInfo nextPrayer;
+            ProhibitedTimes prohibited;
+            if (!copyPrayerSnapshot(prayers, nextPrayer, prohibited)) break;
+            (void)prohibited;
             const bool shouldShowSahari = shouldShowSahariIftar(timeOnScreen);
             if (!allPrayersViewInitialized ||
                 shouldShowSahari != showingSahariIftar) {
                 showingSahariIftar = shouldShowSahari;
                 allPrayersViewInitialized = true;
                 if (showingSahariIftar) {
-                    AllPrayersScreen::drawSahariIftar(g_todayPrayers);
+                    AllPrayersScreen::drawSahariIftar(prayers);
                 } else {
-                    AllPrayersScreen::draw(g_todayPrayers, g_nextPrayer);
+                    AllPrayersScreen::draw(prayers, nextPrayer);
                 }
             }
             break;
         }
 
-        case SYS_SCREEN_CLOCK_CALENDAR:
-            ClockCalendarScreen::update(g_hijriDate, g_todayEvent, g_todayPrayers);
+        case SYS_SCREEN_CLOCK_CALENDAR: {
+            DailyPrayers prayers;
+            NextPrayerInfo nextPrayer;
+            ProhibitedTimes prohibited;
+            HijriDate hijriDate;
+            IslamicEvent todayEvent;
+            if (!copyPrayerSnapshot(prayers, nextPrayer, prohibited)) break;
+            if (!copyCalendarSnapshot(hijriDate, todayEvent)) break;
+            (void)nextPrayer;
+            (void)prohibited;
+            ClockCalendarScreen::update(hijriDate, todayEvent, prayers);
             break;
+        }
 
         case SYS_SCREEN_QIBLA:
             drawQiblaScreen();
@@ -242,22 +318,35 @@ void update(SystemScreen screen) {
             break;
 
         case SYS_SCREEN_POMODORO: {
+            PomodoroState state;
+            if (!lockPomodoroState()) break;
+            state = g_pomodoro;
+            unlockPomodoroState();
             const uint8_t animationFrame =
                 static_cast<uint8_t>((millis() / 350UL) % 8UL);
             const bool animatedPhase =
-                g_pomodoro.phase == POMODORO_IDLE ||
-                g_pomodoro.phase == POMODORO_WAITING_FOR_BREAK;
+                state.phase == POMODORO_IDLE ||
+                state.phase == POMODORO_WAITING_FOR_BREAK;
             if (!pomodoroViewInitialized ||
-                g_pomodoro.phase != lastPomodoroPhase ||
-                g_pomodoro.remainingSeconds != lastPomodoroRemainingSeconds ||
-                g_pomodoro.currentCycle != lastPomodoroCycle ||
-                g_pomodoro.pausedByAzan != lastPomodoroAzanPaused ||
-                g_pomodoro.focusMinutes != lastPomodoroFocusMinutes ||
-                g_pomodoro.shortBreakMinutes != lastPomodoroShortBreakMinutes ||
-                g_pomodoro.longBreakMinutes != lastPomodoroLongBreakMinutes ||
+                state.phase != lastPomodoroPhase ||
+                state.remainingSeconds != lastPomodoroRemainingSeconds ||
+                state.currentCycle != lastPomodoroCycle ||
+                state.pausedByAzan != lastPomodoroAzanPaused ||
+                state.focusMinutes != lastPomodoroFocusMinutes ||
+                state.shortBreakMinutes != lastPomodoroShortBreakMinutes ||
+                state.longBreakMinutes != lastPomodoroLongBreakMinutes ||
                 (animatedPhase &&
                  animationFrame != lastPomodoroAnimationFrame)) {
-                drawPomodoro();
+                PomodoroScreen::draw(state);
+                lastPomodoroPhase = state.phase;
+                lastPomodoroRemainingSeconds = state.remainingSeconds;
+                lastPomodoroCycle = state.currentCycle;
+                lastPomodoroAzanPaused = state.pausedByAzan;
+                lastPomodoroFocusMinutes = state.focusMinutes;
+                lastPomodoroShortBreakMinutes = state.shortBreakMinutes;
+                lastPomodoroLongBreakMinutes = state.longBreakMinutes;
+                lastPomodoroAnimationFrame = animationFrame;
+                pomodoroViewInitialized = true;
             }
             break;
         }

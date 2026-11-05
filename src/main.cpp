@@ -4,6 +4,7 @@
 #include <freertos/semphr.h>
 #include <prayer_bot_config.h>
 #include "core/types.h"
+#include "core/shared_state.h"
 
 // Device and audio services
 #include "managers/audio/azan_manager.h"
@@ -40,6 +41,9 @@
 // --- Global shared state ---
 Settings        g_settings;
 SemaphoreHandle_t g_settingsMutex = nullptr;
+SemaphoreHandle_t g_pomodoroMutex = nullptr;
+SemaphoreHandle_t g_prayerDataMutex = nullptr;
+SemaphoreHandle_t g_calendarMutex = nullptr;
 WeatherData     g_weather;
 DailyPrayers    g_todayPrayers;
 NextPrayerInfo  g_nextPrayer;
@@ -85,6 +89,49 @@ void taskAudio(void* param);
 void taskVoice(void* param);
 
 namespace {
+    bool publishPrayerData(const Settings& settings) {
+        DailyPrayers prayers;
+        NextPrayerInfo nextPrayer;
+        ProhibitedTimes prohibited;
+        PrayerManager::getTodayPrayers(prayers);
+        PrayerManager::updateNextPrayer(nextPrayer, prohibited, settings);
+        if (!lockPrayerData(portMAX_DELAY)) return false;
+        g_todayPrayers = prayers;
+        g_nextPrayer = nextPrayer;
+        g_prohibited = prohibited;
+        unlockPrayerData();
+        return true;
+    }
+
+    bool publishNextPrayerData(const Settings& settings) {
+        NextPrayerInfo nextPrayer;
+        ProhibitedTimes prohibited;
+        PrayerManager::updateNextPrayer(nextPrayer, prohibited, settings);
+        if (!lockPrayerData(portMAX_DELAY)) return false;
+        g_nextPrayer = nextPrayer;
+        g_prohibited = prohibited;
+        unlockPrayerData();
+        return true;
+    }
+
+    void setPrayerReady(bool ready) {
+        if (!lockPrayerData(portMAX_DELAY)) return;
+        g_prayerReady = ready;
+        unlockPrayerData();
+    }
+
+    bool publishCalendarData() {
+        HijriDate hijriDate;
+        IslamicEvent todayEvent;
+        CalendarManager::getHijriDate(hijriDate);
+        CalendarManager::getTodayEvent(hijriDate, todayEvent);
+        if (!lockCalendarData(portMAX_DELAY)) return false;
+        g_hijriDate = hijriDate;
+        g_todayEvent = todayEvent;
+        unlockCalendarData();
+        return true;
+    }
+
     void changeScreen(SystemScreen screen, bool touchTriggered = false) {
         if (screen == g_currentScreen) return;
         if (g_currentScreen == SYS_SCREEN_QURAN)
@@ -102,9 +149,11 @@ namespace {
     }
 
     void resumePomodoroAfterAzan() {
+        if (!lockPomodoroState()) return;
         if (g_pomodoro.pausedByAzan) {
             PomodoroManager::resumeFromAzan(g_pomodoro);
         }
+        unlockPomodoroState();
     }
 }
 
@@ -131,6 +180,12 @@ void setup() {
     g_settingsMutex = xSemaphoreCreateMutex();
     if (!g_settingsMutex) {
         Logger::error("MAIN", "Could not create settings lock; dashboard settings will be read-only.");
+    }
+    g_pomodoroMutex = xSemaphoreCreateMutex();
+    g_prayerDataMutex = xSemaphoreCreateMutex();
+    g_calendarMutex = xSemaphoreCreateMutex();
+    if (!g_pomodoroMutex || !g_prayerDataMutex || !g_calendarMutex) {
+        Logger::error("MAIN", "Could not create shared-state locks.");
     }
     if (!storageReady) {
         Logger::error("STORAGE", "Persistent storage unavailable; settings cannot be saved.");
@@ -159,11 +214,14 @@ void setup() {
 
     // 5. Initialize Pomodoro with saved settings
     PomodoroManager::init(g_settings);
-    PomodoroManager::updateSettings(g_pomodoro, g_settings);
-    g_pomodoro.currentCycle = 0;
-    g_pomodoro.phase = POMODORO_IDLE;
-    g_pomodoro.savedPhase = POMODORO_IDLE;
-    g_pomodoro.pendingBreakPhase = POMODORO_SHORT_BREAK;
+    if (lockPomodoroState()) {
+        PomodoroManager::updateSettings(g_pomodoro, g_settings);
+        g_pomodoro.currentCycle = 0;
+        g_pomodoro.phase = POMODORO_IDLE;
+        g_pomodoro.savedPhase = POMODORO_IDLE;
+        g_pomodoro.pendingBreakPhase = POMODORO_SHORT_BREAK;
+        unlockPomodoroState();
+    }
     Serial.println("[MAIN] Pomodoro initialized.");
 
     // Audio is available even while the device is in Wi-Fi setup AP mode.
@@ -173,12 +231,10 @@ void setup() {
     VoiceManager::init();
 
     // 6. Initialize prayer & calendar base data unconditionally (cached / Dhaka defaults)
-    g_prayerReady = PrayerManager::init(g_settings);
-    PrayerManager::getTodayPrayers(g_todayPrayers);
-    PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, g_settings);
+    setPrayerReady(PrayerManager::init(g_settings));
+    publishPrayerData(g_settings);
     CalendarManager::init(g_settings);
-    CalendarManager::getHijriDate(g_hijriDate);
-    CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
+    publishCalendarData();
     Serial.println("[MAIN] Prayer data and calendar initialized.");
 
     // 7. Connect WiFi (or start AP for setup)
@@ -193,10 +249,8 @@ void setup() {
 
         // Fetch live prayer data
         if (PrayerManager::refresh(g_settings)) {
-            PrayerManager::getTodayPrayers(g_todayPrayers);
-            PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, g_settings);
-            CalendarManager::getHijriDate(g_hijriDate);
-            CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
+            publishPrayerData(g_settings);
+            publishCalendarData();
             Serial.println("[MAIN] Live prayer data fetched.");
         }
 
@@ -282,9 +336,15 @@ void taskDisplay(void* param) {
         uint8_t webPomodoroRequest = g_webPomodoroRequest;
         g_webPomodoroRequest = 0;
         if (webPomodoroRequest == 1 && g_azanState != AZAN_PLAYING) {
-            PomodoroManager::togglePause(g_pomodoro);
+            if (lockPomodoroState()) {
+                PomodoroManager::togglePause(g_pomodoro);
+                unlockPomodoroState();
+            }
         } else if (webPomodoroRequest == 2) {
-            PomodoroManager::reset(g_pomodoro);
+            if (lockPomodoroState()) {
+                PomodoroManager::reset(g_pomodoro);
+                unlockPomodoroState();
+            }
         }
 
         uint8_t webDhikrRequest = g_webDhikrRequest;
@@ -310,13 +370,20 @@ void taskDisplay(void* param) {
         if (g_currentScreen == SYS_SCREEN_POMODORO &&
             touchLongPressed &&
             g_azanState != AZAN_PLAYING) {
-            if (g_pomodoro.phase == POMODORO_IDLE) {
-                PomodoroManager::start(g_pomodoro);
-            } else if (g_pomodoro.phase == POMODORO_WAITING_FOR_BREAK) {
-                PomodoroManager::reset(g_pomodoro);
-            } else if (!g_pomodoro.pausedByAzan) {
-                PomodoroManager::togglePause(g_pomodoro);
-            } else {
+            bool remainsPausedForAzan = false;
+            if (lockPomodoroState()) {
+                if (g_pomodoro.phase == POMODORO_IDLE) {
+                    PomodoroManager::start(g_pomodoro);
+                } else if (g_pomodoro.phase == POMODORO_WAITING_FOR_BREAK) {
+                    PomodoroManager::reset(g_pomodoro);
+                } else if (!g_pomodoro.pausedByAzan) {
+                    PomodoroManager::togglePause(g_pomodoro);
+                } else {
+                    remainsPausedForAzan = true;
+                }
+                unlockPomodoroState();
+            }
+            if (remainsPausedForAzan) {
                 Logger::info("POMODORO", "Timer remains paused until the azan pause ends.");
             }
         }
@@ -337,18 +404,18 @@ void taskDisplay(void* param) {
             CompassManager::resetCalibration();
         }
 
-        if (touchPressed &&
-            g_pomodoro.phase == POMODORO_WAITING_FOR_BREAK &&
-            g_azanState != AZAN_PLAYING) {
-            PomodoroManager::startBreak(g_pomodoro);
-        }
-
-        if (touchPressed &&
-            g_currentScreen == SYS_SCREEN_POMODORO &&
-            g_pomodoro.phase == POMODORO_PAUSED &&
-            !g_pomodoro.pausedByAzan &&
-            g_azanState != AZAN_PLAYING) {
-            PomodoroManager::togglePause(g_pomodoro);
+        if (touchPressed && g_azanState != AZAN_PLAYING) {
+            if (lockPomodoroState()) {
+                if (g_pomodoro.phase == POMODORO_WAITING_FOR_BREAK) {
+                    PomodoroManager::startBreak(g_pomodoro);
+                }
+                if (g_currentScreen == SYS_SCREEN_POMODORO &&
+                    g_pomodoro.phase == POMODORO_PAUSED &&
+                    !g_pomodoro.pausedByAzan) {
+                    PomodoroManager::togglePause(g_pomodoro);
+                }
+                unlockPomodoroState();
+            }
         }
 
         if (touchPressed && g_azanState == AZAN_PLAYING) {
@@ -393,7 +460,11 @@ void taskDisplay(void* param) {
 
 void taskScheduler(void* param) {
     TickType_t lastWake = xTaskGetTickCount();
-    PomodoroPhase previousPomodoroPhase = g_pomodoro.phase;
+    PomodoroPhase previousPomodoroPhase = POMODORO_IDLE;
+    if (lockPomodoroState()) {
+        previousPomodoroPhase = g_pomodoro.phase;
+        unlockPomodoroState();
+    }
     Settings taskSettings = g_settings;
 
     for (;;) {
@@ -408,21 +479,32 @@ void taskScheduler(void* param) {
 
         const bool manualAzanRequest = g_webAzanStartRequested;
         g_webAzanStartRequested = false;
-        const bool scheduledAzanRequest = g_prayerReady &&
+        DailyPrayers prayerSnapshot;
+        bool prayerReadySnapshot = false;
+        const bool havePrayerSnapshot = lockPrayerData();
+        if (havePrayerSnapshot) {
+            prayerSnapshot = g_todayPrayers;
+            prayerReadySnapshot = g_prayerReady;
+            unlockPrayerData();
+        }
+        const bool scheduledAzanRequest = havePrayerSnapshot && prayerReadySnapshot &&
             taskSettings.azanEnabled &&
-            PrayerManager::isAzanTime(g_todayPrayers);
+            PrayerManager::isAzanTime(prayerSnapshot);
         if (g_azanState == AZAN_IDLE &&
             (scheduledAzanRequest || manualAzanRequest)) {
-            const PrayerName prayer = g_prayerReady
+            const PrayerName prayer = prayerReadySnapshot
                 ? PrayerManager::getCurrentPrayerName()
                 : PRAYER_FAJR;
             if (AzanManager::play(prayer)) {
                 g_azanState = AZAN_PLAYING;
 
-                if (g_pomodoro.phase == POMODORO_FOCUS ||
-                    g_pomodoro.phase == POMODORO_SHORT_BREAK ||
-                    g_pomodoro.phase == POMODORO_LONG_BREAK) {
-                    PomodoroManager::pauseForAzan(g_pomodoro);
+                if (lockPomodoroState()) {
+                    if (g_pomodoro.phase == POMODORO_FOCUS ||
+                        g_pomodoro.phase == POMODORO_SHORT_BREAK ||
+                        g_pomodoro.phase == POMODORO_LONG_BREAK) {
+                        PomodoroManager::pauseForAzan(g_pomodoro);
+                    }
+                    unlockPomodoroState();
                 }
             }
         }
@@ -440,23 +522,26 @@ void taskScheduler(void* param) {
                     VoiceManager::stopPlayback();
                 }
             } else if (g_currentScreen == SYS_SCREEN_POMODORO) {
-                switch (g_pomodoro.phase) {
-                    case POMODORO_IDLE:
-                        PomodoroManager::start(g_pomodoro);
-                        break;
-                    case POMODORO_FOCUS:
-                    case POMODORO_SHORT_BREAK:
-                    case POMODORO_LONG_BREAK:
-                        PomodoroManager::togglePause(g_pomodoro);
-                        break;
-                    case POMODORO_PAUSED:
-                        if (!g_pomodoro.pausedByAzan) {
+                if (lockPomodoroState()) {
+                    switch (g_pomodoro.phase) {
+                        case POMODORO_IDLE:
+                            PomodoroManager::start(g_pomodoro);
+                            break;
+                        case POMODORO_FOCUS:
+                        case POMODORO_SHORT_BREAK:
+                        case POMODORO_LONG_BREAK:
                             PomodoroManager::togglePause(g_pomodoro);
-                        }
-                        break;
-                    case POMODORO_WAITING_FOR_BREAK:
-                    default:
-                        break;
+                            break;
+                        case POMODORO_PAUSED:
+                            if (!g_pomodoro.pausedByAzan) {
+                                PomodoroManager::togglePause(g_pomodoro);
+                            }
+                            break;
+                        case POMODORO_WAITING_FOR_BREAK:
+                        default:
+                            break;
+                    }
+                    unlockPomodoroState();
                 }
             }
         }
@@ -468,25 +553,37 @@ void taskScheduler(void* param) {
         }
 
         // Update prayer countdown & prohibited windows continuously
-        PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, taskSettings);
+        publishNextPrayerData(taskSettings);
 
         // Update Pomodoro timer
-        PomodoroManager::update(g_pomodoro);
-        if (g_pomodoro.phase == POMODORO_FOCUS &&
-            previousPomodoroPhase != POMODORO_FOCUS &&
-            previousPomodoroPhase != POMODORO_PAUSED) {
+        PomodoroState pomodoroSnapshot;
+        bool focusStarted = false;
+        bool focusCompleted = false;
+        bool breakCompleted = false;
+        if (lockPomodoroState()) {
+            PomodoroManager::update(g_pomodoro);
+            pomodoroSnapshot = g_pomodoro;
+            focusStarted = pomodoroSnapshot.phase == POMODORO_FOCUS &&
+                previousPomodoroPhase != POMODORO_FOCUS &&
+                previousPomodoroPhase != POMODORO_PAUSED;
+            focusCompleted = previousPomodoroPhase == POMODORO_FOCUS &&
+                pomodoroSnapshot.phase == POMODORO_WAITING_FOR_BREAK;
+            breakCompleted =
+                (previousPomodoroPhase == POMODORO_SHORT_BREAK ||
+                 previousPomodoroPhase == POMODORO_LONG_BREAK) &&
+                pomodoroSnapshot.phase == POMODORO_FOCUS;
+            previousPomodoroPhase = pomodoroSnapshot.phase;
+            unlockPomodoroState();
+        }
+        if (focusStarted) {
             PomodoroStats::recordSessionStarted();
         }
-        if (previousPomodoroPhase == POMODORO_FOCUS &&
-            g_pomodoro.phase == POMODORO_WAITING_FOR_BREAK) {
-            PomodoroStats::recordFocusCompleted(g_pomodoro.focusMinutes);
+        if (focusCompleted) {
+            PomodoroStats::recordFocusCompleted(pomodoroSnapshot.focusMinutes);
             AzanManager::playPomodoroBeep();
-        } else if ((previousPomodoroPhase == POMODORO_SHORT_BREAK ||
-                    previousPomodoroPhase == POMODORO_LONG_BREAK) &&
-                   g_pomodoro.phase == POMODORO_FOCUS) {
+        } else if (breakCompleted) {
             AzanManager::playPomodoroBeep();
         }
-        previousPomodoroPhase = g_pomodoro.phase;
 
         // Update voice state machine
         VoiceManager::update(g_voiceState);
@@ -548,13 +645,12 @@ void taskNetwork(void* param) {
                     : "[MAIN] WiFi connected; initializing online services.");
                 g_timesynced = WifiManager::syncNTP(taskSettings);
                 g_prayerRefreshing = true;
-                g_prayerReady = PrayerManager::refresh(taskSettings);
+                const bool prayerReady = PrayerManager::refresh(taskSettings);
+                setPrayerReady(prayerReady);
                 g_prayerRefreshing = false;
-                if (g_prayerReady) {
-                    PrayerManager::getTodayPrayers(g_todayPrayers);
-                    PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, taskSettings);
-                    CalendarManager::getHijriDate(g_hijriDate);
-                    CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
+                if (prayerReady) {
+                    publishPrayerData(taskSettings);
+                    publishCalendarData();
                 }
                 g_weatherRefreshing = true;
                 g_weatherReady = WeatherManager::update(taskSettings, g_weather);
@@ -582,13 +678,12 @@ void taskNetwork(void* param) {
             if (g_locationRefreshRequested) {
                 g_locationRefreshRequested = false;
                 g_prayerRefreshing = true;
-                g_prayerReady = PrayerManager::refresh(taskSettings);
+                const bool prayerReady = PrayerManager::refresh(taskSettings);
+                setPrayerReady(prayerReady);
                 g_prayerRefreshing = false;
-                if (g_prayerReady) {
-                    PrayerManager::getTodayPrayers(g_todayPrayers);
-                    PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, taskSettings);
-                    CalendarManager::getHijriDate(g_hijriDate);
-                    CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
+                if (prayerReady) {
+                    publishPrayerData(taskSettings);
+                    publishCalendarData();
                 }
                 lastPrayerUpdate = millis();
                 lastPrayerFetch = lastPrayerUpdate;
@@ -606,11 +701,9 @@ void taskNetwork(void* param) {
                 (now - lastPrayerUpdate) >= 8000UL) {
                 g_prayerRefreshing = true;
                 if (PrayerManager::refresh(taskSettings)) {
-                    g_prayerReady = true;
-                    PrayerManager::getTodayPrayers(g_todayPrayers);
-                    PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, taskSettings);
-                    CalendarManager::getHijriDate(g_hijriDate);
-                    CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
+                    setPrayerReady(true);
+                    publishPrayerData(taskSettings);
+                    publishCalendarData();
                     lastPrayerFetch = millis();
                     Serial.println("[MAIN] Live prayer data fetched from Aladhan API.");
                 }
@@ -620,14 +713,12 @@ void taskNetwork(void* param) {
 
             if ((now - lastPrayerFetch) >= PRAYER_FETCH_INTERVAL) {
                 g_prayerRefreshing = true;
-                g_prayerReady = PrayerManager::refresh(taskSettings);
+                const bool prayerReady = PrayerManager::refresh(taskSettings);
+                setPrayerReady(prayerReady);
                 g_prayerRefreshing = false;
-                if (g_prayerReady) {
-                    PrayerManager::getTodayPrayers(g_todayPrayers);
-                    PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited,
-                                                    taskSettings);
-                    CalendarManager::getHijriDate(g_hijriDate);
-                    CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
+                if (prayerReady) {
+                    publishPrayerData(taskSettings);
+                    publishCalendarData();
                 }
                 lastPrayerFetch = millis();
                 lastPrayerUpdate = lastPrayerFetch;
@@ -645,10 +736,8 @@ void taskNetwork(void* param) {
 
             // Refresh prayer & prohibited window status every minute
             if ((now - lastPrayerUpdate) >= PRAYER_UPDATE_INTERVAL || lastPrayerUpdate == 0) {
-                PrayerManager::getTodayPrayers(g_todayPrayers);
-                PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, taskSettings);
-                CalendarManager::getHijriDate(g_hijriDate);
-                CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
+                publishPrayerData(taskSettings);
+                publishCalendarData();
                 lastPrayerUpdate = now;
             }
 

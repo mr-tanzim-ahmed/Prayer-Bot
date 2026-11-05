@@ -395,11 +395,7 @@ bool writeFile(const char* path, const String& content) {
         xSemaphoreGive(storageMutex);
         return false;
     }
-    bool renamed = LittleFS.rename(temporaryPath.c_str(), path);
-    if (!renamed) {
-        LittleFS.remove(path);
-        renamed = LittleFS.rename(temporaryPath.c_str(), path);
-    }
+    const bool renamed = LittleFS.rename(temporaryPath.c_str(), path);
     if (!renamed) {
         Serial.print("[STORAGE] Could not replace: ");
         Serial.println(path);

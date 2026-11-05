@@ -26,9 +26,13 @@ namespace VoiceManager {
     // Takes ownership of audio only when the request is successfully queued.
     bool queueDashboardAudioRecognition(uint8_t* audio, size_t audioLength,
                                         const char* mimeType,
+                                        const char* language,
                                         uint32_t& requestId);
     const char* getDashboardRecognition(uint32_t requestId,
                                         uint8_t& surahNumber);
+    bool queueDashboardLiveToken(uint32_t& requestId);
+    const char* getDashboardLiveToken(uint32_t requestId, char* token,
+                                      size_t tokenCapacity);
 
     // Stop current playback
     void stopPlayback();

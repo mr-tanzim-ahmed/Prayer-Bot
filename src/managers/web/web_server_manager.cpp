@@ -10,6 +10,7 @@
 #include "managers/productivity/pomodoro_stats.h"
 #include "managers/network/wifi_manager.h"
 #include "managers/audio/voice_manager.h"
+#include "core/shared_state.h"
 #include "managers/audio/azan_manager.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -95,6 +96,7 @@ namespace {
         size_t total;
         size_t received;
         char mimeType[32];
+        char language[8];
     };
 
     void freeDashboardAudioUpload(DashboardAudioUpload* upload) {
@@ -295,7 +297,10 @@ namespace {
             candidate.utcOffset != previousSettings.utcOffset ||
             strcmp(candidate.timezone, previousSettings.timezone) != 0;
         g_webVolumeRequest = candidate.volume;
-        PomodoroManager::updateSettings(g_pomodoro, candidate);
+        if (lockPomodoroState(portMAX_DELAY)) {
+            PomodoroManager::updateSettings(g_pomodoro, candidate);
+            unlockPomodoroState();
+        }
         CalendarManager::setHijriOffset(candidate.hijriOffset);
         if (timezoneChanged) g_ntpSyncRequested = true;
         if (locationChanged) {
@@ -487,23 +492,53 @@ void init(Settings& settings) {
         });
 
     auto handlePrayerRefresh = [](AsyncWebServerRequest* request) {
-        const bool refreshSucceeded =
-            settingsRef && WifiManager::isConnected() &&
-            PrayerManager::refresh(*settingsRef);
-        if (refreshSucceeded) {
-            PrayerManager::getTodayPrayers(g_todayPrayers);
-            PrayerManager::updateNextPrayer(g_nextPrayer, g_prohibited, *settingsRef);
-            CalendarManager::getHijriDate(g_hijriDate);
-            CalendarManager::getTodayEvent(g_hijriDate, g_todayEvent);
-        } else if (!WifiManager::isConnected()) {
-            g_locationRefreshRequested = true;
+        Settings refreshSettings;
+        const bool hasSettings = settingsRef && g_settingsMutex &&
+            xSemaphoreTake(g_settingsMutex, pdMS_TO_TICKS(50)) == pdTRUE;
+        if (hasSettings) {
+            refreshSettings = *settingsRef;
+            xSemaphoreGive(g_settingsMutex);
         }
-
+        const bool refreshSucceeded =
+            hasSettings && WifiManager::isConnected() &&
+            PrayerManager::refresh(refreshSettings);
         DailyPrayers today;
-        PrayerManager::getTodayPrayers(today);
-        ProhibitedTimes prob = g_prohibited;
-        if (prob.afterSunrise.startHour == 0 && prob.afterSunrise.startMinute == 0 && settingsRef) {
-            PrayerManager::updateNextPrayer(g_nextPrayer, prob, *settingsRef);
+        NextPrayerInfo nextPrayer;
+        ProhibitedTimes prob;
+        if (refreshSucceeded) {
+            PrayerManager::getTodayPrayers(today);
+            PrayerManager::updateNextPrayer(nextPrayer, prob, refreshSettings);
+            if (!lockPrayerData()) {
+                request->send(503, "application/json", "{\"error\":\"Prayer data is busy; try again shortly.\"}");
+                return;
+            }
+            g_todayPrayers = today;
+            g_nextPrayer = nextPrayer;
+            g_prohibited = prob;
+            unlockPrayerData();
+            HijriDate hijriDate;
+            IslamicEvent todayEvent;
+            CalendarManager::getHijriDate(hijriDate);
+            CalendarManager::getTodayEvent(hijriDate, todayEvent);
+            if (!lockCalendarData()) {
+                request->send(503, "application/json", "{\"error\":\"Calendar data is busy; try again shortly.\"}");
+                return;
+            }
+            g_hijriDate = hijriDate;
+            g_todayEvent = todayEvent;
+            unlockCalendarData();
+        } else {
+            if (!WifiManager::isConnected()) {
+                g_locationRefreshRequested = true;
+            }
+            if (!lockPrayerData()) {
+                request->send(503, "application/json", "{\"error\":\"Prayer data is busy; try again shortly.\"}");
+                return;
+            }
+            today = g_todayPrayers;
+            nextPrayer = g_nextPrayer;
+            prob = g_prohibited;
+            unlockPrayerData();
         }
 
         JsonDocument doc;
@@ -570,11 +605,18 @@ void init(Settings& settings) {
             : "";
 
         DailyPrayers today;
-        PrayerManager::getTodayPrayers(today);
-        ProhibitedTimes prob = g_prohibited;
-        if (prob.afterSunrise.startHour == 0 && prob.afterSunrise.startMinute == 0 && settingsRef) {
-            PrayerManager::updateNextPrayer(g_nextPrayer, prob, *settingsRef);
+        NextPrayerInfo nextPrayer;
+        ProhibitedTimes prob;
+        bool prayerReady;
+        if (!lockPrayerData()) {
+            request->send(503, "application/json", "{\"error\":\"Prayer data is busy; try again shortly.\"}");
+            return;
         }
+        today = g_todayPrayers;
+        nextPrayer = g_nextPrayer;
+        prob = g_prohibited;
+        prayerReady = g_prayerReady;
+        unlockPrayerData();
 
         JsonObject prayers = doc["prayers"].to<JsonObject>();
         prayers["ready"] = true;
@@ -602,11 +644,11 @@ void init(Settings& settings) {
         beforeSunset["active"] = prob.beforeSunset.active;
 
         JsonObject next = doc["nextPrayer"].to<JsonObject>();
-        next["name"] = g_prayerReady
-            ? PrayerManager::getPrayerNameStr(g_nextPrayer.upcomingPrayer) : "";
-        next["time"] = formatTime(g_nextPrayer.upcomingStartTime);
-        next["end"] = formatTime(g_nextPrayer.upcomingEndTime);
-        next["countdown"] = formatDuration(g_nextPrayer.countdownSeconds);
+        next["name"] = prayerReady
+            ? PrayerManager::getPrayerNameStr(nextPrayer.upcomingPrayer) : "";
+        next["time"] = formatTime(nextPrayer.upcomingStartTime);
+        next["end"] = formatTime(nextPrayer.upcomingEndTime);
+        next["countdown"] = formatDuration(nextPrayer.countdownSeconds);
         JsonObject quran = doc["quran"].to<JsonObject>();
         const uint8_t curSurah = VoiceManager::getPlayingSurah();
         quran["surah"] = curSurah ? VoiceManager::getSurahName(curSurah) : "";
@@ -615,13 +657,22 @@ void init(Settings& settings) {
         quran["playing"] = AzanManager::isQuranPlaying();
         doc["azanPlaying"] = g_azanState == AZAN_PLAYING;
 
+        HijriDate hijriDate;
+        IslamicEvent todayEvent;
+        if (!lockCalendarData()) {
+            request->send(503, "application/json", "{\"error\":\"Calendar data is busy; try again shortly.\"}");
+            return;
+        }
+        hijriDate = g_hijriDate;
+        todayEvent = g_todayEvent;
+        unlockCalendarData();
         JsonObject hijri = doc["hijri"].to<JsonObject>();
         char hijriText[64];
         snprintf(hijriText, sizeof(hijriText), "%u %s %u %s",
-                 g_hijriDate.day, g_hijriDate.monthName.c_str(),
-                 g_hijriDate.year, g_hijriDate.designation.c_str());
-        hijri["date"] = g_hijriDate.year ? hijriText : "";
-        hijri["event"] = g_todayEvent.name;
+                 hijriDate.day, hijriDate.monthName.c_str(),
+                 hijriDate.year, hijriDate.designation.c_str());
+        hijri["date"] = hijriDate.year ? hijriText : "";
+        hijri["event"] = todayEvent.name;
 
         JsonObject weather = doc["weather"].to<JsonObject>();
         weather["valid"] = g_weatherReady && g_weather.valid;
@@ -641,16 +692,23 @@ void init(Settings& settings) {
         weather["condition"] = g_weather.weatherDescription;
 
         JsonObject pomodoro = doc["pomodoro"].to<JsonObject>();
-        pomodoro["phase"] = pomodoroPhaseName(g_pomodoro.phase);
-        pomodoro["remaining"] = formatDuration(g_pomodoro.remainingSeconds);
+        PomodoroState pomodoroSnapshot;
+        if (!lockPomodoroState()) {
+            request->send(503, "application/json", "{\"error\":\"Pomodoro timer is busy; try again shortly.\"}");
+            return;
+        }
+        pomodoroSnapshot = g_pomodoro;
+        unlockPomodoroState();
+        pomodoro["phase"] = pomodoroPhaseName(pomodoroSnapshot.phase);
+        pomodoro["remaining"] = formatDuration(pomodoroSnapshot.remainingSeconds);
         pomodoro["nextBreakMinutes"] =
-            g_pomodoro.pendingBreakPhase == POMODORO_LONG_BREAK
-                ? g_pomodoro.longBreakMinutes
-                : g_pomodoro.shortBreakMinutes;
-        pomodoro["cycle"] = g_pomodoro.currentCycle >= g_pomodoro.totalCycles
-            ? g_pomodoro.totalCycles
-            : g_pomodoro.currentCycle + 1;
-        pomodoro["cycles"] = g_pomodoro.totalCycles;
+            pomodoroSnapshot.pendingBreakPhase == POMODORO_LONG_BREAK
+                ? pomodoroSnapshot.longBreakMinutes
+                : pomodoroSnapshot.shortBreakMinutes;
+        pomodoro["cycle"] = pomodoroSnapshot.currentCycle >= pomodoroSnapshot.totalCycles
+            ? pomodoroSnapshot.totalCycles
+            : pomodoroSnapshot.currentCycle + 1;
+        pomodoro["cycles"] = pomodoroSnapshot.totalCycles;
         doc["screen"] = (uint8_t)g_currentScreen;
         doc["dhikrCount"] = DhikrScreen::getCount();
 
@@ -831,6 +889,58 @@ void init(Settings& settings) {
             request->send(200, "application/json", "{\"status\":\"queued\"}");
         });
 
+    server->on("/api/quran/live-token", HTTP_POST,
+        [](AsyncWebServerRequest* request) {
+            uint32_t requestId = 0;
+            if (!VoiceManager::queueDashboardLiveToken(requestId)) {
+                request->send(503, "application/json",
+                              "{\"error\":\"Live voice is busy, unavailable, or rate limited. Try again shortly.\"}");
+                return;
+            }
+            JsonDocument doc;
+            doc["requestId"] = requestId;
+            AsyncResponseStream* response =
+                request->beginResponseStream("application/json");
+            serializeJson(doc, *response);
+            response->setCode(202);
+            response->addHeader("Cache-Control", "no-store");
+            request->send(response);
+        });
+
+    server->on("/api/quran/live-token", HTTP_GET,
+        [](AsyncWebServerRequest* request) {
+            if (!request->hasParam("id")) {
+                request->send(400, "application/json",
+                              "{\"error\":\"A live voice request ID is required.\"}");
+                return;
+            }
+            const String idText = request->getParam("id")->value();
+            char* end = nullptr;
+            const unsigned long parsedId = strtoul(idText.c_str(), &end, 10);
+            if (idText.isEmpty() || !end || *end != '\0' || parsedId == 0 ||
+                parsedId > UINT32_MAX) {
+                request->send(400, "application/json",
+                              "{\"error\":\"Live voice request ID is invalid.\"}");
+                return;
+            }
+            char token[256] = {};
+            const char* status = VoiceManager::getDashboardLiveToken(
+                static_cast<uint32_t>(parsedId), token, sizeof(token));
+            JsonDocument doc;
+            doc["status"] = status;
+            if (strcmp(status, "done") == 0) {
+                doc["token"] = token;
+            } else if (strcmp(status, "error") == 0) {
+                doc["error"] =
+                    "Gemini could not authorize live voice. Check the API key, Live API access, internet, and device time.";
+            }
+            AsyncResponseStream* response =
+                request->beginResponseStream("application/json");
+            serializeJson(doc, *response);
+            response->addHeader("Cache-Control", "no-store");
+            request->send(response);
+        });
+
     server->on("/api/quran/recognize", HTTP_POST,
         [](AsyncWebServerRequest*) {},
         nullptr,
@@ -884,6 +994,8 @@ void init(Settings& settings) {
                 const int parameters = mimeType.indexOf(';');
                 if (parameters >= 0) mimeType.remove(parameters);
                 mimeType.trim();
+                String language = request->hasParam("lang")
+                    ? request->getParam("lang")->value() : "auto";
                 if (mimeType != "audio/mp4" && mimeType != "audio/webm" &&
                     mimeType != "audio/wav" && mimeType != "audio/aac") {
                     delete upload;
@@ -891,6 +1003,15 @@ void init(Settings& settings) {
                                   "{\"error\":\"Use Safari audio/mp4 or a supported audio recording format.\"}");
                     return;
                 }
+                if (language != "en-US" && language != "bn-BD" &&
+                    language != "auto") {
+                    delete upload;
+                    request->send(400, "application/json",
+                                  "{\"error\":\"Choose English, Bangla, or automatic voice language.\"}");
+                    return;
+                }
+                strlcpy(upload->language, language.c_str(),
+                        sizeof(upload->language));
                 upload->data = static_cast<uint8_t*>(
                     heap_caps_malloc(total, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
                 if (!upload->data) {
@@ -949,7 +1070,8 @@ void init(Settings& settings) {
             request->_tempObject = nullptr;
             uint32_t requestId = 0;
             if (!VoiceManager::queueDashboardAudioRecognition(
-                    upload->data, upload->total, upload->mimeType, requestId)) {
+                    upload->data, upload->total, upload->mimeType,
+                    upload->language, requestId)) {
                 freeDashboardAudioUpload(upload);
                 request->send(503, "application/json",
                               "{\"error\":\"Gemini audio recognition is busy or unavailable. Try again shortly.\"}");

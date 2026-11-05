@@ -45,7 +45,10 @@ void draw(const PomodoroState& state) {
 
     DisplayManager::clearBuffer();
 
-    String cycleStr = String(state.currentCycle + 1) + "/" + String(state.totalCycles);
+    const uint8_t displayedCycle = state.currentCycle >= state.totalCycles
+        ? state.totalCycles
+        : state.currentCycle + 1;
+    String cycleStr = String(displayedCycle) + "/" + String(state.totalCycles);
     ScreenUI::drawHeader(oled, "FOCUS TIMER", cycleStr.c_str());
 
     const unsigned long animationFrame = (millis() / 350UL) % 8UL;
