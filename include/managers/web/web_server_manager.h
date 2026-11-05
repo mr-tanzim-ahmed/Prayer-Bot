@@ -22,6 +22,9 @@ namespace WebServerManager {
     // Print the dashboard URLs for the active Wi-Fi interfaces
     void logDashboardAddresses();
 
+    // Refresh router mDNS after the station connects; HTTP remains on both interfaces.
+    void refreshNetworkInterfaces();
+
     // Apply one queued dashboard control from the display task.
     void processDashboardControl();
 }

@@ -85,6 +85,9 @@ namespace {
             Serial.print("[WEB] Dashboard (home Wi-Fi): http://");
             Serial.print(WiFi.localIP());
             Serial.println("/");
+            Serial.printf("[WEB] Router gateway: %s; device MAC: %s\n",
+                          WiFi.gatewayIP().toString().c_str(),
+                          WiFi.macAddress().c_str());
         } else {
             Serial.println("[WEB] Dashboard (home Wi-Fi): address will appear after Wi-Fi connects.");
         }
@@ -394,7 +397,20 @@ void init(Settings& settings) {
 
     server->on("/", HTTP_GET, sendDashboard);
     server->on("/health", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(200, "text/plain", "Prayer-Bot dashboard server is running.");
+        String status = "Prayer-Bot dashboard server is running.\n";
+        if ((WiFi.getMode() & WIFI_AP) != 0) {
+            status += "AP IP: ";
+            status += WiFi.softAPIP().toString();
+            status += '\n';
+        }
+        if (WifiManager::isConnected()) {
+            status += "Router IP: ";
+            status += WiFi.localIP().toString();
+            status += "\nGateway: ";
+            status += WiFi.gatewayIP().toString();
+            status += '\n';
+        }
+        request->send(200, "text/plain", status);
     });
     static const char* const captivePortalPaths[] = {
         "/generate_204", "/gen_204", "/hotspot-detect.html",
@@ -1350,6 +1366,23 @@ void init(Settings& settings) {
 void logDashboardAddresses() {
     if (!serverRunning) return;
     printDashboardAddresses();
+}
+
+void refreshNetworkInterfaces() {
+    if (!server || !serverRunning || !WifiManager::isConnected()) return;
+
+    // AsyncWebServer listens on both AP and station interfaces; do not restart
+    // it here, since that would briefly disconnect clients already on the AP.
+    Serial.println("[WEB] HTTP dashboard remains available on AP and router interfaces.");
+
+    MDNS.end();
+    if (MDNS.begin("prayer-bot")) {
+        MDNS.addService("http", "tcp", WEB_SERVER_PORT);
+        Serial.println("[WEB] Dashboard hostname: prayer-bot.local");
+    } else {
+        Serial.println("[WEB] Could not start mDNS after the router connection.");
+    }
+    logDashboardAddresses();
 }
 
 void processDashboardControl() {

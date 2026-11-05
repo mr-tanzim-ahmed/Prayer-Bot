@@ -19,23 +19,42 @@ extern volatile bool g_webAzanStartRequested;
 
 namespace {
     constexpr size_t WAV_HEADER_BYTES = 44;
-    constexpr uint32_t MIC_BYTES_PER_SECOND =
-        MIC_SAMPLE_RATE * sizeof(int16_t);
-    constexpr uint8_t SHORT_RECORD_SECONDS = 2;
-    constexpr uint8_t MIN_RECORD_SECONDS = 1;
+    constexpr uint32_t RECORDING_SAMPLE_RATE = MIC_SAMPLE_RATE / 2;
+    constexpr uint32_t RECORDING_BYTES_PER_SECOND =
+        RECORDING_SAMPLE_RATE * sizeof(int16_t);
+    constexpr uint8_t MAX_RECORD_SECONDS = MIC_RECORD_SECONDS;
+    constexpr uint8_t EIGHT_SECOND_RECORD_SECONDS = 8;
+    constexpr uint8_t SIX_SECOND_RECORD_SECONDS = 6;
+    constexpr uint8_t FIVE_SECOND_RECORD_SECONDS = 5;
+    constexpr uint8_t FOUR_SECOND_RECORD_SECONDS = 4;
+    constexpr uint8_t THREE_SECOND_RECORD_SECONDS = 3;
+    constexpr uint8_t TWO_SECOND_RECORD_SECONDS = 2;
+    constexpr uint8_t ONE_SECOND_RECORD_SECONDS = 1;
+    constexpr uint8_t MIN_RECORD_SECONDS = 2;
     constexpr size_t RECORDING_CAPACITY =
-        MIC_SAMPLE_RATE * MIC_RECORD_SECONDS * sizeof(int16_t);
+        RECORDING_SAMPLE_RATE * MAX_RECORD_SECONDS * sizeof(int16_t);
     constexpr size_t SHORT_RECORDING_CAPACITY =
-        MIC_SAMPLE_RATE * SHORT_RECORD_SECONDS * sizeof(int16_t);
-    constexpr size_t MIN_RECORDING_CAPACITY =
-        MIC_SAMPLE_RATE * MIN_RECORD_SECONDS * sizeof(int16_t);
+        RECORDING_SAMPLE_RATE * EIGHT_SECOND_RECORD_SECONDS * sizeof(int16_t);
+    constexpr size_t SIX_SECOND_RECORDING_CAPACITY =
+        RECORDING_SAMPLE_RATE * SIX_SECOND_RECORD_SECONDS * sizeof(int16_t);
+    constexpr size_t FIVE_SECOND_RECORDING_CAPACITY =
+        RECORDING_SAMPLE_RATE * FIVE_SECOND_RECORD_SECONDS * sizeof(int16_t);
+    constexpr size_t FOUR_SECOND_RECORDING_CAPACITY =
+        RECORDING_SAMPLE_RATE * FOUR_SECOND_RECORD_SECONDS * sizeof(int16_t);
+    constexpr size_t THREE_SECOND_RECORDING_CAPACITY =
+        RECORDING_SAMPLE_RATE * THREE_SECOND_RECORD_SECONDS * sizeof(int16_t);
+    constexpr size_t TWO_SECOND_RECORDING_CAPACITY =
+        RECORDING_SAMPLE_RATE * TWO_SECOND_RECORD_SECONDS * sizeof(int16_t);
+    constexpr size_t ONE_SECOND_RECORDING_CAPACITY =
+        RECORDING_SAMPLE_RATE * ONE_SECOND_RECORD_SECONDS * sizeof(int16_t);
     constexpr unsigned long RECORDING_BUFFER_RETRY_MS = 5000UL;
     constexpr size_t BASE64_INPUT_CHUNK_BYTES = 3072;
     constexpr size_t MAX_DASHBOARD_AUDIO_BYTES = 256 * 1024;
     constexpr size_t MAX_GEMINI_RESPONSE_BYTES = 400 * 1024;
     constexpr size_t MAX_INTERNAL_DASHBOARD_AUDIO_BYTES = 64 * 1024;
     constexpr size_t MIN_INTERNAL_AUDIO_HEADROOM_BYTES = 32 * 1024;
-    constexpr size_t MIN_RECORDING_HEADROOM_BYTES = 24 * 1024;
+    constexpr size_t REDUCED_RECORDING_HEADROOM_BYTES = 24 * 1024;
+    constexpr size_t MIN_RECORDING_HEADROOM_BYTES = 16 * 1024;
     constexpr size_t MAX_SPOKEN_TRANSCRIPT_LENGTH = 120;
     constexpr uint8_t GEMINI_AZAN_INTENT = TOTAL_SURAHS + 1;
     constexpr char GEMINI_MODEL[] = "gemini-3.8-flash";
@@ -92,6 +111,8 @@ namespace {
     size_t activeRecordingCapacity = RECORDING_CAPACITY;
     bool recordingBufferAllocationAttempted = false;
     unsigned long recordingBufferLastAttemptMs = 0;
+    int16_t decimationPreviousSample = 0;
+    bool decimationHasPreviousSample = false;
     size_t capturedBytes = 0;
     unsigned long recordingStartedMs = 0;
     unsigned long lastMicReadErrorLogMs = 0;
@@ -176,12 +197,67 @@ namespace {
             MIN_INTERNAL_AUDIO_HEADROOM_BYTES);
         if (recordingBuffer) {
             Serial.println(
-                "[VOICE] Using a 2-second microphone buffer because "
-                "the 3-second buffer could not be allocated.");
+                "[VOICE] Using an 8-second microphone buffer because "
+                "the 10-second buffer could not be allocated.");
             return true;
         }
 
-        activeRecordingCapacity = MIN_RECORDING_CAPACITY;
+        activeRecordingCapacity = SIX_SECOND_RECORDING_CAPACITY;
+        recordingBuffer = allocateAudioBuffer(
+            activeRecordingCapacity + WAV_HEADER_BYTES,
+            MIN_INTERNAL_AUDIO_HEADROOM_BYTES);
+        if (recordingBuffer) {
+            Serial.println(
+                "[VOICE] Using a 6-second microphone buffer because "
+                "the longer buffers could not be allocated.");
+            return true;
+        }
+
+        activeRecordingCapacity = FIVE_SECOND_RECORDING_CAPACITY;
+        recordingBuffer = allocateAudioBuffer(
+            activeRecordingCapacity + WAV_HEADER_BYTES,
+            MIN_INTERNAL_AUDIO_HEADROOM_BYTES);
+        if (recordingBuffer) {
+            Serial.println(
+                "[VOICE] Using a 5-second microphone buffer because "
+                "the longer buffers could not be allocated.");
+            return true;
+        }
+
+        activeRecordingCapacity = FOUR_SECOND_RECORDING_CAPACITY;
+        recordingBuffer = allocateAudioBuffer(
+            activeRecordingCapacity + WAV_HEADER_BYTES,
+            MIN_INTERNAL_AUDIO_HEADROOM_BYTES);
+        if (recordingBuffer) {
+            Serial.println(
+                "[VOICE] Using a 4-second microphone buffer because "
+                "the longer buffers could not be allocated.");
+            return true;
+        }
+
+        activeRecordingCapacity = THREE_SECOND_RECORDING_CAPACITY;
+        recordingBuffer = allocateAudioBuffer(
+            activeRecordingCapacity + WAV_HEADER_BYTES,
+            MIN_INTERNAL_AUDIO_HEADROOM_BYTES);
+        if (recordingBuffer) {
+            Serial.println(
+                "[VOICE] Using a 3-second microphone buffer because "
+                "the longer buffers could not be allocated.");
+            return true;
+        }
+
+        activeRecordingCapacity = TWO_SECOND_RECORDING_CAPACITY;
+        recordingBuffer = allocateAudioBuffer(
+            activeRecordingCapacity + WAV_HEADER_BYTES,
+            REDUCED_RECORDING_HEADROOM_BYTES);
+        if (recordingBuffer) {
+            Serial.println(
+                "[VOICE] Using a 2-second microphone buffer because "
+                "the longer buffers could not be allocated.");
+            return true;
+        }
+
+        activeRecordingCapacity = ONE_SECOND_RECORDING_CAPACITY;
         recordingBuffer = allocateAudioBuffer(
             activeRecordingCapacity + WAV_HEADER_BYTES,
             MIN_RECORDING_HEADROOM_BYTES);
@@ -196,7 +272,7 @@ namespace {
             "[VOICE] Audio allocation failed: minimum recording needs "
             "%u bytes with at least %u bytes of internal RAM left free; "
             "internal free %u bytes, largest block %u bytes.\n",
-            static_cast<unsigned>(MIN_RECORDING_CAPACITY + WAV_HEADER_BYTES),
+            static_cast<unsigned>(ONE_SECOND_RECORDING_CAPACITY + WAV_HEADER_BYTES),
             static_cast<unsigned>(MIN_RECORDING_HEADROOM_BYTES),
             static_cast<unsigned>(heap_caps_get_free_size(
                 MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
@@ -239,8 +315,8 @@ namespace {
         writeLe32(buffer, 16, 16);
         writeLe16(buffer, 20, 1);
         writeLe16(buffer, 22, 1);
-        writeLe32(buffer, 24, MIC_SAMPLE_RATE);
-        writeLe32(buffer, 28, MIC_SAMPLE_RATE * sizeof(int16_t));
+        writeLe32(buffer, 24, RECORDING_SAMPLE_RATE);
+        writeLe32(buffer, 28, RECORDING_BYTES_PER_SECOND);
         writeLe16(buffer, 32, sizeof(int16_t));
         writeLe16(buffer, 34, 16);
         memcpy(buffer + 36, "data", 4);
@@ -492,8 +568,12 @@ namespace {
             "transliteration: ";
         prompt += transcript;
         prompt +=
-            ". Return only one integer: 1 through 114 when the user asks to "
-            "find or play that Quran Surah; 115 only when the user explicitly "
+            ". Understand a Surah requested by name or by its chapter number "
+            "from 1 through 114, including numbers spoken in English or "
+            "Bangla/Bengali. Treat a number as a Surah number only when the "
+            "user is asking to find or play a Surah, not when it refers to a "
+            "verse or another item. Return only one integer: 1 through 114 "
+            "for the requested Quran Surah; 115 only when the user explicitly "
             "asks to play/trigger the device's Azan alarm; otherwise 0. "
             "Do not infer an Azan request from a Surah request.";
         JsonDocument request;
@@ -546,16 +626,16 @@ namespace {
         prefix += GEMINI_MODEL;
         prefix +=
             "\",\"input\":["
-            "{\"type\":\"text\",\"text\":\"Identify the requested Quran Surah in this short voice command. The speaker may use English, Bangla/Bengali, Arabic pronunciation, or phonetic transliteration, with brief silence or background noise. Focus on the spoken Surah name or number. Return only one integer: 1 through 114 for a requested Surah; 115 only for an explicit Azan-alarm request; otherwise 0.\"},"
+            "{\"type\":\"text\",\"text\":\"Identify the Quran Surah the user wants to play. Understand English and Bangla/Bengali speech, Arabic Surah names, and common English or Bangla phonetic transliterations. The user may say a Surah name or request its chapter number using English or Bangla number words/digits (for example, 'play Surah two' or the Bangla equivalent). Convert a spoken chapter number from 1 to 114 to its Surah number. Do not treat a verse number or unrelated number as a Surah request. Return only one integer: 1 through 114 for the requested Surah; 115 only for an explicit Azan-alarm request; otherwise 0.\"},"
             "{\"type\":\"audio\",\"mime_type\":\"";
         if (language && strcmp(language, "bn-BD") == 0) {
             prefix.replace(
-                "The speaker may use English, Bangla/Bengali, Arabic pronunciation, or phonetic transliteration",
-                "The selected language is Bangla (bn-BD); prioritize Bengali speech while accepting Arabic pronunciation or phonetic transliteration");
+                "Understand English and Bangla/Bengali speech",
+                "Prioritize Bangla/Bengali speech and also understand English speech");
         } else if (language && strcmp(language, "en-US") == 0) {
             prefix.replace(
-                "The speaker may use English, Bangla/Bengali, Arabic pronunciation, or phonetic transliteration",
-                "The selected language is English (en-US); prioritize English speech while accepting Arabic pronunciation or phonetic transliteration");
+                "Understand English and Bangla/Bengali speech",
+                "Prioritize English speech and also understand Bangla/Bengali speech");
         }
         prefix += mimeType;
         prefix +=
@@ -726,7 +806,7 @@ namespace {
             sumSquares += static_cast<uint64_t>(sample * sample);
         }
         rms = sqrt(static_cast<double>(sumSquares) / sampleCount);
-        return rms > 180.0;
+        return rms > 25.0;
     }
 
     void startPlayback(uint8_t surah, const char* fallbackReason,
@@ -802,16 +882,6 @@ void enterSurahScreen() {
         ::g_voiceState = VOICE_ERROR;
         return;
     }
-    if (!micInitialized) init();
-    if (!micInitialized) {
-        listenRequested = false;
-        cancelRequested = false;
-        setStatus("Microphone unavailable");
-        ::g_voiceState = VOICE_ERROR;
-        Serial.printf("[VOICE] Cannot record: microphone is not initialized (%s).\n",
-                      esp_err_to_name(micInitError));
-        return;
-    }
     if (skipNextAutoListen) {
         skipNextAutoListen = false;
         cancelRequested = false;
@@ -835,6 +905,17 @@ void enterSurahScreen() {
         ::g_voiceState = VOICE_ERROR;
         return;
     }
+    if (!micInitialized) init();
+    if (!micInitialized) {
+        freeRecording();
+        listenRequested = false;
+        cancelRequested = false;
+        setStatus("Microphone unavailable");
+        ::g_voiceState = VOICE_ERROR;
+        Serial.printf("[VOICE] Cannot record: microphone is not initialized (%s).\n",
+                      esp_err_to_name(micInitError));
+        return;
+    }
     listenRequested = true;
     recognitionPending = false;
     cancelRequested = false;
@@ -854,6 +935,16 @@ void leaveSurahScreen() {
     recognitionPending = false;
     cancelRequested = true;
     if (!recognitionInProgress) freeRecording();
+    if (micInitialized) {
+        const esp_err_t uninstallResult = i2s_driver_uninstall(I2S_MIC_PORT);
+        if (uninstallResult != ESP_OK) {
+            Serial.printf("[VOICE] Could not release microphone DMA: %s\n",
+                          esp_err_to_name(uninstallResult));
+        } else {
+            micInitialized = false;
+            micInitError = ESP_FAIL;
+        }
+    }
     AzanManager::stopQuran();
     setStatus("Playback stopped");
 }
@@ -874,15 +965,24 @@ void update(VoiceState& state) {
         if (dashboardRecognitionBusy) return;
 
         listenRequested = false;
-        recording = true;
-        recordingStartedMs = millis();
-        capturedBytes = 0;
         if (!allocateRecordingBuffer()) {
-            recording = false;
             setStatus("Low RAM; retrying shortly");
             state = VOICE_ERROR;
             return;
         }
+        if (!micInitialized) init();
+        if (!micInitialized) {
+            freeRecording();
+            setStatus("Microphone unavailable");
+            state = VOICE_ERROR;
+            Serial.printf("[VOICE] Cannot record: microphone is not initialized (%s).\n",
+                          esp_err_to_name(micInitError));
+            return;
+        }
+        recording = true;
+        recordingStartedMs = millis();
+        capturedBytes = 0;
+        decimationHasPreviousSample = false;
         const esp_err_t clearResult = i2s_zero_dma_buffer(I2S_MIC_PORT);
         if (clearResult != ESP_OK) {
             Serial.printf("[VOICE] Could not clear I2S input buffer: %s\n",
@@ -898,11 +998,13 @@ void update(VoiceState& state) {
             size_t availableBytes = 0;
             const size_t remaining =
                 activeRecordingCapacity - capturedBytes;
+            const size_t outputSamplesRemaining =
+                remaining / sizeof(int16_t);
             const size_t requestedSamples = min(
                 sizeof(microphoneSamples) / sizeof(microphoneSamples[0]),
-                remaining / sizeof(int16_t));
-            const size_t chunkBytes =
-                requestedSamples * sizeof(microphoneSamples[0]);
+                outputSamplesRemaining * 2);
+            const size_t chunkBytes = requestedSamples *
+                                      sizeof(microphoneSamples[0]);
             const esp_err_t result = i2s_read(
                 I2S_MIC_PORT, microphoneSamples, chunkBytes,
                 &availableBytes, 0);
@@ -922,14 +1024,26 @@ void update(VoiceState& state) {
                 availableBytes / sizeof(int32_t), requestedSamples);
             int16_t* outputSamples = reinterpret_cast<int16_t*>(
                 recordingBuffer + capturedBytes);
-            for (size_t i = 0; i < sampleCount; ++i)
-                outputSamples[i] =
+            size_t outputSampleCount = 0;
+            for (size_t i = 0; i < sampleCount; ++i) {
+                const int16_t sample =
                     static_cast<int16_t>(microphoneSamples[i] >> 16);
-            capturedBytes += sampleCount * sizeof(int16_t);
+                if (!decimationHasPreviousSample) {
+                    decimationPreviousSample = sample;
+                    decimationHasPreviousSample = true;
+                    continue;
+                }
+                outputSamples[outputSampleCount++] =
+                    static_cast<int16_t>(
+                        (static_cast<int32_t>(decimationPreviousSample) +
+                         sample) / 2);
+                decimationHasPreviousSample = false;
+            }
+            capturedBytes += outputSampleCount * sizeof(int16_t);
         }
 
         const uint32_t recordingDurationMs = static_cast<uint32_t>(
-            activeRecordingCapacity / MIC_BYTES_PER_SECOND * 1000UL);
+            activeRecordingCapacity / RECORDING_BYTES_PER_SECOND * 1000UL);
         if (millis() - recordingStartedMs >= recordingDurationMs) {
             recording = false;
             recognitionPending = true;
@@ -1186,8 +1300,9 @@ void processPending(const Settings& settings) {
             setStatus("Gemini key not configured");
             state = VOICE_ERROR;
         } else {
-            setStatus("No speech detected; try again");
-            state = VOICE_ERROR;
+            setStatus("No speech; listening again");
+            listenRequested = true;
+            state = VOICE_IDLE;
         }
         started = surahScreenActive && !cancelRequested &&
                   requestGeneration == screenGeneration;

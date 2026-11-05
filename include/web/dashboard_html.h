@@ -1381,7 +1381,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
       <div class="field" style="margin-top:16px">
         <label for="quranOutput">Audio Playback Destination</label>
-        <select id="quranOutput" data-requires-wifi>
+        <select id="quranOutput">
           <option value="device" selected>🔊 Prayer-Bot Device Speaker (default)</option>
           <option value="phone">📱 This Phone / Browser (needs internet)</option>
         </select>
@@ -1389,18 +1389,18 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
       <div class="field">
         <label for="quranSurahSelect">Select Surah (1 to 114)</label>
-        <select id="quranSurahSelect" data-requires-wifi>
+        <select id="quranSurahSelect">
           <option value="">Choose a Surah</option>
         </select>
       </div>
       <div class="actions quran-actions" style="margin-top:12px">
-        <button type="button" class="primary quran-play" data-requires-wifi onclick="playQuran()">▶ Play Recitation</button>
+        <button type="button" class="primary quran-play" onclick="playQuran()">▶ Play Recitation</button>
         <button type="button" onclick="stopQuran()">⏹ Stop</button>
-        <button type="button" data-requires-wifi onclick="prevQuran()">⏮ Prev</button>
-        <button type="button" data-requires-wifi onclick="nextQuran()">⏭ Next</button>
+        <button type="button" onclick="prevQuran()">⏮ Prev</button>
+        <button type="button" onclick="nextQuran()">⏭ Next</button>
       </div>
 
-      <audio id="phoneQuranAudio" controls playsinline preload="none" data-requires-wifi style="display:none;width:100%;margin-top:14px"></audio>
+      <audio id="phoneQuranAudio" controls playsinline preload="none" style="display:none;width:100%;margin-top:14px"></audio>
 
       <div class="stats" style="margin-top:16px">
         <div class="stat"><span>Now Playing</span><strong id="quranNowPlaying">None</strong></div>
@@ -1710,8 +1710,9 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       control.disabled = !routerWifiConnected;
     });
     const audio = byId('phoneQuranAudio');
-    audio.controls = routerWifiConnected;
-    if (!routerWifiConnected && !audio.paused) {
+    const phoneOutputSelected = byId('quranOutput').value === 'phone';
+    audio.controls = phoneOutputSelected;
+    if (!routerWifiConnected && !phoneOutputSelected && !audio.paused) {
       audio.pause();
       audio.removeAttribute('src');
       audio.load();
@@ -1883,18 +1884,24 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       const qNum = s.quran.surahNumber || '';
       const qName = s.quran.surah || 'None';
       put('quranStatus', `Surah ${qName} · ${s.quran.status || 'Idle'}`);
-      put('quranNowPlaying', qNum ? `${qNum}. ${qName}` : qName);
       const phoneAudio = byId('phoneQuranAudio');
       const phoneSelected = byId('quranOutput').value === 'phone' &&
         phoneAudio && (Boolean(phoneAudio.currentSrc) || Boolean(phonePlaybackStatus));
       const phonePlaying = phoneSelected && !phoneAudio.paused;
+      if (phonePlaybackSurah) {
+        put('quranNowPlaying',
+          `${phonePlaybackSurah}. ${surahs[phonePlaybackSurah - 1]}`);
+      } else if (byId('quranOutput').value !== 'phone') {
+        put('quranNowPlaying', qNum ? `${qNum}. ${qName}` : qName);
+      }
       put('quranStreamStatus', phonePlaying
         ? 'Playing on this phone'
         : (phoneSelected
           ? (phonePlaybackStatus || 'Ready on this phone')
           : (s.quran.playing ? 'Playing on Prayer-Bot' : (s.quran.status || 'Idle'))));
       const qSel = byId('quranSurahSelect');
-      if (qSel && s.quran.surahNumber && document.activeElement !== qSel) {
+      if (qSel && byId('quranOutput').value !== 'phone' &&
+          s.quran.surahNumber && document.activeElement !== qSel) {
         qSel.value = s.quran.surahNumber;
       }
     }
@@ -2428,6 +2435,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
   let phonePlaybackGeneration = 0;
   let phonePlaybackStallTimer = null;
   let phonePlaybackStatus = '';
+  let phonePlaybackSurah = 0;
   function clearPhonePlaybackStallTimer() {
     if (phonePlaybackStallTimer !== null) {
       window.clearTimeout(phonePlaybackStallTimer);
@@ -2454,7 +2462,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       setPhoneStatus('Primary stream unavailable. Trying alternate recitation source…');
       audio.src = fallbackUrl;
       audio.load();
-      return Promise.resolve().then(() => audio.play()).then(() => true).catch(error => {
+      let playPromise;
+      try {
+        playPromise = audio.play();
+      } catch (error) {
+        playPromise = Promise.reject(error);
+      }
+      return Promise.resolve(playPromise).then(() => true).catch(error => {
         if (generation === phonePlaybackGeneration) {
           setPhoneStatus(error.name === 'NotAllowedError'
             ? 'Tap play in the audio controls to allow this phone to start recitation.'
@@ -2500,7 +2514,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     audio.load();
     audio.style.display = 'block';
     setPhoneStatus('Starting recitation on this phone…');
-    return Promise.resolve().then(() => audio.play()).then(() => {
+    let playPromise;
+    try {
+      playPromise = audio.play();
+    } catch (error) {
+      playPromise = Promise.reject(error);
+    }
+    return Promise.resolve(playPromise).then(() => {
       return { playing: !audio.paused, destination: 'phone' };
     }).catch(error => {
       if (generation !== phonePlaybackGeneration) {
@@ -2529,11 +2549,23 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       const primary = `https://cdn.islamic.network/quran/audio-surah/128/ar.alafasy/${number}.mp3`;
       const backup = `https://cdn.mp3quran.net/audio/maher-muaiqly/r1/${String(number).padStart(3, '0')}.mp3`;
       const generation = ++phonePlaybackGeneration;
-      return startPhoneQuranPlayback(audio, primary, backup, generation);
+      phonePlaybackSurah = number;
+      audio.controls = true;
+      audio.style.display = 'block';
+      const playback = startPhoneQuranPlayback(audio, primary, backup, generation);
+      void api('/api/quran', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' })
+      }).catch(() => {
+        message('Phone playback started, but the Prayer-Bot speaker could not be stopped.', true);
+      });
+      return playback;
     }
 
     await ensureRouterConnection();
     ++phonePlaybackGeneration;
+    phonePlaybackSurah = 0;
     const phoneAudio = byId('phoneQuranAudio');
     phoneAudio.pause();
     phoneAudio.removeAttribute('src');
@@ -3245,8 +3277,13 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     const sel = byId('quranSurahSelect');
     const surah = Number(sel?.value);
     try {
-      await chooseSurah(surah);
-      message(`Playing Surah ${surah}: ${surahs[surah - 1] || ''}.`);
+      const playback = await chooseSurah(surah);
+      if (playback?.destination === 'phone' && !playback.playing) {
+        message(phonePlaybackStatus ||
+          'Tap play in the audio controls to start this recitation.');
+      } else {
+        message(`Starting Surah ${surah}: ${surahs[surah - 1] || ''}.`);
+      }
     } catch(e) {
       message(e.message, true);
     }
@@ -3267,6 +3304,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       audio.load();
       audio.style.display = 'none';
       phonePlaybackStatus = '';
+      phonePlaybackSurah = 0;
+      put('quranNowPlaying', 'None');
       await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) });
       message('Quran recitation stopped.');
       await loadStatus();
@@ -3277,10 +3316,10 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   async function nextQuran() {
     try {
-      const next = (Number(byId('quranSurahSelect').value) % surahs.length) + 1;
-      if (byId('quranOutput').value === 'phone') await chooseSurah(next);
-      else await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'next' }) });
-      await loadStatus();
+      const current = Number(byId('quranSurahSelect').value) ||
+        phonePlaybackSurah || 0;
+      const next = current > 0 ? (current % surahs.length) + 1 : 1;
+      await chooseSurah(next);
     } catch(e) {
       message(e.message, true);
     }
@@ -3288,15 +3327,34 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   async function prevQuran() {
     try {
-      const current = Number(byId('quranSurahSelect').value) || 1;
+      const current = Number(byId('quranSurahSelect').value) ||
+        phonePlaybackSurah || 1;
       const prev = current <= 1 ? surahs.length : current - 1;
-      if (byId('quranOutput').value === 'phone') await chooseSurah(prev);
-      else await api('/api/quran', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'prev' }) });
-      await loadStatus();
+      await chooseSurah(prev);
     } catch(e) {
       message(e.message, true);
     }
   }
+
+  byId('quranOutput').addEventListener('change', () => {
+    const audio = byId('phoneQuranAudio');
+    const usePhone = byId('quranOutput').value === 'phone';
+    audio.controls = usePhone;
+    if (!usePhone) {
+      ++phonePlaybackGeneration;
+      clearPhonePlaybackStallTimer();
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      audio.style.display = 'none';
+      phonePlaybackStatus = '';
+      phonePlaybackSurah = 0;
+      put('quranStreamStatus', 'Ready');
+    } else {
+      put('quranStreamStatus',
+        'Select a Surah to stream audio in this browser. Internet is required.');
+    }
+  });
 
   async function saveWifi() {
     const ssid = byId('wifiSsid').value.trim();

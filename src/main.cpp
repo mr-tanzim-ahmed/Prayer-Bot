@@ -228,7 +228,6 @@ void setup() {
     if (AzanManager::init()) {
         AzanManager::setVolume(g_settings.volume);
     }
-    VoiceManager::init();
 
     // 6. Initialize prayer & calendar base data unconditionally (cached / Dhaka defaults)
     setPrayerReady(PrayerManager::init(g_settings));
@@ -627,7 +626,7 @@ void taskNetwork(void* param) {
 
         const bool wifiJustConnected = g_wifiConnected && !wasWifiConnected;
         if (wifiJustConnected) {
-            WebServerManager::logDashboardAddresses();
+            WebServerManager::refreshNetworkInterfaces();
         }
         wasWifiConnected = g_wifiConnected;
 

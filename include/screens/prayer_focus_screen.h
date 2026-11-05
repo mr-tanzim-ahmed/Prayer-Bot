@@ -10,12 +10,12 @@
 // ============================================================
 
 namespace PrayerFocusScreen {
-    void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
-              bool azanPlaying, PrayerName activePrayer, bool syncing,
-              bool showNextPrayer);
-    void update(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
-                bool azanPlaying, PrayerName activePrayer, bool syncing,
-                bool showNextPrayer);
+    void draw(const DailyPrayers& prayers, const NextPrayerInfo& next,
+              const ProhibitedTimes& prohibited, bool azanPlaying,
+              PrayerName activePrayer, bool syncing, bool showNextPrayer);
+    void update(const DailyPrayers& prayers, const NextPrayerInfo& next,
+                const ProhibitedTimes& prohibited, bool azanPlaying,
+                PrayerName activePrayer, bool syncing, bool showNextPrayer);
 }
 
 #endif // PRAYER_FOCUS_SCREEN_H

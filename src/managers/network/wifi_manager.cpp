@@ -265,12 +265,12 @@ bool reconnect() {
 #endif
     }
 
-    // In AP mode, back off reconnection attempts to prevent disrupting AP clients
+    // Keep retries paced, but do not make a connected setup client prevent the
+    // station interface from restoring the router connection.
     static unsigned long lastReconnectMs = 0;
-    if (apMode && WiFi.softAPgetStationNum() > 0) {
-        return false;
-    }
-    if (apMode && lastReconnectMs != 0 && (millis() - lastReconnectMs < 60000UL)) {
+    constexpr unsigned long RECONNECT_RETRY_INTERVAL_MS = 60000UL;
+    if (lastReconnectMs != 0 &&
+        millis() - lastReconnectMs < RECONNECT_RETRY_INTERVAL_MS) {
         return false;
     }
 
@@ -279,7 +279,8 @@ bool reconnect() {
     }
     connectionPending = false;
     lastReconnectMs = millis();
-    Serial.println("[WiFi] Reconnecting...");
+    Serial.printf("[WiFi] Reconnecting station interface; setup AP clients=%u.\n",
+                  static_cast<unsigned>(WiFi.softAPgetStationNum()));
     WiFi.disconnect(false, false);
     connectionAttemptFailed = false;
     connectionStartedMs = millis();

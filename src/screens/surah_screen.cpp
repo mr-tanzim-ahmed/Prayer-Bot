@@ -67,7 +67,7 @@ void draw() {
         oled.setFont(u8g2_font_6x12_tf);
         DisplayManager::drawCenteredText("Listening...", 54);
         oled.setFont(u8g2_font_5x8_tf);
-        DisplayManager::drawCenteredText("Speak in English / Bangla", 62);
+        DisplayManager::drawCenteredText("English/Bangla: name or #", 62);
 
     } else if (VoiceManager::isProcessing()) {
         ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 45);

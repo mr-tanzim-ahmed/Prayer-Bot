@@ -72,7 +72,7 @@
 #define I2S_MIC_PORT          I2S_NUM_0
 #define I2S_AMP_PORT          I2S_NUM_1
 #define MIC_SAMPLE_RATE       16000
-#define MIC_RECORD_SECONDS    3
+#define MIC_RECORD_SECONDS    10
 #define MIC_I2S_DMA_BUF_COUNT 4
 #define MIC_I2S_DMA_BUF_LEN   512
 #define AMP_SAMPLE_RATE       44100

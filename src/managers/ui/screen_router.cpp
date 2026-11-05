@@ -144,9 +144,8 @@ void draw(SystemScreen screen) {
         NextPrayerInfo nextPrayer;
         ProhibitedTimes prohibited;
         if (!copyPrayerSnapshot(prayers, nextPrayer, prohibited)) return;
-        (void)prayers;
         azanOverlayDisplayed = true;
-        PrayerFocusScreen::draw(nextPrayer, prohibited, true,
+        PrayerFocusScreen::draw(prayers, nextPrayer, prohibited, true,
                                 PrayerManager::getCurrentPrayerName(),
                                 g_prayerRefreshing ||
                                     g_locationRefreshRequested,
@@ -163,8 +162,7 @@ void draw(SystemScreen screen) {
             NextPrayerInfo nextPrayer;
             ProhibitedTimes prohibited;
             if (!copyPrayerSnapshot(prayers, nextPrayer, prohibited)) break;
-            (void)prayers;
-            PrayerFocusScreen::draw(nextPrayer, prohibited,
+            PrayerFocusScreen::draw(prayers, nextPrayer, prohibited,
                                     g_azanState == AZAN_PLAYING,
                                     PrayerManager::getCurrentPrayerName(),
                                     g_prayerRefreshing ||
@@ -238,9 +236,8 @@ void update(SystemScreen screen) {
         NextPrayerInfo nextPrayer;
         ProhibitedTimes prohibited;
         if (!copyPrayerSnapshot(prayers, nextPrayer, prohibited)) return;
-        (void)prayers;
         azanOverlayDisplayed = true;
-        PrayerFocusScreen::update(nextPrayer, prohibited, true,
+        PrayerFocusScreen::update(prayers, nextPrayer, prohibited, true,
                                   PrayerManager::getCurrentPrayerName(),
                                   g_prayerRefreshing ||
                                       g_locationRefreshRequested,
@@ -263,8 +260,7 @@ void update(SystemScreen screen) {
             NextPrayerInfo nextPrayer;
             ProhibitedTimes prohibited;
             if (!copyPrayerSnapshot(prayers, nextPrayer, prohibited)) break;
-            (void)prayers;
-            PrayerFocusScreen::update(nextPrayer, prohibited,
+            PrayerFocusScreen::update(prayers, nextPrayer, prohibited,
                                       g_azanState == AZAN_PLAYING,
                                       PrayerManager::getCurrentPrayerName(),
                                       g_prayerRefreshing ||
