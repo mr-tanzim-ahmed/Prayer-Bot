@@ -172,6 +172,7 @@ namespace {
     constexpr uint32_t POMODORO_BEEP_LENGTH_MS = 250;
     constexpr uint32_t TOUCH_BEEP_LENGTH_MS = 220;
     constexpr int16_t BEEP_AMPLITUDE = 9000;
+    constexpr int16_t TOUCH_BEEP_AMPLITUDE = 20000;
     constexpr uint32_t SCREEN_CHANGE_BEEP_LENGTH_MS = 130;
     constexpr int16_t SCREEN_CHANGE_BEEP_AMPLITUDE = 9000;
     constexpr float SCREEN_CHANGE_BEEP_GAIN = 0.45f;
@@ -732,7 +733,8 @@ void update() {
         ? isBeepOn(now - alarmStartedMs)
         : (pomodoroBeepActive || screenChangeBeepActive || touchBeepActive);
     const int16_t amplitude = screenChangeBeepActive
-        ? SCREEN_CHANGE_BEEP_AMPLITUDE : BEEP_AMPLITUDE;
+        ? SCREEN_CHANGE_BEEP_AMPLITUDE
+        : (touchBeepActive ? TOUCH_BEEP_AMPLITUDE : BEEP_AMPLITUDE);
     const uint32_t phaseIncrement =
         (uint32_t)(((uint64_t)BEEP_FREQUENCY_HZ << 32) / AMP_SAMPLE_RATE);
 
@@ -810,6 +812,7 @@ void playTouchBeep() {
     portEXIT_CRITICAL(&quranStateMux);
     if (playing || quranBusy) return;
     touchBeepPending = true;
+    Serial.println("[AZAN] Touch beep queued.");
 }
 
 bool isPlaying() {

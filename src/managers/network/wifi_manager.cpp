@@ -131,30 +131,23 @@ void startAP() {
         return;
     }
 
-    delay(50);
-    if (WiFi.softAPIP() != setupAddress) {
-        Serial.printf("[WiFi] Setup AP IP was %s; applying %s static configuration...\n",
-                      WiFi.softAPIP().toString().c_str(), SETUP_AP_IP);
-        WiFi.softAPConfig(setupAddress, setupAddress, setupSubnet);
-    }
-
     Serial.print("[WiFi] AP started: ");
     Serial.println(AP_SSID);
-    const IPAddress apAddress = WiFi.softAPIP();
+    delay(50);
+    const IPAddress activeApAddress = WiFi.softAPIP();
     Serial.print("[WiFi] AP IP: ");
-    Serial.println(apAddress);
-    if (apAddress != setupAddress) {
-        Serial.printf("[WiFi] Setup AP did not use %s; retrying static IP configuration.\n",
+    Serial.println(activeApAddress);
+    if (activeApAddress != setupAddress) {
+        Serial.printf("[WiFi] AP address differs from configured %s; use the actual AP IP shown above.\n",
                       SETUP_AP_IP);
-        if (!WiFi.softAPConfig(setupAddress, setupAddress, setupSubnet) ||
-            WiFi.softAPIP() != setupAddress) {
-            Serial.println("[WiFi] Setup AP IP configuration failed; check the AP address in the serial log.");
-        }
     }
 
     captiveDnsServer.stop();
     captiveDnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-    const IPAddress activeApAddress = (apAddress == IPAddress(0, 0, 0, 0)) ? setupAddress : apAddress;
+    if (activeApAddress == IPAddress(0, 0, 0, 0)) {
+        Serial.println("[WiFi] AP has no usable IP address; captive DNS was not started.");
+        return;
+    }
     if (!captiveDnsServer.start(DNS_PORT, "*", activeApAddress)) {
         Serial.println("[WiFi] Could not start captive-portal DNS.");
     } else {
@@ -274,6 +267,9 @@ bool reconnect() {
 
     // In AP mode, back off reconnection attempts to prevent disrupting AP clients
     static unsigned long lastReconnectMs = 0;
+    if (apMode && WiFi.softAPgetStationNum() > 0) {
+        return false;
+    }
     if (apMode && lastReconnectMs != 0 && (millis() - lastReconnectMs < 60000UL)) {
         return false;
     }

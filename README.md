@@ -67,14 +67,14 @@ To test the touch beep, start at low volume and touch the TTP223 sensor once; th
 
 When testing the MAX98357A and speaker, start at a low device volume and raise it gradually. Never connect either speaker output terminal to ground.
 
-Quran recitation is streamed over Wi-Fi and does not need a full audio file or extra RAM/PSRAM. On-device voice selection does need a microphone buffer: about 94 KiB for the usual 3-second recording, with an automatic 2-second fallback using about 63 KiB. The standard ESP32 Dev Board has no PSRAM by default; the fallback still needs a contiguous RAM block and about 64 KiB of internal RAM left free. If it cannot allocate that, the Quran screen reports the required block size and the serial monitor shows the available free memory.
+Quran recitation is streamed over Wi-Fi and does not need a full audio file or extra RAM/PSRAM. On-device voice selection reserves a microphone buffer while the Quran screen is open: about 94 KiB for the usual 3-second recording, with automatic 2-second (about 63 KiB) and 1-second (about 31 KiB) fallbacks. On a standard ESP32 Dev Board without PSRAM, the 3- and 2-second buffers leave at least 32 KiB of internal RAM for networking and other tasks; the 1-second fallback leaves at least 24 KiB. The reservation is released during audio processing, Quran playback, or dashboard voice requests, restored when the Quran screen is idle, and freed when you leave the screen. If memory is temporarily unavailable, voice selection retries periodically while the Quran screen remains open.
 
 </details>
 
 <details>
 <summary><strong>📶 First connection: setup Wi-Fi</strong> <kbd>▸ VIEW DETAILS</kbd></summary>
 
-The setup hotspot is **`Prayer-Bot`** (password: **`12345678`**) at **`http://10.77.0.1`**. A phone or laptop may show a captive-portal prompt when it connects; if it does not, open that address in a browser. From the dashboard, connect the ESP32 to any compatible 2.4 GHz Wi-Fi network, including a router or phone hotspot.
+The setup hotspot is **`Prayer-Bot`** (password: **`12345678`**) at **`http://10.77.0.1`**. Stay connected to the hotspot if your phone reports that it has no internet (temporarily disable mobile data or VPN if needed). If a captive-portal prompt does not appear, type `http://10.77.0.1/` directly into the browser address bar. You can check the local HTTP connection at `http://10.77.0.1/health`. If the configured AP address cannot be applied, use the actual AP IP reported by the device instead. From the dashboard, connect the ESP32 to any compatible 2.4 GHz Wi-Fi network, including a router or phone hotspot. The home Wi-Fi IP shown by the dashboard is reachable only from a device connected to that same router network; when connected to the Prayer-Bot hotspot, continue using `http://10.77.0.1/`.
 
 </details>
 

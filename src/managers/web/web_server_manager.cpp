@@ -393,6 +393,9 @@ void init(Settings& settings) {
     }
 
     server->on("/", HTTP_GET, sendDashboard);
+    server->on("/health", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(200, "text/plain", "Prayer-Bot dashboard server is running.");
+    });
     static const char* const captivePortalPaths[] = {
         "/generate_204", "/gen_204", "/hotspot-detect.html",
         "/library/test/success.html", "/connecttest.txt",

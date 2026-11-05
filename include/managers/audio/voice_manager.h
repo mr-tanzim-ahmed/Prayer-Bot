@@ -13,7 +13,7 @@ namespace VoiceManager {
     // Initialize I2S microphone
     void init();
 
-    // Begin the three-second Surah-selection listening window.
+    // Begin the adaptive Surah-selection listening window.
     void startListening();
 
     void enterSurahScreen();

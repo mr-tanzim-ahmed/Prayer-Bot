@@ -22,15 +22,20 @@ namespace {
     constexpr uint32_t MIC_BYTES_PER_SECOND =
         MIC_SAMPLE_RATE * sizeof(int16_t);
     constexpr uint8_t SHORT_RECORD_SECONDS = 2;
+    constexpr uint8_t MIN_RECORD_SECONDS = 1;
     constexpr size_t RECORDING_CAPACITY =
         MIC_SAMPLE_RATE * MIC_RECORD_SECONDS * sizeof(int16_t);
     constexpr size_t SHORT_RECORDING_CAPACITY =
         MIC_SAMPLE_RATE * SHORT_RECORD_SECONDS * sizeof(int16_t);
+    constexpr size_t MIN_RECORDING_CAPACITY =
+        MIC_SAMPLE_RATE * MIN_RECORD_SECONDS * sizeof(int16_t);
+    constexpr unsigned long RECORDING_BUFFER_RETRY_MS = 5000UL;
     constexpr size_t BASE64_INPUT_CHUNK_BYTES = 3072;
     constexpr size_t MAX_DASHBOARD_AUDIO_BYTES = 256 * 1024;
     constexpr size_t MAX_GEMINI_RESPONSE_BYTES = 400 * 1024;
     constexpr size_t MAX_INTERNAL_DASHBOARD_AUDIO_BYTES = 64 * 1024;
-    constexpr size_t MIN_INTERNAL_AUDIO_HEADROOM_BYTES = 64 * 1024;
+    constexpr size_t MIN_INTERNAL_AUDIO_HEADROOM_BYTES = 32 * 1024;
+    constexpr size_t MIN_RECORDING_HEADROOM_BYTES = 24 * 1024;
     constexpr size_t MAX_SPOKEN_TRANSCRIPT_LENGTH = 120;
     constexpr uint8_t GEMINI_AZAN_INTENT = TOTAL_SURAHS + 1;
     constexpr char GEMINI_MODEL[] = "gemini-3.8-flash";
@@ -67,6 +72,7 @@ namespace {
     bool micInitialized = false;
     esp_err_t micInitError = ESP_FAIL;
     volatile bool surahScreenActive = false;
+    bool surahScreenVoiceSelectionEnabled = false;
     bool recognizedPlaybackPending = false;
     unsigned long recognizedResultStartedMs = 0;
     constexpr unsigned long RECOGNIZED_RESULT_DISPLAY_MS = 1200UL;
@@ -84,6 +90,8 @@ namespace {
     bool lastSelectionVoiceRecognized = false;
     uint8_t* recordingBuffer = nullptr;
     size_t activeRecordingCapacity = RECORDING_CAPACITY;
+    bool recordingBufferAllocationAttempted = false;
+    unsigned long recordingBufferLastAttemptMs = 0;
     size_t capturedBytes = 0;
     unsigned long recordingStartedMs = 0;
     unsigned long lastMicReadErrorLogMs = 0;
@@ -132,11 +140,10 @@ namespace {
     };
 
     uint8_t* allocateAudioBuffer(size_t length,
-                                 size_t maxInternalAllocation) {
+                                  size_t minimumInternalHeadroom) {
         uint8_t* buffer = static_cast<uint8_t*>(
             heap_caps_malloc(length, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
         if (buffer) return buffer;
-        if (length > maxInternalAllocation) return nullptr;
 
         constexpr uint32_t internalMemoryCaps =
             MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
@@ -144,11 +151,58 @@ namespace {
         const size_t largestBlock =
             heap_caps_get_largest_free_block(internalMemoryCaps);
         if (freeBytes < length || largestBlock < length ||
-            freeBytes - length < MIN_INTERNAL_AUDIO_HEADROOM_BYTES) {
+            freeBytes - length < minimumInternalHeadroom) {
             return nullptr;
         }
         return static_cast<uint8_t*>(
             heap_caps_malloc(length, internalMemoryCaps));
+    }
+
+    bool allocateRecordingBuffer() {
+        if (recordingBuffer) return true;
+        if (recordingBufferAllocationAttempted) return false;
+        recordingBufferAllocationAttempted = true;
+        recordingBufferLastAttemptMs = millis();
+
+        activeRecordingCapacity = RECORDING_CAPACITY;
+        recordingBuffer = allocateAudioBuffer(
+            activeRecordingCapacity + WAV_HEADER_BYTES,
+            MIN_INTERNAL_AUDIO_HEADROOM_BYTES);
+        if (recordingBuffer) return true;
+
+        activeRecordingCapacity = SHORT_RECORDING_CAPACITY;
+        recordingBuffer = allocateAudioBuffer(
+            activeRecordingCapacity + WAV_HEADER_BYTES,
+            MIN_INTERNAL_AUDIO_HEADROOM_BYTES);
+        if (recordingBuffer) {
+            Serial.println(
+                "[VOICE] Using a 2-second microphone buffer because "
+                "the 3-second buffer could not be allocated.");
+            return true;
+        }
+
+        activeRecordingCapacity = MIN_RECORDING_CAPACITY;
+        recordingBuffer = allocateAudioBuffer(
+            activeRecordingCapacity + WAV_HEADER_BYTES,
+            MIN_RECORDING_HEADROOM_BYTES);
+        if (recordingBuffer) {
+            Serial.println(
+                "[VOICE] Using a 1-second microphone buffer because "
+                "the longer buffers could not be allocated.");
+            return true;
+        }
+
+        Serial.printf(
+            "[VOICE] Audio allocation failed: minimum recording needs "
+            "%u bytes with at least %u bytes of internal RAM left free; "
+            "internal free %u bytes, largest block %u bytes.\n",
+            static_cast<unsigned>(MIN_RECORDING_CAPACITY + WAV_HEADER_BYTES),
+            static_cast<unsigned>(MIN_RECORDING_HEADROOM_BYTES),
+            static_cast<unsigned>(heap_caps_get_free_size(
+                MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+            static_cast<unsigned>(heap_caps_get_largest_free_block(
+                MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+        return false;
     }
 
     void setStatus(const char* status) {
@@ -160,6 +214,8 @@ namespace {
             heap_caps_free(recordingBuffer);
             recordingBuffer = nullptr;
         }
+        recordingBufferAllocationAttempted = false;
+        recordingBufferLastAttemptMs = 0;
         capturedBytes = 0;
         activeRecordingCapacity = RECORDING_CAPACITY;
     }
@@ -736,6 +792,7 @@ void startListening() {
 
 void enterSurahScreen() {
     surahScreenActive = true;
+    surahScreenVoiceSelectionEnabled = false;
     recognizedPlaybackPending = false;
     lastSelectionVoiceRecognized = false;
     if (WiFi.status() != WL_CONNECTED) {
@@ -760,6 +817,24 @@ void enterSurahScreen() {
         cancelRequested = false;
         return;
     }
+    surahScreenVoiceSelectionEnabled = true;
+    portENTER_CRITICAL(&dashboardRecognitionMux);
+    const bool dashboardWorkQueuedOrRunning =
+        dashboardRecognitionQueued || dashboardAudioQueued ||
+        dashboardRecognitionRunning || dashboardLiveTokenQueued ||
+        dashboardLiveTokenRunning;
+    portEXIT_CRITICAL(&dashboardRecognitionMux);
+    if (dashboardWorkQueuedOrRunning) {
+        listenRequested = true;
+        setStatus("Preparing voice selection");
+        return;
+    }
+    if (!allocateRecordingBuffer()) {
+        listenRequested = false;
+        setStatus("Low RAM; retrying shortly");
+        ::g_voiceState = VOICE_ERROR;
+        return;
+    }
     listenRequested = true;
     recognitionPending = false;
     cancelRequested = false;
@@ -770,6 +845,7 @@ void enterSurahScreen() {
 
 void leaveSurahScreen() {
     surahScreenActive = false;
+    surahScreenVoiceSelectionEnabled = false;
     recognizedPlaybackPending = false;
     ++screenGeneration;
     listenRequested = false;
@@ -783,58 +859,34 @@ void leaveSurahScreen() {
 }
 
 void update(VoiceState& state) {
+    portENTER_CRITICAL(&dashboardRecognitionMux);
+    const bool dashboardRecognitionBusy =
+        dashboardRecognitionQueued || dashboardAudioQueued ||
+        dashboardRecognitionRunning || dashboardLiveTokenQueued ||
+        dashboardLiveTokenRunning;
+    portEXIT_CRITICAL(&dashboardRecognitionMux);
+    if (dashboardRecognitionBusy && recordingBuffer && !recording &&
+        !recognitionPending && !recognitionInProgress) {
+        freeRecording();
+    }
+
     if (listenRequested && !recognitionInProgress) {
-        portENTER_CRITICAL(&dashboardRecognitionMux);
-        const bool dashboardRecognitionBusy =
-            dashboardRecognitionQueued || dashboardAudioQueued ||
-            dashboardRecognitionRunning || dashboardLiveTokenQueued ||
-            dashboardLiveTokenRunning;
-        portEXIT_CRITICAL(&dashboardRecognitionMux);
         if (dashboardRecognitionBusy) return;
 
         listenRequested = false;
         recording = true;
         recordingStartedMs = millis();
         capturedBytes = 0;
-        activeRecordingCapacity = RECORDING_CAPACITY;
-        if (recordingBuffer) heap_caps_free(recordingBuffer);
-        recordingBuffer = allocateAudioBuffer(
-            RECORDING_CAPACITY + WAV_HEADER_BYTES,
-            RECORDING_CAPACITY + WAV_HEADER_BYTES);
-        if (!recordingBuffer) {
-            activeRecordingCapacity = SHORT_RECORDING_CAPACITY;
-            recordingBuffer = allocateAudioBuffer(
-                activeRecordingCapacity + WAV_HEADER_BYTES,
-                activeRecordingCapacity + WAV_HEADER_BYTES);
-            if (recordingBuffer) {
-                Serial.println(
-                    "[VOICE] Using a 2-second microphone buffer because "
-                    "the 3-second buffer could not be allocated.");
-            }
-        }
-        if (recordingBuffer) {
-            const esp_err_t clearResult = i2s_zero_dma_buffer(I2S_MIC_PORT);
-            if (clearResult != ESP_OK) {
-                Serial.printf("[VOICE] Could not clear I2S input buffer: %s\n",
-                              esp_err_to_name(clearResult));
-            }
-        }
-        if (!recordingBuffer) {
+        if (!allocateRecordingBuffer()) {
             recording = false;
-            setStatus("Need 63KB RAM block");
-            Serial.printf(
-                "[VOICE] Audio allocation failed: %u-byte block needed "
-                "with at least %u bytes of internal RAM left free; "
-                "internal free %u bytes, largest block %u bytes.\n",
-                static_cast<unsigned>(activeRecordingCapacity +
-                                      WAV_HEADER_BYTES),
-                static_cast<unsigned>(MIN_INTERNAL_AUDIO_HEADROOM_BYTES),
-                static_cast<unsigned>(heap_caps_get_free_size(
-                    MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
-                static_cast<unsigned>(heap_caps_get_largest_free_block(
-                    MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+            setStatus("Low RAM; retrying shortly");
             state = VOICE_ERROR;
             return;
+        }
+        const esp_err_t clearResult = i2s_zero_dma_buffer(I2S_MIC_PORT);
+        if (clearResult != ESP_OK) {
+            Serial.printf("[VOICE] Could not clear I2S input buffer: %s\n",
+                          esp_err_to_name(clearResult));
         }
         state = VOICE_LISTENING;
     }
@@ -892,6 +944,32 @@ void update(VoiceState& state) {
         if (AzanManager::isQuranPending()) return;
         state = VOICE_IDLE;
         setStatus("Recitation finished");
+    }
+
+    if (surahScreenVoiceSelectionEnabled && !recordingBuffer &&
+        !recording && !listenRequested && !recognitionPending &&
+        !recognitionInProgress && !playRequested &&
+        !recognizedPlaybackPending && !AzanManager::isQuranPending() &&
+        !AzanManager::isQuranPlaying() &&
+        (!recordingBufferAllocationAttempted ||
+         millis() - recordingBufferLastAttemptMs >=
+             RECORDING_BUFFER_RETRY_MS)) {
+        portENTER_CRITICAL(&dashboardRecognitionMux);
+        const bool dashboardWorkQueuedOrRunning =
+            dashboardRecognitionQueued || dashboardAudioQueued ||
+            dashboardRecognitionRunning || dashboardLiveTokenQueued ||
+            dashboardLiveTokenRunning;
+        portEXIT_CRITICAL(&dashboardRecognitionMux);
+        if (!dashboardWorkQueuedOrRunning) {
+            recordingBufferAllocationAttempted = false;
+            if (allocateRecordingBuffer()) {
+                listenRequested = true;
+                cancelRequested = false;
+                ++screenGeneration;
+                setStatus("Listening - say or select a Surah");
+                state = VOICE_IDLE;
+            }
+        }
     }
 }
 
@@ -1013,6 +1091,8 @@ void processPending(const Settings& settings) {
     if (playRequested) {
         playRequested = false;
         recognizedPlaybackPending = false;
+        if (!recording && !recognitionPending && !recognitionInProgress)
+            freeRecording();
         if (WiFi.status() != WL_CONNECTED) {
             setStatus("Wi-Fi not connected");
             ::g_voiceState = VOICE_ERROR;

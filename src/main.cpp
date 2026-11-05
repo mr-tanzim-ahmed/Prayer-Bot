@@ -325,7 +325,6 @@ void taskDisplay(void* param) {
 
         // Handle button presses
         ButtonHandler::update();
-        WifiManager::processCaptivePortal();
         WebServerManager::processDashboardControl();
         int8_t webScreenRequest = g_webScreenRequest;
         g_webScreenRequest = -1;

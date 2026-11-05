@@ -1236,7 +1236,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
           <div class="hero-stat"><span>Hijri Date</span><strong id="hijri">—</strong></div>
           <div class="hero-stat"><span>Islamic Event</span><strong id="event">—</strong></div>
           <div class="hero-stat"><span>Alarm Status</span><strong id="azanStatus">—</strong></div>
-          <div class="hero-stat"><span>Home Wi-Fi IP</span><strong><a id="homeIpLink" href="#">—</a></strong></div>
+          <div class="hero-stat"><span>Home Wi-Fi IP (use same router)</span><strong><a id="homeIpLink" href="#">—</a></strong></div>
         </div>
       </div>
     </article>
