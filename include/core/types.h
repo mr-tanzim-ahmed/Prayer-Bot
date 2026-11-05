@@ -24,6 +24,7 @@ struct DailyPrayers {
     PrayerTime asr;
     PrayerTime maghrib;
     PrayerTime isha;
+    PrayerTime imsak;
 };
 
 enum PrayerName : uint8_t {
@@ -38,11 +39,17 @@ enum PrayerName : uint8_t {
 
 struct NextPrayerInfo {
     PrayerName  name;
+    PrayerName  presentPrayer;       // Most recently started salah for list highlight
     PrayerTime  startTime;
+    PrayerTime  endTime;             // End of the selected prayer's window
+    PrayerName  upcomingPrayer;
+    PrayerTime  upcomingStartTime;
+    PrayerTime  upcomingEndTime;
     int32_t     countdownSeconds;    // Seconds until this prayer starts
     int32_t     remainingSeconds;    // Seconds left to pray current prayer (window)
     bool        windowOpen;          // Is a prayer window currently open?
     PrayerName  currentPrayer;       // Which prayer window is currently open
+    PrayerTime  currentStartTime;
     PrayerTime  windowEndTime;       // Local time the current prayer window ends
 };
 

@@ -6,7 +6,7 @@
 
 // ============================================================
 //  ALL PRAYERS SCREEN (Screen 2)
-//  Shows the five daily prayers with aligned, easy-to-read times.
+//  Shows the five daily prayers and highlights the present salah.
 // ============================================================
 
 namespace {
@@ -44,8 +44,9 @@ void draw(const DailyPrayers& prayers, const NextPrayerInfo& next) {
     oled.setFont(u8g2_font_5x8_tf);
     for (int i = 0; i < 5; i++) {
         const int y = 17 + i * 9;
-        const bool isNext = rows[i].prayerName == next.name;
-        if (isNext) {
+        const bool isPresent = next.presentPrayer != PRAYER_NONE &&
+            rows[i].prayerName == next.presentPrayer;
+        if (isPresent) {
             ScreenUI::drawPill(oled, 3, y, SCREEN_WIDTH - 6, 9);
             oled.setDrawColor(0);
         }

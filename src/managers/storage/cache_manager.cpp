@@ -92,51 +92,41 @@ void markUpdated(const char* path) {
 void cleanExpired(uint32_t maxAgeDays) {
     uint32_t now = getCurrentTime();
     if (now < 1000000000) return; // Time not synced
-    constexpr size_t MAX_EXPIRED_ENTRIES = 16;
-    struct ExpiredEntry {
-        char path[64];
+    const char* const cachePaths[] = {
+        PRAYER_CACHE_PATH,
+        WEATHER_CACHE_PATH,
+        FESTIVAL_TABLE_PATH
     };
-    ExpiredEntry expired[MAX_EXPIRED_ENTRIES];
-    size_t expiredCount = 0;
     JsonObject root = metaDoc.as<JsonObject>();
-    
-    for (JsonPair kv : root) {
-        const char* path = kv.key().c_str();
-        if (!isManagedCachePath(path)) continue;
-        if (!kv.value().is<uint32_t>()) {
-            Serial.printf("[CACHE] Ignoring invalid timestamp for: %s\n", path);
-            continue;
-        }
-        
-        uint32_t timestamp = kv.value().as<uint32_t>();
-        if (timestamp == 0) continue;
-        uint32_t ageSecs = now > timestamp ? (now - timestamp) : 0;
-        
-        // Use specific max days based on path, or default maxAgeDays
+
+    bool changed = false;
+    for (const char* path : cachePaths) {
+        const bool hasTimestamp = root[path].is<uint32_t>() &&
+            root[path].as<uint32_t>() > 0;
+        const uint32_t timestamp = hasTimestamp
+            ? root[path].as<uint32_t>() : 0;
+        const uint32_t ageSecs = hasTimestamp && now > timestamp
+            ? now - timestamp : 0;
         uint32_t maxDays = maxAgeDays;
         if (strcmp(path, PRAYER_CACHE_PATH) == 0) maxDays = CACHE_PRAYER_MAX_DAYS;
         else if (strcmp(path, WEATHER_CACHE_PATH) == 0) maxDays = CACHE_WEATHER_MAX_DAYS;
         else if (strcmp(path, FESTIVAL_TABLE_PATH) == 0) maxDays = CACHE_FESTIVAL_MAX_DAYS;
-        
-        if (ageSecs > (maxDays * 86400UL)) {
-            Serial.printf("[CACHE] Expired: %s (age %u days)\n", path, ageSecs / 86400);
-            if (expiredCount == MAX_EXPIRED_ENTRIES) {
-                Serial.println("[CACHE] Expired metadata limit reached; remaining entries deferred.");
-                break;
-            }
-            strlcpy(expired[expiredCount++].path, path, sizeof(expired[0].path));
-        }
-    }
 
-    bool changed = false;
-    for (size_t i = 0; i < expiredCount; ++i) {
-        const char* path = expired[i].path;
-        if (StorageManager::removeFile(path)) {
+        const bool expired = !hasTimestamp ||
+            ageSecs > (maxDays * 86400UL);
+        if (!expired) continue;
+
+        if (StorageManager::exists(path) &&
+            !StorageManager::removeFile(path)) {
+            Serial.printf("[CACHE] Could not remove expired or untracked file: %s\n",
+                          path);
+            continue;
+        }
+        if (!root[path].isUnbound()) {
             root.remove(path);
             changed = true;
-        } else {
-            Serial.printf("[CACHE] Could not remove expired file: %s\n", path);
         }
+        Serial.printf("[CACHE] Removed expired or untracked cache: %s\n", path);
     }
 
     if (changed) saveMeta();

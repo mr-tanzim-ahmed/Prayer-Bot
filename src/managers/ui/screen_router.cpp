@@ -37,6 +37,19 @@ namespace {
     bool showingSahariIftar = false;
     bool allPrayersViewInitialized = false;
     bool azanOverlayDisplayed = false;
+    constexpr unsigned long PRAYER_CURRENT_PAGE_MS = 4000UL;
+    constexpr unsigned long PRAYER_NEXT_PAGE_MS = 3000UL;
+    constexpr unsigned long PRAYER_PAGE_CYCLE_MS =
+        PRAYER_CURRENT_PAGE_MS + PRAYER_NEXT_PAGE_MS;
+    bool pomodoroViewInitialized = false;
+    PomodoroPhase lastPomodoroPhase = POMODORO_IDLE;
+    int32_t lastPomodoroRemainingSeconds = -1;
+    uint8_t lastPomodoroCycle = 0;
+    bool lastPomodoroAzanPaused = false;
+    uint16_t lastPomodoroFocusMinutes = 0;
+    uint16_t lastPomodoroShortBreakMinutes = 0;
+    uint16_t lastPomodoroLongBreakMinutes = 0;
+    uint8_t lastPomodoroAnimationFrame = 0;
     float lastQiblaLatitude = DEFAULT_LATITUDE;
     float lastQiblaLongitude = DEFAULT_LONGITUDE;
     bool hasQiblaLocation = true;
@@ -74,6 +87,25 @@ namespace {
         constexpr unsigned long PRAYER_TABLE_MS = 3000UL;
         return timeOnScreen % CYCLE_MS >= PRAYER_TABLE_MS;
     }
+
+    bool shouldShowNextPrayer(unsigned long timeOnScreen) {
+        return timeOnScreen % PRAYER_PAGE_CYCLE_MS >=
+            PRAYER_CURRENT_PAGE_MS;
+    }
+
+    void drawPomodoro() {
+        PomodoroScreen::draw(g_pomodoro);
+        lastPomodoroPhase = g_pomodoro.phase;
+        lastPomodoroRemainingSeconds = g_pomodoro.remainingSeconds;
+        lastPomodoroCycle = g_pomodoro.currentCycle;
+        lastPomodoroAzanPaused = g_pomodoro.pausedByAzan;
+        lastPomodoroFocusMinutes = g_pomodoro.focusMinutes;
+        lastPomodoroShortBreakMinutes = g_pomodoro.shortBreakMinutes;
+        lastPomodoroLongBreakMinutes = g_pomodoro.longBreakMinutes;
+        lastPomodoroAnimationFrame =
+            static_cast<uint8_t>((millis() / 350UL) % 8UL);
+        pomodoroViewInitialized = true;
+    }
 }
 
 // Track time on current screen for animations
@@ -89,11 +121,13 @@ void draw(SystemScreen screen) {
         PrayerFocusScreen::draw(g_nextPrayer, g_prohibited, true,
                                 PrayerManager::getCurrentPrayerName(),
                                 g_prayerRefreshing ||
-                                    g_locationRefreshRequested);
+                                    g_locationRefreshRequested,
+                                false);
         return;
     }
     
     unsigned long timeOnScreen = millis() - g_screenStartMs;
+    const bool showNextPrayer = shouldShowNextPrayer(timeOnScreen);
 
     switch (screen) {
         case SYS_SCREEN_PRAYER_FOCUS:
@@ -101,7 +135,8 @@ void draw(SystemScreen screen) {
                                     g_azanState == AZAN_PLAYING,
                                     PrayerManager::getCurrentPrayerName(),
                                     g_prayerRefreshing ||
-                                        g_locationRefreshRequested);
+                                        g_locationRefreshRequested,
+                                    showNextPrayer);
             break;
 
         case SYS_SCREEN_ALL_PRAYERS:
@@ -129,7 +164,7 @@ void draw(SystemScreen screen) {
             break;
 
         case SYS_SCREEN_POMODORO:
-            PomodoroScreen::draw(g_pomodoro);
+            drawPomodoro();
             break;
 
         case SYS_SCREEN_DHIKR:
@@ -153,7 +188,8 @@ void update(SystemScreen screen) {
         PrayerFocusScreen::update(g_nextPrayer, g_prohibited, true,
                                   PrayerManager::getCurrentPrayerName(),
                                   g_prayerRefreshing ||
-                                      g_locationRefreshRequested);
+                                      g_locationRefreshRequested,
+                                  false);
         return;
     }
 
@@ -164,6 +200,7 @@ void update(SystemScreen screen) {
     }
 
     unsigned long timeOnScreen = millis() - g_screenStartMs;
+    const bool showNextPrayer = shouldShowNextPrayer(timeOnScreen);
 
     switch (screen) {
         case SYS_SCREEN_PRAYER_FOCUS:
@@ -171,7 +208,8 @@ void update(SystemScreen screen) {
                                       g_azanState == AZAN_PLAYING,
                                       PrayerManager::getCurrentPrayerName(),
                                       g_prayerRefreshing ||
-                                          g_locationRefreshRequested);
+                                          g_locationRefreshRequested,
+                                      showNextPrayer);
             break;
 
         case SYS_SCREEN_ALL_PRAYERS: {
@@ -203,9 +241,26 @@ void update(SystemScreen screen) {
                 timeOnScreen);
             break;
 
-        case SYS_SCREEN_POMODORO:
-            PomodoroScreen::update(g_pomodoro);
+        case SYS_SCREEN_POMODORO: {
+            const uint8_t animationFrame =
+                static_cast<uint8_t>((millis() / 350UL) % 8UL);
+            const bool animatedPhase =
+                g_pomodoro.phase == POMODORO_IDLE ||
+                g_pomodoro.phase == POMODORO_WAITING_FOR_BREAK;
+            if (!pomodoroViewInitialized ||
+                g_pomodoro.phase != lastPomodoroPhase ||
+                g_pomodoro.remainingSeconds != lastPomodoroRemainingSeconds ||
+                g_pomodoro.currentCycle != lastPomodoroCycle ||
+                g_pomodoro.pausedByAzan != lastPomodoroAzanPaused ||
+                g_pomodoro.focusMinutes != lastPomodoroFocusMinutes ||
+                g_pomodoro.shortBreakMinutes != lastPomodoroShortBreakMinutes ||
+                g_pomodoro.longBreakMinutes != lastPomodoroLongBreakMinutes ||
+                (animatedPhase &&
+                 animationFrame != lastPomodoroAnimationFrame)) {
+                drawPomodoro();
+            }
             break;
+        }
 
         case SYS_SCREEN_DHIKR:
             DhikrScreen::update(timeOnScreen);

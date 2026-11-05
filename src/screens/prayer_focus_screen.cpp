@@ -6,19 +6,10 @@
 
 // ============================================================
 //  PRAYER FOCUS SCREEN (Screen 1 - Default)
-//  Next prayer, countdown, remaining window, prohibited time.
+//  Current and next prayer pages, countdown, and prohibited time.
 // ============================================================
 
 namespace {
-    String formatTime(uint8_t h, uint8_t m) {
-        if (h == 0 && m == 0) return "00:00";
-        const uint8_t hour12 = h % 12 == 0 ? 12 : h % 12;
-        const char* meridiem = h < 12 ? "AM" : "PM";
-        char buf[12];
-        snprintf(buf, sizeof(buf), "%u:%02u %s", hour12, m, meridiem);
-        return String(buf);
-    }
-
     String formatCompactTime(uint8_t h, uint8_t m) {
         if (h == 0 && m == 0) return "00:00";
         const uint8_t hour12 = h % 12 == 0 ? 12 : h % 12;
@@ -43,7 +34,8 @@ namespace {
 namespace PrayerFocusScreen {
 
 void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
-          bool azanPlaying, PrayerName activePrayer, bool syncing) {
+          bool azanPlaying, PrayerName activePrayer, bool syncing,
+          bool showNextPrayer) {
     U8G2& oled = DisplayManager::getDisplay();
 
     DisplayManager::clearBuffer();
@@ -62,36 +54,43 @@ void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
         return;
     }
 
-    ScreenUI::drawHeader(oled, "NEXT PRAYER", syncing ? "SYNC" : nullptr);
-    ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 30);
+    const bool showingCurrentPrayer = next.windowOpen && !showNextPrayer;
+    const PrayerName displayPrayer = showingCurrentPrayer
+        ? next.currentPrayer : next.upcomingPrayer;
+    const PrayerTime displayStart = showingCurrentPrayer
+        ? next.currentStartTime : next.upcomingStartTime;
+    const PrayerTime displayEnd = showingCurrentPrayer
+        ? next.windowEndTime : next.upcomingEndTime;
+    ScreenUI::drawHeader(oled, showingCurrentPrayer ? "CURRENT PRAYER" :
+                         "NEXT PRAYER", syncing ? "SYNC" : nullptr);
+    ScreenUI::drawCard(oled, 3, 16, SCREEN_WIDTH - 6, 34);
     oled.setFont(u8g2_font_7x14B_tf);
-    const char* name = PrayerManager::getPrayerNameStr(next.name);
-    oled.drawStr(8, 43, name);
-
-    String timeStr = formatTime(next.startTime.hour, next.startTime.minute);
-    oled.setFont(u8g2_font_6x10_tf);
-    const int tw = oled.getStrWidth(timeStr.c_str());
-    oled.drawStr(SCREEN_WIDTH - tw - 8, 43, timeStr.c_str());
+    const char* name = PrayerManager::getPrayerNameStr(displayPrayer);
+    oled.drawStr(8, 30, name);
 
     oled.setFont(u8g2_font_5x8_tf);
-    String countdown = "STARTS IN " + formatCountdown(next.countdownSeconds);
-    DisplayManager::drawCenteredText(countdown, 55);
+    oled.drawStr(8, 40, "START");
+    oled.drawStr(34, 40,
+                 formatCompactTime(displayStart.hour,
+                                   displayStart.minute).c_str());
+    oled.drawStr(69, 40, "END");
+    oled.drawStr(88, 40,
+                 formatCompactTime(displayEnd.hour,
+                                   displayEnd.minute).c_str());
 
-    if (next.windowOpen) {
-        String windowEnd = String(PrayerManager::getPrayerNameStr(
-            next.currentPrayer)) + " ENDS " +
-            formatCompactTime(next.windowEndTime.hour,
-                              next.windowEndTime.minute);
-        if (prohibited.nextWindow.active) windowEnd += " PAUSE";
-        oled.drawStr(8, 63, windowEnd.c_str());
-    } else if (prohibited.nextWindow.active) {
+    String countdown = showingCurrentPrayer
+        ? "ENDS IN " + formatCountdown(next.remainingSeconds)
+        : "STARTS IN " + formatCountdown(next.countdownSeconds);
+    DisplayManager::drawCenteredText(countdown, 56);
+
+    oled.setFont(u8g2_font_4x6_tf);
+    if (prohibited.nextWindow.active) {
         oled.drawStr(8, 63, "PRAYER PAUSE ACTIVE");
     } else if (prohibited.nextWindow.startHour > 0 || prohibited.nextWindow.startMinute > 0) {
         String probStr = "PAUSE " +
             formatCompactTime(prohibited.nextWindow.startHour, prohibited.nextWindow.startMinute) +
             "-" +
             formatCompactTime(prohibited.nextWindow.endHour, prohibited.nextWindow.endMinute);
-        oled.setFont(u8g2_font_4x6_tf);
         oled.drawStr(8, 63, probStr.c_str());
     }
 
@@ -99,9 +98,10 @@ void draw(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
 }
 
 void update(const NextPrayerInfo& next, const ProhibitedTimes& prohibited,
-            bool azanPlaying, PrayerName activePrayer, bool syncing) {
+            bool azanPlaying, PrayerName activePrayer, bool syncing,
+            bool showNextPrayer) {
     // Redraw every second for countdown updates
-    draw(next, prohibited, azanPlaying, activePrayer, syncing);
+    draw(next, prohibited, azanPlaying, activePrayer, syncing, showNextPrayer);
 }
 
 } // namespace PrayerFocusScreen

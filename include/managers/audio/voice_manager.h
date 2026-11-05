@@ -37,6 +37,7 @@ namespace VoiceManager {
     uint8_t getRecognizedSurah();
     const char* getSurahName(uint8_t number);
     uint8_t getPlayingSurah();
+    bool wasLastSelectionVoiceRecognized();
     const char* getStatusText();
 
     // State queries

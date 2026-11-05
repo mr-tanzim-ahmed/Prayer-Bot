@@ -52,7 +52,7 @@
 // Timing Intervals
 // ------------------------------------------------------------
 #define WEATHER_UPDATE_INTERVAL   (30UL * 60UL * 1000UL)
-#define PRAYER_FETCH_INTERVAL     (30UL * 60UL * 1000UL)
+#define PRAYER_FETCH_INTERVAL     (24UL * 60UL * 60UL * 1000UL)
 #define PRAYER_UPDATE_INTERVAL    (60UL * 1000UL)
 #define PRAYER_CACHE_FETCH_DAYS   30
 #define NTP_SYNC_INTERVAL         (6UL * 3600UL * 1000UL)
@@ -161,6 +161,7 @@
 // ------------------------------------------------------------
 #define SETTINGS_PATH         "/settings.json"
 #define PRAYER_CACHE_PATH     "/prayer_cache.json"
+#define PRAYER_CACHE_BACKUP_DAYS 3
 #define WEATHER_CACHE_PATH    "/weather_cache.json"
 #define FESTIVAL_TABLE_PATH   "/festivals.json"
 
@@ -169,7 +170,7 @@
 // ------------------------------------------------------------
 #define CACHE_META_PATH        "/cache_meta.json"
 #define CACHE_MAX_AGE_DAYS     7
-#define CACHE_PRAYER_MAX_DAYS  35
+#define CACHE_PRAYER_MAX_DAYS  3
 #define CACHE_WEATHER_MAX_DAYS 1
 #define CACHE_FESTIVAL_MAX_DAYS 365
 #define CACHE_CLEANUP_INTERVAL (24UL * 3600UL * 1000UL)

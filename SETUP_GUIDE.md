@@ -162,7 +162,7 @@ Check Serial Monitor or your router's client list for the current IP. Confirm th
 
 ### Prayer times or Quran audio are unavailable offline
 
-Previously fetched prayer data may be available from cache, but the timetable requires internet to fetch initially and refresh monthly. Weather, Surah recognition, and Quran streaming also need internet. Dhikr and Pomodoro work locally.
+Prayer timings and their Hijri date are kept in a rolling three-day device backup, so prayer/Sehri times and derived prohibited windows remain available offline during that period. After an internet time sync, the clock and Gregorian calendar continue running offline while the board stays powered. After full power loss, Wi-Fi is needed again to set the clock because the documented circuit has no battery-backed RTC. When Wi-Fi reconnects, the device automatically resynchronizes its clock and refreshes prayer and weather data. An initial network connection is needed to fetch location-specific prayer timings. Surah recognition, Quran streaming, and weather updates also need internet; Dhikr and Pomodoro work locally.
 
 ### I use a different ESP32 board
 

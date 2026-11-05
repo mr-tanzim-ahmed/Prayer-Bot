@@ -1,6 +1,7 @@
 #include "managers/prayer/calendar_manager.h"
 #include <prayer_bot_config.h>
 #include "managers/storage/storage_manager.h"
+#include "managers/storage/cache_manager.h"
 #include <ArduinoJson.h>
 #include <time.h>
 
@@ -67,9 +68,44 @@ void init(const Settings& settings) {
 void getHijriDate(HijriDate& date) {
     // Read from cached prayer data which includes Hijri info per day
     String json = StorageManager::readFile(PRAYER_CACHE_PATH);
-    if (!json.isEmpty()) {
+    const uint32_t cacheAge = CacheManager::getCacheAge(PRAYER_CACHE_PATH);
+    const bool cacheFresh = cacheAge == 0xFFFFFFFF ||
+        cacheAge <= CACHE_PRAYER_MAX_DAYS * 86400UL;
+    if (!json.isEmpty() && cacheFresh) {
         JsonDocument doc;
         if (!deserializeJson(doc, json)) {
+            if ((doc["version"] | 0) == 2) {
+                JsonArray dailyBackups = doc["days"].as<JsonArray>();
+                JsonObjectConst selectedDay;
+                struct tm today = {};
+                if (getLocalTime(&today, 0) &&
+                    today.tm_year >= (2020 - 1900)) {
+                    char todayDate[11];
+                    snprintf(todayDate, sizeof(todayDate), "%04d-%02d-%02d",
+                             today.tm_year + 1900, today.tm_mon + 1, today.tm_mday);
+                    for (JsonObjectConst day : dailyBackups) {
+                        if (strcmp(day["date"] | "", todayDate) == 0) {
+                            selectedDay = day;
+                            break;
+                        }
+                    }
+                } else if (!dailyBackups.isNull() && dailyBackups.size() > 0) {
+                    selectedDay = dailyBackups[0];
+                }
+
+                JsonObjectConst cachedHijri = selectedDay["hijri"];
+                if (!cachedHijri.isNull()) {
+                    date.day = cachedHijri["day"] | 1;
+                    date.month = cachedHijri["month"] | 1;
+                    date.year = cachedHijri["year"] | 1448;
+                    date.monthName = String((const char*)(cachedHijri["monthName"] | "Muharram"));
+                    date.designation = "AH";
+                    date.day += hijriOffset;
+                    normalizeHijriDate(date);
+                    return;
+                }
+            }
+
             // Check single day cache format first
             JsonObject singleHijri = doc["hijri"];
             if (!singleHijri.isNull()) {
@@ -85,7 +121,7 @@ void getHijriDate(HijriDate& date) {
 
             // Check monthly calendar format
             struct tm t;
-            if (getLocalTime(&t)) {
+            if (getLocalTime(&t) && t.tm_year >= (2020 - 1900)) {
                 int dayIndex = t.tm_mday - 1; // 0-indexed day of month
                 JsonArray days = doc["days"].as<JsonArray>();
                 
@@ -121,7 +157,7 @@ void getTodayEvent(const HijriDate& date, IslamicEvent& event) {
 
     // Check for Jumuah (Friday)
     struct tm t;
-    if (getLocalTime(&t) && t.tm_wday == 5) {
+    if (getLocalTime(&t) && t.tm_year >= (2020 - 1900) && t.tm_wday == 5) {
         event = {0, 0, "Jumuah", true};
     }
 

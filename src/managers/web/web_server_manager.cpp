@@ -614,8 +614,10 @@ void init(Settings& settings) {
         beforeSunset["active"] = prob.beforeSunset.active;
 
         JsonObject next = doc["nextPrayer"].to<JsonObject>();
-        next["name"] = g_prayerReady ? PrayerManager::getPrayerNameStr(g_nextPrayer.name) : "";
-        next["time"] = formatTime(g_nextPrayer.startTime);
+        next["name"] = g_prayerReady
+            ? PrayerManager::getPrayerNameStr(g_nextPrayer.upcomingPrayer) : "";
+        next["time"] = formatTime(g_nextPrayer.upcomingStartTime);
+        next["end"] = formatTime(g_nextPrayer.upcomingEndTime);
         next["countdown"] = formatDuration(g_nextPrayer.countdownSeconds);
         JsonObject quran = doc["quran"].to<JsonObject>();
         const uint8_t curSurah = VoiceManager::getPlayingSurah();

@@ -54,22 +54,22 @@ void draw() {
     } else if (VoiceManager::isProcessing()) {
         ScreenUI::drawCard(oled, 3, 18, SCREEN_WIDTH - 6, 45);
         const int cx = 64;
-        const int cy = 34;
-        static const int8_t spinnerX[8] = {0, 8, 12, 8, 0, -8, -12, -8};
-        static const int8_t spinnerY[8] = {-12, -8, 0, 8, 12, 8, 0, -8};
-        const uint8_t activeDot = static_cast<uint8_t>((now / 100) % 8);
-        for (uint8_t i = 0; i < 8; ++i) {
-            const int x = cx + spinnerX[i];
-            const int y = cy + spinnerY[i];
-            if (i == activeDot)
-                oled.drawDisc(x, y, 3);
-            else
-                oled.drawDisc(x, y, 1);
+        const int cy = 33;
+        const uint8_t scanFrame = static_cast<uint8_t>((now / 140) % 4);
+        oled.drawCircle(cx - 3, cy - 3, 9);
+        oled.drawLine(cx + 3, cy + 3, cx + 11, cy + 11);
+        static const int8_t scanX[4] = {0, 9, 0, -9};
+        static const int8_t scanY[4] = {-9, 0, 9, 0};
+        for (uint8_t i = 0; i < 4; ++i) {
+            const int x = cx - 3 + scanX[i];
+            const int y = cy - 3 + scanY[i];
+            oled.drawDisc(x, y, i == scanFrame ? 2 : 1);
         }
+        oled.drawDisc(cx - 3, cy - 3, 2);
         oled.setFont(u8g2_font_6x12_tf);
-        DisplayManager::drawCenteredText("Recognizing voice", 55);
+        DisplayManager::drawCenteredText("Analyzing voice...", 55);
         oled.setFont(u8g2_font_5x8_tf);
-        DisplayManager::drawCenteredText("Gemini is processing", 62);
+        DisplayManager::drawCenteredText("Gemini is finding the Surah", 63);
 
     } else if (VoiceManager::isPlaying()) {
         const uint8_t surah = VoiceManager::getPlayingSurah();
@@ -95,7 +95,15 @@ void draw() {
         }
 
         oled.setFont(u8g2_font_5x8_tf);
-        DisplayManager::drawCenteredText("Now playing", 52);
+        char recognizedText[32];
+        if (VoiceManager::wasLastSelectionVoiceRecognized()) {
+            snprintf(recognizedText, sizeof(recognizedText),
+                     "GEMINI FOUND SURAH %u", surah);
+        } else {
+            snprintf(recognizedText, sizeof(recognizedText),
+                     "NOW PLAYING SURAH %u", surah);
+        }
+        DisplayManager::drawCenteredText(recognizedText, 52);
         DisplayManager::drawCenteredText("[Tap] Next   [Shake] Stop", 63);
 
     } else {
@@ -105,7 +113,15 @@ void draw() {
         drawSurahTitle(surah, 34);
 
         oled.setFont(u8g2_font_6x10_tf);
-        DisplayManager::drawCenteredText(VoiceManager::getStatusText(), 49);
+        if (VoiceManager::wasLastSelectionVoiceRecognized()) {
+            char recognizedText[32];
+            snprintf(recognizedText, sizeof(recognizedText),
+                     "Gemini identified Surah %u", surah);
+            oled.setFont(u8g2_font_5x8_tf);
+            DisplayManager::drawCenteredText(recognizedText, 49);
+        } else {
+            DisplayManager::drawCenteredText(VoiceManager::getStatusText(), 49);
+        }
 
         oled.setFont(u8g2_font_5x8_tf);
         if (VoiceManager::hasError())

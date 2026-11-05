@@ -16,7 +16,10 @@ namespace {
     uint8_t peakCount = 0;
     unsigned long firstPeakTime = 0;
     unsigned long lastMpuCheckMs = 0;
+    unsigned long lastShakeTime = 0;
+    bool aboveThreshold = false;
     constexpr unsigned long MPU_RETRY_INTERVAL_MS = 5000UL;
+    constexpr unsigned long SHAKE_COOLDOWN_MS = 1500UL;
 
     bool writeMPU(uint8_t reg, uint8_t val) {
         if (!I2CBus::lock()) return false;
@@ -104,6 +107,7 @@ void update() {
         mpuAvailable = false;
         lastMpuCheckMs = millis();
         peakCount = 0;
+        aboveThreshold = false;
         Serial.println("[MPU] Read failed; sensor will be retried.");
         return;
     }
@@ -114,7 +118,12 @@ void update() {
 
     unsigned long now = millis();
 
-    if (mag > threshold) {
+    if (mag > threshold && !aboveThreshold) {
+        aboveThreshold = true;
+        if (lastShakeTime != 0 &&
+            now - lastShakeTime < SHAKE_COOLDOWN_MS) {
+            return;
+        }
         if (peakCount == 0) {
             firstPeakTime = now;
         }
@@ -123,8 +132,11 @@ void update() {
         if (peakCount >= SHAKE_COUNT_REQUIRED &&
             (now - firstPeakTime) <= SHAKE_WINDOW_MS) {
             shakeDetected = true;
+            lastShakeTime = now;
             peakCount = 0;
         }
+    } else if (mag <= threshold) {
+        aboveThreshold = false;
     }
 
     // Reset window if expired
@@ -144,6 +156,7 @@ bool isShakeDetected() {
 void reset() {
     shakeDetected = false;
     peakCount = 0;
+    aboveThreshold = false;
 }
 
 } // namespace ShakeDetector

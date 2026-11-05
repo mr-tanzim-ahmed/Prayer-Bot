@@ -53,6 +53,7 @@ namespace {
     };
 
     bool micInitialized = false;
+    esp_err_t micInitError = ESP_FAIL;
     volatile bool surahScreenActive = false;
     volatile bool listenRequested = false;
     volatile bool recording = false;
@@ -65,9 +66,11 @@ namespace {
     uint32_t pendingGeneration = 0;
     volatile uint8_t requestedSurah = DEFAULT_SURAH;
     uint8_t selectedSurah = DEFAULT_SURAH;
+    bool lastSelectionVoiceRecognized = false;
     uint8_t* recordingBuffer = nullptr;
     size_t capturedBytes = 0;
     unsigned long recordingStartedMs = 0;
+    unsigned long lastMicReadErrorLogMs = 0;
     char statusText[40] = "Ready";
     portMUX_TYPE dashboardRecognitionMux = portMUX_INITIALIZER_UNLOCKED;
     char dashboardTranscript[MAX_SPOKEN_TRANSCRIPT_LENGTH + 1] = {};
@@ -236,7 +239,7 @@ namespace {
 
         WiFiClientSecure client;
         configureHttpsClient(client);
-        client.setTimeout(5000);
+        client.setTimeout(15000);
         if (!client.connect("generativelanguage.googleapis.com", 443, 15000)) {
             Serial.println("[VOICE] Gemini transcript connection failed.");
             return false;
@@ -269,7 +272,7 @@ namespace {
 
         String prefix =
             "{\"contents\":[{\"parts\":["
-            "{\"text\":\"Identify this short voice command for a Quran and prayer device. The speaker may use English, Bangla/Bengali, or common transliteration. Return only one integer: 1 through 114 for a requested Quran Surah; 115 only for an explicit request to play the Azan alarm; otherwise 0.\"},"
+            "{\"text\":\"Identify the requested Quran Surah in this short voice command. The speaker may use English, Bangla/Bengali, Arabic pronunciation, or phonetic transliteration, with brief silence or background noise. Focus on the spoken Surah name or number. Return only one integer: 1 through 114 for a requested Surah; 115 only for an explicit Azan-alarm request; otherwise 0.\"},"
             "{\"inlineData\":{\"mimeType\":\"";
         prefix += mimeType;
         prefix += "\",\"data\":\"";
@@ -281,7 +284,7 @@ namespace {
 
         WiFiClientSecure client;
         configureHttpsClient(client);
-        client.setTimeout(3000);
+        client.setTimeout(15000);
         if (!client.connect("generativelanguage.googleapis.com", 443, 15000)) {
             Serial.println("[VOICE] Gemini connection failed.");
             return false;
@@ -334,16 +337,22 @@ namespace {
         return readGeminiSurahResponse(client, surahNumber);
     }
 
-    bool hasSpeechEnergy(const uint8_t* pcm, size_t length) {
+    bool hasSpeechEnergy(const uint8_t* pcm, size_t length, double& rms) {
+        rms = 0;
         if (!pcm || length < sizeof(int16_t) * 10) return false;
         const int16_t* samples = reinterpret_cast<const int16_t*>(pcm);
         const size_t sampleCount = length / sizeof(int16_t);
+        int64_t sampleSum = 0;
+        for (size_t i = 0; i < sampleCount; ++i)
+            sampleSum += samples[i];
+        const double mean = static_cast<double>(sampleSum) / sampleCount;
+
         uint64_t sumSquares = 0;
         for (size_t i = 0; i < sampleCount; ++i) {
-            const int32_t sample = samples[i];
+            const double sample = samples[i] - mean;
             sumSquares += static_cast<uint64_t>(sample * sample);
         }
-        const double rms = sqrt(static_cast<double>(sumSquares) / sampleCount);
+        rms = sqrt(static_cast<double>(sumSquares) / sampleCount);
         return rms > 180.0;
     }
 
@@ -385,17 +394,22 @@ void init() {
         .data_in_num = PIN_MIC_SD
     };
 
-    if (i2s_driver_install(I2S_MIC_PORT, &i2sConfig, 0, nullptr) != ESP_OK) {
-        Serial.println("[VOICE] I2S microphone initialization failed.");
+    micInitError = i2s_driver_install(I2S_MIC_PORT, &i2sConfig, 0, nullptr);
+    if (micInitError != ESP_OK) {
+        Serial.printf("[VOICE] I2S microphone initialization failed: %s\n",
+                      esp_err_to_name(micInitError));
         return;
     }
-    if (i2s_set_pin(I2S_MIC_PORT, &pinConfig) != ESP_OK) {
+    micInitError = i2s_set_pin(I2S_MIC_PORT, &pinConfig);
+    if (micInitError != ESP_OK) {
         i2s_driver_uninstall(I2S_MIC_PORT);
-        Serial.println("[VOICE] Could not configure microphone pins.");
+        Serial.printf("[VOICE] Could not configure microphone pins: %s\n",
+                      esp_err_to_name(micInitError));
         return;
     }
 
     micInitialized = true;
+    micInitError = ESP_OK;
     Serial.println("[VOICE] I2S microphone initialized.");
 }
 
@@ -405,11 +419,22 @@ void startListening() {
 
 void enterSurahScreen() {
     surahScreenActive = true;
+    lastSelectionVoiceRecognized = false;
     if (WiFi.status() != WL_CONNECTED) {
         listenRequested = false;
         cancelRequested = false;
         setStatus("Wi-Fi not connected");
         ::g_voiceState = VOICE_ERROR;
+        return;
+    }
+    if (!micInitialized) init();
+    if (!micInitialized) {
+        listenRequested = false;
+        cancelRequested = false;
+        setStatus("Microphone unavailable");
+        ::g_voiceState = VOICE_ERROR;
+        Serial.printf("[VOICE] Cannot record: microphone is not initialized (%s).\n",
+                      esp_err_to_name(micInitError));
         return;
     }
     if (skipNextAutoListen) {
@@ -448,9 +473,18 @@ void update(VoiceState& state) {
         if (recordingBuffer) heap_caps_free(recordingBuffer);
         recordingBuffer = static_cast<uint8_t*>(
             heap_caps_malloc(RECORDING_CAPACITY + WAV_HEADER_BYTES,
-                             MALLOC_CAP_8BIT));
-        if (recordingBuffer && micInitialized) {
-            i2s_zero_dma_buffer(I2S_MIC_PORT);
+                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        if (!recordingBuffer) {
+            recordingBuffer = static_cast<uint8_t*>(
+                heap_caps_malloc(RECORDING_CAPACITY + WAV_HEADER_BYTES,
+                                 MALLOC_CAP_8BIT));
+        }
+        if (recordingBuffer) {
+            const esp_err_t clearResult = i2s_zero_dma_buffer(I2S_MIC_PORT);
+            if (clearResult != ESP_OK) {
+                Serial.printf("[VOICE] Could not clear I2S input buffer: %s\n",
+                              esp_err_to_name(clearResult));
+            }
         }
         if (!recordingBuffer) {
             recording = false;
@@ -462,8 +496,8 @@ void update(VoiceState& state) {
     }
 
     if (recording) {
-        if (micInitialized && recordingBuffer &&
-            capturedBytes < RECORDING_CAPACITY) {
+        while (micInitialized && recordingBuffer &&
+               capturedBytes < RECORDING_CAPACITY) {
             int32_t microphoneSamples[256];
             size_t availableBytes = 0;
             const size_t remaining = RECORDING_CAPACITY - capturedBytes;
@@ -475,16 +509,26 @@ void update(VoiceState& state) {
             const esp_err_t result = i2s_read(
                 I2S_MIC_PORT, microphoneSamples, chunkBytes,
                 &availableBytes, 0);
-            if (result == ESP_OK && availableBytes >= sizeof(int32_t)) {
-                const size_t sampleCount = min(
-                    availableBytes / sizeof(int32_t), requestedSamples);
-                int16_t* outputSamples = reinterpret_cast<int16_t*>(
-                    recordingBuffer + capturedBytes);
-                for (size_t i = 0; i < sampleCount; ++i)
-                    outputSamples[i] =
-                        static_cast<int16_t>(microphoneSamples[i] >> 16);
-                capturedBytes += sampleCount * sizeof(int16_t);
+            if (result != ESP_OK) {
+                const unsigned long now = millis();
+                if (lastMicReadErrorLogMs == 0 ||
+                    now - lastMicReadErrorLogMs >= 3000UL) {
+                    Serial.printf("[VOICE] I2S microphone read failed: %s\n",
+                                  esp_err_to_name(result));
+                    lastMicReadErrorLogMs = now;
+                }
+                break;
             }
+            if (availableBytes < sizeof(int32_t)) break;
+
+            const size_t sampleCount = min(
+                availableBytes / sizeof(int32_t), requestedSamples);
+            int16_t* outputSamples = reinterpret_cast<int16_t*>(
+                recordingBuffer + capturedBytes);
+            for (size_t i = 0; i < sampleCount; ++i)
+                outputSamples[i] =
+                    static_cast<int16_t>(microphoneSamples[i] >> 16);
+            capturedBytes += sampleCount * sizeof(int16_t);
         }
 
         if (millis() - recordingStartedMs >= MIC_RECORD_SECONDS * 1000UL) {
@@ -554,6 +598,7 @@ void processPending(const Settings& settings) {
         if (recognized) {
             if (recognizedSurah <= TOTAL_SURAHS) {
                 selectedSurah = recognizedSurah;
+                lastSelectionVoiceRecognized = false;
                 skipNextAutoListen = true;
                 setStatus("Dashboard voice recognized");
                 Serial.printf("[VOICE] Dashboard transcript recognized Surah %u (%s).\n",
@@ -603,7 +648,11 @@ void processPending(const Settings& settings) {
             recognitionInProgress = false;
             return;
         }
-        const bool hasSpeech = hasSpeechEnergy(recordingBuffer, capturedBytes);
+        double speechRms = 0;
+        const bool hasSpeech = hasSpeechEnergy(
+            recordingBuffer, capturedBytes, speechRms);
+        Serial.printf("[VOICE] Microphone captured %u bytes; RMS %.1f.\n",
+                      static_cast<unsigned>(capturedBytes), speechRms);
         uint8_t recognizedSurah = 0;
         const char* apiKey = settings.geminiApiKey;
         if (hasSpeech && apiKey[0]) {
@@ -616,9 +665,19 @@ void processPending(const Settings& settings) {
                                wavLength, "audio/wav", recognizedSurah) &&
                 surahScreenActive && !cancelRequested &&
                 requestGeneration == screenGeneration) {
-                Serial.printf("[VOICE] Recognized Surah %u (%s).\n",
-                              recognizedSurah, SURAH_NAMES[recognizedSurah - 1]);
-                startPlayback(recognizedSurah, nullptr, state);
+                if (recognizedSurah >= 1 &&
+                    recognizedSurah <= TOTAL_SURAHS) {
+                    lastSelectionVoiceRecognized = true;
+                    Serial.printf("[VOICE] Gemini recognized Surah %u (%s).\n",
+                                  recognizedSurah,
+                                  SURAH_NAMES[recognizedSurah - 1]);
+                    startPlayback(recognizedSurah, nullptr, state);
+                } else {
+                    setStatus("Command was not a Surah");
+                    state = VOICE_ERROR;
+                    Serial.printf("[VOICE] Gemini returned unsupported voice command %u.\n",
+                                  recognizedSurah);
+                }
             } else {
                 setStatus("Gemini recognition failed");
                 state = VOICE_ERROR;
@@ -661,6 +720,10 @@ const char* getSurahName(uint8_t number) {
 
 uint8_t getPlayingSurah() {
     return selectedSurah;
+}
+
+bool wasLastSelectionVoiceRecognized() {
+    return lastSelectionVoiceRecognized;
 }
 
 const char* getStatusText() {
@@ -761,6 +824,7 @@ const char* getDashboardRecognition(uint32_t requestId,
 void selectSurah(int number) {
     if (number >= 1 && number <= TOTAL_SURAHS) {
         selectedSurah = static_cast<uint8_t>(number);
+        lastSelectionVoiceRecognized = false;
         skipNextAutoListen = !surahScreenActive;
         ::g_voiceState = VOICE_IDLE;
         setStatus("Selected from dashboard");
@@ -769,6 +833,7 @@ void selectSurah(int number) {
 
 void nextSurah() {
     selectedSurah = (selectedSurah % TOTAL_SURAHS) + 1;
+    lastSelectionVoiceRecognized = false;
     skipNextAutoListen = !surahScreenActive;
     if (AzanManager::isQuranPlaying()) {
         playSurah(selectedSurah);
@@ -781,6 +846,7 @@ void nextSurah() {
 
 void prevSurah() {
     selectedSurah = (selectedSurah <= 1) ? TOTAL_SURAHS : (selectedSurah - 1);
+    lastSelectionVoiceRecognized = false;
     skipNextAutoListen = !surahScreenActive;
     if (AzanManager::isQuranPlaying()) {
         playSurah(selectedSurah);
@@ -799,6 +865,7 @@ bool playSurah(int number) {
     }
     if (number < 1 || number > TOTAL_SURAHS) number = selectedSurah;
     selectedSurah = static_cast<uint8_t>(number);
+    lastSelectionVoiceRecognized = false;
     skipNextAutoListen = !surahScreenActive;
     requestedSurah = selectedSurah;
     playRequested = true;

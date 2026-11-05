@@ -529,7 +529,8 @@ void taskNetwork(void* param) {
             g_wifiConnected = true;
         }
 
-        if (g_wifiConnected && !wasWifiConnected) {
+        const bool wifiJustConnected = g_wifiConnected && !wasWifiConnected;
+        if (wifiJustConnected) {
             WebServerManager::logDashboardAddresses();
         }
         wasWifiConnected = g_wifiConnected;
@@ -541,8 +542,10 @@ void taskNetwork(void* param) {
         }
 
         if (g_wifiConnected && WiFi.status() == WL_CONNECTED) {
-            if (!networkServicesInitialized) {
-                Serial.println("[MAIN] WiFi connected; initializing online services.");
+            if (!networkServicesInitialized || wifiJustConnected) {
+                Serial.println(wifiJustConnected
+                    ? "[MAIN] WiFi restored; synchronizing clock and cached data."
+                    : "[MAIN] WiFi connected; initializing online services.");
                 g_timesynced = WifiManager::syncNTP(taskSettings);
                 g_prayerRefreshing = true;
                 g_prayerReady = PrayerManager::refresh(taskSettings);

@@ -9,9 +9,10 @@ namespace {
     constexpr double KAABA_LATITUDE = 21.4225;
     constexpr double KAABA_LONGITUDE = 39.8262;
     constexpr float RADIANS_TO_DEGREES = 57.2957795131f;
-    constexpr float DHAKA_LATITUDE_TOLERANCE = 0.001f;
-    constexpr float DHAKA_LONGITUDE_TOLERANCE = 0.001f;
     constexpr float HEADING_FILTER_TIME_CONSTANT_MS = 100.0f;
+    constexpr const char* CARDINAL_DIRECTIONS[] = {
+        "N", "NE", "E", "SE", "S", "SW", "W", "NW"
+    };
 
     bool headingFilterInitialized = false;
     float filteredHeadingDegrees = 0.0f;
@@ -22,12 +23,6 @@ namespace {
             latitude < -90.0f || latitude > 90.0f ||
             longitude < -180.0f || longitude > 180.0f) {
             return false;
-        }
-
-        if (fabsf(latitude - DEFAULT_LATITUDE) <= DHAKA_LATITUDE_TOLERANCE &&
-            fabsf(longitude - DEFAULT_LONGITUDE) <= DHAKA_LONGITUDE_TOLERANCE) {
-            bearing = 277.6f;
-            return true;
         }
 
         const double lat = latitude * (PI / 180.0);
@@ -47,6 +42,17 @@ namespace {
         if (result < 0.0) result += 360.0;
         bearing = static_cast<float>(result);
         return true;
+    }
+
+    const char* getCardinalDirection(float bearing) {
+        const int index = static_cast<int>(
+            floorf((bearing + 22.5f) / 45.0f)) % 8;
+        return CARDINAL_DIRECTIONS[index];
+    }
+
+    int roundedBearing(float bearing) {
+        const int rounded = static_cast<int>(lroundf(bearing));
+        return rounded >= 360 ? 0 : rounded;
     }
 
     float smoothHeading(float heading, uint32_t now) {
@@ -116,8 +122,21 @@ namespace {
             while (relAngle > 180.0f) relAngle -= 360.0f;
             while (relAngle < -180.0f) relAngle += 360.0f;
 
-            drawQiblaArrow(oled, relAngle, SCREEN_WIDTH / 2,
-                           SCREEN_HEIGHT / 2, 1.4f);
+            drawQiblaArrow(oled, relAngle, 35, 40, 0.95f);
+            oled.setFont(u8g2_font_5x8_tf);
+            oled.drawStr(70, 29, "TO KAABA");
+            char bearingText[16];
+            snprintf(bearingText, sizeof(bearingText), "%03d %s",
+                     roundedBearing(qiblaBearing),
+                     getCardinalDirection(qiblaBearing));
+            oled.setFont(u8g2_font_7x14B_tf);
+            oled.drawStr(69, 46, bearingText);
+            oled.setFont(u8g2_font_5x8_tf);
+            char headingText[16];
+            snprintf(headingText, sizeof(headingText), "HDG %03d %s",
+                     roundedBearing(displayHeading),
+                     getCardinalDirection(displayHeading));
+            oled.drawStr(69, 59, headingText);
         } else {
             headingFilterInitialized = false;
             ScreenUI::drawCard(oled, 4, 18, SCREEN_WIDTH - 8, 42);
