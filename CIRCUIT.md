@@ -47,7 +47,7 @@ This visual overview shows how the main Prayer-Bot modules fit together, includi
 - Connect all module grounds to a common ground. Do not connect the MAX98357A speaker output terminals to ground or to each other.
 - Keep I²C wires short. Use 3.3 V-compatible I²C pull-ups; many breakout boards already include them.
 - All three I²C devices use GPIO 21 (SDA) and GPIO 22 (SCL). The firmware initializes the OLED and MPU6050 and reads either supported compass chip for the Qibla screen.
-- Mount the HMC5883L or QMC5883L flat, with X toward the display's right edge and Y toward its top edge. Keep it level and rotate slowly through about 270° on the Qibla screen to calibrate. The bearing uses zero magnetic declination and is approximate.
+- Mount the HMC5883L or QMC5883L flat, with X toward the display's right edge and Y toward its top edge. Keep it level and rotate slowly through a full 360° on the Qibla screen to calibrate. The bearing uses zero magnetic declination and is approximate.
 - The optional INMP441 is required for voice capture on the device. Dashboard voice input instead uses the phone or computer browser microphone.
 - The firmware assigns the microphone to I²S port 0 and the amplifier to I²S port 1. Do not interchange their GPIO wiring.
 - The LM2596S only steps voltage down. A single-cell battery charged by the TP4056 is below 5 V, so it cannot supply a regulated 5 V output through the LM2596S; use an appropriate boost/boost-buck converter or a higher-voltage input source.

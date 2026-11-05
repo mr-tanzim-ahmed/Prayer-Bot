@@ -19,8 +19,13 @@ extern volatile bool g_webAzanStartRequested;
 
 namespace {
     constexpr size_t WAV_HEADER_BYTES = 44;
+    constexpr uint32_t MIC_BYTES_PER_SECOND =
+        MIC_SAMPLE_RATE * sizeof(int16_t);
+    constexpr uint8_t SHORT_RECORD_SECONDS = 2;
     constexpr size_t RECORDING_CAPACITY =
         MIC_SAMPLE_RATE * MIC_RECORD_SECONDS * sizeof(int16_t);
+    constexpr size_t SHORT_RECORDING_CAPACITY =
+        MIC_SAMPLE_RATE * SHORT_RECORD_SECONDS * sizeof(int16_t);
     constexpr size_t BASE64_INPUT_CHUNK_BYTES = 3072;
     constexpr size_t MAX_DASHBOARD_AUDIO_BYTES = 256 * 1024;
     constexpr size_t MAX_GEMINI_RESPONSE_BYTES = 400 * 1024;
@@ -78,6 +83,7 @@ namespace {
     uint8_t selectedSurah = 0;
     bool lastSelectionVoiceRecognized = false;
     uint8_t* recordingBuffer = nullptr;
+    size_t activeRecordingCapacity = RECORDING_CAPACITY;
     size_t capturedBytes = 0;
     unsigned long recordingStartedMs = 0;
     unsigned long lastMicReadErrorLogMs = 0;
@@ -155,6 +161,7 @@ namespace {
             recordingBuffer = nullptr;
         }
         capturedBytes = 0;
+        activeRecordingCapacity = RECORDING_CAPACITY;
     }
 
     void writeLe16(uint8_t* buffer, size_t offset, uint16_t value) {
@@ -789,10 +796,22 @@ void update(VoiceState& state) {
         recording = true;
         recordingStartedMs = millis();
         capturedBytes = 0;
+        activeRecordingCapacity = RECORDING_CAPACITY;
         if (recordingBuffer) heap_caps_free(recordingBuffer);
         recordingBuffer = allocateAudioBuffer(
             RECORDING_CAPACITY + WAV_HEADER_BYTES,
             RECORDING_CAPACITY + WAV_HEADER_BYTES);
+        if (!recordingBuffer) {
+            activeRecordingCapacity = SHORT_RECORDING_CAPACITY;
+            recordingBuffer = allocateAudioBuffer(
+                activeRecordingCapacity + WAV_HEADER_BYTES,
+                activeRecordingCapacity + WAV_HEADER_BYTES);
+            if (recordingBuffer) {
+                Serial.println(
+                    "[VOICE] Using a 2-second microphone buffer because "
+                    "the 3-second buffer could not be allocated.");
+            }
+        }
         if (recordingBuffer) {
             const esp_err_t clearResult = i2s_zero_dma_buffer(I2S_MIC_PORT);
             if (clearResult != ESP_OK) {
@@ -802,11 +821,14 @@ void update(VoiceState& state) {
         }
         if (!recordingBuffer) {
             recording = false;
-            setStatus("Not enough memory for microphone");
+            setStatus("Need 63KB RAM block");
             Serial.printf(
-                "[VOICE] Audio allocation failed: %u bytes requested; "
+                "[VOICE] Audio allocation failed: %u-byte block needed "
+                "with at least %u bytes of internal RAM left free; "
                 "internal free %u bytes, largest block %u bytes.\n",
-                static_cast<unsigned>(RECORDING_CAPACITY + WAV_HEADER_BYTES),
+                static_cast<unsigned>(activeRecordingCapacity +
+                                      WAV_HEADER_BYTES),
+                static_cast<unsigned>(MIN_INTERNAL_AUDIO_HEADROOM_BYTES),
                 static_cast<unsigned>(heap_caps_get_free_size(
                     MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
                 static_cast<unsigned>(heap_caps_get_largest_free_block(
@@ -819,10 +841,11 @@ void update(VoiceState& state) {
 
     if (recording) {
         while (micInitialized && recordingBuffer &&
-               capturedBytes < RECORDING_CAPACITY) {
+               capturedBytes < activeRecordingCapacity) {
             int32_t microphoneSamples[256];
             size_t availableBytes = 0;
-            const size_t remaining = RECORDING_CAPACITY - capturedBytes;
+            const size_t remaining =
+                activeRecordingCapacity - capturedBytes;
             const size_t requestedSamples = min(
                 sizeof(microphoneSamples) / sizeof(microphoneSamples[0]),
                 remaining / sizeof(int16_t));
@@ -853,7 +876,9 @@ void update(VoiceState& state) {
             capturedBytes += sampleCount * sizeof(int16_t);
         }
 
-        if (millis() - recordingStartedMs >= MIC_RECORD_SECONDS * 1000UL) {
+        const uint32_t recordingDurationMs = static_cast<uint32_t>(
+            activeRecordingCapacity / MIC_BYTES_PER_SECOND * 1000UL);
+        if (millis() - recordingStartedMs >= recordingDurationMs) {
             recording = false;
             recognitionPending = true;
             pendingGeneration = screenGeneration;

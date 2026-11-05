@@ -32,8 +32,9 @@ namespace {
     constexpr uint16_t CALIBRATION_MIN_SAMPLES = 80;
     constexpr int16_t CALIBRATION_MIN_AXIS_SPAN = 100;
     constexpr uint8_t CALIBRATION_DIRECTION_COUNT = 8;
-    constexpr uint8_t CALIBRATION_MIN_DIRECTIONS = 6;
-    constexpr uint8_t CALIBRATION_FORMAT_VERSION = 3;
+    constexpr uint8_t CALIBRATION_MIN_DIRECTIONS =
+        CALIBRATION_DIRECTION_COUNT;
+    constexpr uint8_t CALIBRATION_FORMAT_VERSION = 4;
     constexpr uint32_t HMC5883L_POLL_INTERVAL_MS = 20;
     constexpr uint32_t QMC5883L_POLL_INTERVAL_MS = 20;
     constexpr uint32_t SENSOR_RETRY_MS = 5000;
@@ -277,7 +278,7 @@ namespace {
             return;
         }
 
-        float heading = atan2f(correctedX, correctedY) * 180.0f / PI;
+        float heading = atan2f(-correctedX, correctedY) * 180.0f / PI;
         if (!isfinite(heading)) {
             headingValid = false;
             return;
@@ -407,7 +408,7 @@ bool resetCalibration() {
     scaleX = 1.0f;
     scaleY = 1.0f;
     headingValid = false;
-    Serial.println("[COMPASS] Calibration reset; keep the device level and slowly turn it through about 270 degrees, away from metal and magnets.");
+    Serial.println("[COMPASS] Calibration reset; keep the device level and slowly turn it through a full 360 degrees, away from metal and magnets.");
     return true;
 }
 
@@ -419,6 +420,12 @@ void getReading(CompassReading& reading) {
     reading.calibrated = calibrated;
     reading.calibrationSaveFailed = calibrationSaveFailed;
     reading.calibrationSamples = calibrationSamples;
+    uint8_t directions = calibrationDirections;
+    reading.calibrationDirections = 0;
+    while (directions != 0) {
+        reading.calibrationDirections += directions & 1U;
+        directions >>= 1;
+    }
 }
 
 }

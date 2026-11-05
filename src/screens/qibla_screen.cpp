@@ -161,8 +161,12 @@ namespace {
                           42, bearingText);
         }
         if (reading.sensorAvailable && !reading.calibrated) {
-            oled.setFont(u8g2_font_5x8_tf);
-            oled.drawStr(67, 55, "TURN 270 DEG");
+            oled.setFont(u8g2_font_4x6_tf);
+            oled.drawStr(67, 52, "TURN 360 SLOW");
+            char progress[20];
+            snprintf(progress, sizeof(progress), "LEVEL DIRS %u/8",
+                     static_cast<unsigned>(reading.calibrationDirections));
+            oled.drawStr(67, 61, progress);
         }
         DisplayManager::sendBuffer();
     }

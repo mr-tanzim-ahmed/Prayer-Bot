@@ -10,6 +10,7 @@ struct CompassReading {
     bool calibrated;
     bool calibrationSaveFailed;
     uint16_t calibrationSamples;
+    uint8_t calibrationDirections;
 };
 
 namespace CompassManager {
